@@ -1,0 +1,4 @@
+# 合法的登录 shell。chsh 等工具读这个文件。
+/bin/sh
+/bin/bash
+/usr/bin/bash

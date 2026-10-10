@@ -1,0 +1,8 @@
+root:x:0:
+bin:x:1:
+daemon:x:2:
+tty:x:5:
+disk:x:6:
+wheel:x:10:
+users:x:100:
+nobody:x:65534:

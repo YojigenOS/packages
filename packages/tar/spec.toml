@@ -1,0 +1,26 @@
+# tar —— 归档工具
+
+[package]
+name        = "tar"
+version     = "1.35"
+release     = 1
+description = "归档工具"
+section     = "base"
+url         = "https://www.gnu.org/software/tar/"
+license     = "GPL-3.0-or-later"
+
+[[source]]
+url    = "https://ftp.gnu.org/gnu/tar/tar-$VERSION.tar.xz"
+sha256 = "4d62ff37342ec7aed748535323930c7cf94acf71c3591882b26a7ea50f3edc16"
+
+[dependencies]
+runtime = ["glibc"]
+build   = ["make"]
+
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["make"]
+
+[build]
+type      = "autotools"
+configure = ["--prefix=/usr", "--disable-nls"]

@@ -1,0 +1,13 @@
+# 系统级 shell 初始化。登录 shell 会读取它。
+#
+# 注意 PATH 的顺序：/usr/local 在前，/usr 在后——这是通行做法，
+# 让本地安装的东西能覆盖系统自带的同名程序。
+
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+if [ -d /etc/profile.d ]; then
+  for _f in /etc/profile.d/*.sh; do
+    [ -r "$_f" ] && . "$_f"
+  done
+  unset _f
+fi

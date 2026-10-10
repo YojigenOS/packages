@@ -314,7 +314,10 @@ def make_build_script(spec: dict) -> str:
         die(f"{spec['package']['name']}: out_of_tree 目前只支持 autotools"
             f"（meson 和 cmake 本来就是离开源码树构建的）")
 
-    header = 'BUILDDIR="$SRCDIR/_build"\n' if oot else ""
+    # 脚本自带 cd：它会被降权后由 setpriv 单独执行，不能依赖调用方的 cwd
+    header = 'cd "$SRCDIR"\n'
+    if oot:
+        header += 'BUILDDIR="$SRCDIR/_build"\n'
 
     if kind == "autotools":
         opts = " ".join(b.get("configure", ["--prefix=/usr"]))
@@ -357,7 +360,7 @@ def make_build_script(spec: dict) -> str:
     )
 
 
-def run_in_container(script: str, srcrel: str, arch: str, spec: dict) -> None:
+def run_in_container(srcrel: str, arch: str, spec: dict) -> None:
     pkg = spec["package"]
     (BUILD_DIR / "sysroot").mkdir(parents=True, exist_ok=True)
 
@@ -369,37 +372,43 @@ def run_in_container(script: str, srcrel: str, arch: str, spec: dict) -> None:
     #      "are the same file"。见 docs/决策记录/0002。
     #   2. 绑定挂载上的海量小文件 I/O 比容器内慢一个数量级——而构建过程
     #      恰好就是海量小文件读写。
+    #
+    # 权限：容器以 root 启动，因为要把依赖合并进根文件系统；合并完成后
+    # 立刻降权到宿主用户再执行构建。以 root 构建会踩两部分上游检查
+    # （GNU 的 "you should not run configure as root"），也会让产物属主不对。
     wrapper = (
         "set -euo pipefail\n"
         "\n"
         'cleanup() { chown -R "$HOSTUID:$HOSTGID" /in 2>/dev/null || true; }\n'
         "trap cleanup EXIT\n"
         "\n"
-        "# 依赖包的 payload 合并进根文件系统\n"
+        "# 依赖包的 payload 合并进根文件系统（需要 root）\n"
         'if [ -d /in/sysroot ] && [ -n "$(ls -A /in/sysroot 2>/dev/null)" ]; then\n'
         '  echo "[依赖] 合并 $(find /in/sysroot \\( -type f -o -type l \\) | wc -l | tr -d " ") 项到 /"\n'
         "  cp -a /in/sysroot/. /\n"
         "fi\n"
         "\n"
-        "# 源码与步骤脚本搬进容器原生文件系统\n"
+        "# 容器内工作区：复制源码与脚本，属主交给宿主用户\n"
         "WORK=/work-local\n"
-        'mkdir -p "$WORK"\n'
+        'rm -rf "$WORK"\n'
+        'mkdir -p "$WORK/dest"\n'
         'cp -a /in/src "$WORK/src"\n'
         '[ -f /in/steps.sh ] && cp /in/steps.sh "$WORK/steps.sh"\n'
-        'mkdir -p "$WORK/dest"\n'
+        'cp /in/run.sh "$WORK/run.sh"\n'
+        'chown -R "$HOSTUID:$HOSTGID" "$WORK"\n'
+        "export WORK\n"
         "\n"
-        'export PKGDEST="$WORK/dest"\n'
-        f'export SRCDIR="$WORK/src/{srcrel}"\n'
-        'cd "$SRCDIR"\n'
+        "# 降权执行构建\n"
+        'setpriv --reuid="$HOSTUID" --regid="$HOSTGID" --clear-groups \\\n'
+        '  env HOME="$WORK" \\\n'
+        f'      PKGDEST="$WORK/dest" SRCDIR="$WORK/src/{srcrel}" \\\n'
+        '  bash "$WORK/run.sh"\n'
         "\n"
-        + script
-        + "\n"
         "# 产物拷回宿主\n"
         "mkdir -p /in/dest\n"
         'cp -a "$WORK/dest/." /in/dest/\n'
     )
 
-    # 需要 root：要把依赖合并进 /。容器带 --rm，不会污染宿主。
     # MAKEFLAGS 通过环境变量传给所有 make（含子 make），省得每个配方各写一遍 -j。
     jobs = str(os.cpu_count() or 4)
     cmd = [
@@ -505,8 +514,12 @@ def cmd_build(args) -> None:
         shutil.copy2(steps, BUILD_DIR / "steps.sh")
         log("步骤", "已加载 steps.sh")
 
+    # 生成的构建脚本先落成文件再送进容器。这样 steps.sh 里的 heredoc、
+    # 引号、变量展开都不必经过任何转义——脚本就是脚本。
+    (BUILD_DIR / "run.sh").write_text(make_build_script(spec), encoding="utf-8")
+
     print()
-    run_in_container(make_build_script(spec), srcrel, arch, spec)
+    run_in_container(srcrel, arch, spec)
 
     out, count = collect(spec, arch)
     print()

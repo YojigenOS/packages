@@ -1,0 +1,26 @@
+# diffutils —— 文件比较工具（diff、cmp、diff3）
+
+[package]
+name        = "diffutils"
+version     = "3.12"
+release     = 1
+description = "文件比较工具（diff、cmp、diff3）"
+section     = "base"
+url         = "https://www.gnu.org/software/diffutils/"
+license     = "GPL-3.0-or-later"
+
+[[source]]
+url    = "https://ftp.gnu.org/gnu/diffutils/diffutils-$VERSION.tar.xz"
+sha256 = "7c8b7f9fc8609141fdea9cece85249d308624391ff61dedaf528fcb337727dfd"
+
+[dependencies]
+runtime = ["glibc"]
+build   = ["make"]
+
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["make"]
+
+[build]
+type      = "autotools"
+configure = ["--prefix=/usr", "--disable-nls"]

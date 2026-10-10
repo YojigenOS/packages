@@ -1,0 +1,26 @@
+# grep —— 文本搜索工具
+
+[package]
+name        = "grep"
+version     = "3.12"
+release     = 1
+description = "文本搜索工具"
+section     = "base"
+url         = "https://www.gnu.org/software/grep/"
+license     = "GPL-3.0-or-later"
+
+[[source]]
+url    = "https://ftp.gnu.org/gnu/grep/grep-$VERSION.tar.xz"
+sha256 = "2649b27c0e90e632eadcd757be06c6e9a4f48d941de51e7c0f83ff76408a07b9"
+
+[dependencies]
+runtime = ["glibc"]
+build   = ["make"]
+
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["make"]
+
+[build]
+type      = "autotools"
+configure = ["--prefix=/usr", "--disable-nls"]

@@ -1,0 +1,26 @@
+# coreutils —— 核心文件与文本工具（ls、cp、cat、mkdir…）
+
+[package]
+name        = "coreutils"
+version     = "9.12"
+release     = 1
+description = "核心文件与文本工具（ls、cp、cat、mkdir…）"
+section     = "base"
+url         = "https://www.gnu.org/software/coreutils/"
+license     = "GPL-3.0-or-later"
+
+[[source]]
+url    = "https://ftp.gnu.org/gnu/coreutils/coreutils-$VERSION.tar.xz"
+sha256 = "a480198559733e9b3da999e90543ac6f888a2caa544d8d664c5a1f17e528e210"
+
+[dependencies]
+runtime = ["glibc"]
+build   = ["make"]
+
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["make"]
+
+[build]
+type      = "autotools"
+configure = ["--prefix=/usr", "--disable-nls"]

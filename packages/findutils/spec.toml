@@ -1,0 +1,26 @@
+# findutils —— 文件查找工具（find、xargs、locate）
+
+[package]
+name        = "findutils"
+version     = "4.11.0"
+release     = 1
+description = "文件查找工具（find、xargs、locate）"
+section     = "base"
+url         = "https://www.gnu.org/software/findutils/"
+license     = "GPL-3.0-or-later"
+
+[[source]]
+url    = "https://ftp.gnu.org/gnu/findutils/findutils-$VERSION.tar.xz"
+sha256 = "bfd19cb06cc71f3352d567e90284d8cdac02ac89774bbeadf0b533b0c11432fd"
+
+[dependencies]
+runtime = ["glibc"]
+build   = ["make"]
+
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["make"]
+
+[build]
+type      = "autotools"
+configure = ["--prefix=/usr", "--disable-nls", "--localstatedir=/var/lib/locate"]

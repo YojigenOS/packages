@@ -1,0 +1,26 @@
+# bash —— Bourne Again Shell，命令行解释器
+
+[package]
+name        = "bash"
+version     = "5.3"
+release     = 1
+description = "Bourne Again Shell，命令行解释器"
+section     = "base"
+url         = "https://www.gnu.org/software/bash/"
+license     = "GPL-3.0-or-later"
+
+[[source]]
+url    = "https://ftp.gnu.org/gnu/bash/bash-$VERSION.tar.gz"
+sha256 = "0d5cd86965f869a26cf64f4b71be7b96f90a3ba8b3d74e27e8e9d9d5550f31ba"
+
+[dependencies]
+runtime = ["glibc"]
+build   = ["make"]
+
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["make"]
+
+[build]
+type      = "autotools"
+configure = ["--prefix=/usr", "--disable-nls", "--without-bash-malloc"]
