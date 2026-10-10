@@ -77,6 +77,27 @@ def sha256_of(path: Path) -> str:
     return h.hexdigest()
 
 
+def rmtree_force(path: Path) -> None:
+    """删除目录树，带重试。
+
+    在 macOS + Docker 绑定挂载下，容器刚退出时文件系统状态可能尚未同步完，
+    shutil.rmtree 内部的 os.rmdir 会偶发 "Directory not empty"——即使目录
+    实际上已经被掏空了。重试可以跨过这个窗口。
+    """
+    if not path.exists():
+        return
+    last: OSError | None = None
+    for attempt in range(5):
+        try:
+            shutil.rmtree(path)
+            return
+        except OSError as exc:
+            last = exc
+            time.sleep(0.5 * (attempt + 1))
+    die(f"清理失败: {path}\n       {last}\n"
+        f"       这通常只是文件系统同步慢，手动删除该目录后重试即可。")
+
+
 def resolve_arch(requested: str | None) -> str:
     host = ARCH_ALIASES.get(platform.machine())
     if host is None:
@@ -244,8 +265,7 @@ def fetch(spec: dict) -> Path:
 
 def extract(archive: Path, into: Path) -> str:
     """解压到 into，返回源码根目录相对名（'.' 表示就是 into 本身）。"""
-    if into.exists():
-        shutil.rmtree(into)
+    rmtree_force(into)
     into.mkdir(parents=True)
     log("解压", archive.name)
     with tarfile.open(archive) as tf:
@@ -354,8 +374,7 @@ def collect(spec: dict, arch: str) -> tuple[Path, int]:
     destdir = BUILD_DIR / "dest"
     out = OUTPUT_DIR / arch / f"{pkg['name']}-{pkg['version']}-{pkg['release']}"
 
-    if out.exists():
-        shutil.rmtree(out)
+    rmtree_force(out)
     payload = out / "payload"
     payload.parent.mkdir(parents=True, exist_ok=True)
     shutil.copytree(destdir, payload, symlinks=True)
@@ -411,8 +430,7 @@ def cmd_build(args) -> None:
     print()
     log("开始", f"{name} {ver}-{rel} [{arch}]")
 
-    if BUILD_DIR.exists():
-        shutil.rmtree(BUILD_DIR)
+    rmtree_force(BUILD_DIR)
     (BUILD_DIR / "dest").mkdir(parents=True)
 
     # 依赖
@@ -480,14 +498,14 @@ def cmd_list(args) -> None:
 
 def cmd_clean(args) -> None:
     if BUILD_DIR.exists():
-        shutil.rmtree(BUILD_DIR)
+        rmtree_force(BUILD_DIR)
         log("清理", "build/")
     if args.package and OUTPUT_DIR.is_dir():
         for arch_dir in sorted(OUTPUT_DIR.iterdir()):
             if not arch_dir.is_dir():
                 continue
             for d in sorted(arch_dir.glob(f"{args.package}-*")):
-                shutil.rmtree(d)
+                rmtree_force(d)
                 log("清理", f"{d.relative_to(ROOT)}/")
     if not args.package:
         log("提示", "未指定包名，只清理了 build/（产物保留）")
@@ -522,4 +540,11 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except BrokenPipeError:
+        # 输出被下游截断（例如 `skirt build x | head`）。这时构建本身往往
+        # 还在正常进行，不该报一个看不懂的 traceback。把 stdout 换成
+        # /dev/null 让后续写入无处可去，然后安静退出。
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+        sys.exit(0)

@@ -1,0 +1,29 @@
+# mpfr —— 多精度浮点运算库
+#
+# 构建和运行时都依赖 gmp。gmp 不在 host/provides.txt 里，
+# 所以 skirt 会强制要求先构建它。
+
+[package]
+name        = "mpfr"
+version     = "4.2.2"
+release     = 1
+description = "多精度浮点运算库"
+section     = "libs"
+url         = "https://www.mpfr.org/"
+license     = "LGPL-3.0-or-later"
+
+[[source]]
+url    = "https://ftp.gnu.org/gnu/mpfr/mpfr-$VERSION.tar.xz"
+sha256 = "b67ba0383ef7e8a8563734e2e889ef5ec3c3b898a01d00fa0a6869ad81c6ce01"
+
+[dependencies]
+runtime = ["glibc", "gmp"]
+build   = ["make", "gmp"]
+
+[dependencies.x86_64]
+runtime = ["glibc", "gmp"]
+build   = ["make", "gmp"]
+
+[build]
+type      = "autotools"
+configure = ["--prefix=/usr", "--enable-shared"]

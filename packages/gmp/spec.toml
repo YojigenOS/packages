@@ -1,0 +1,30 @@
+# gmp —— 任意精度算术库
+#
+# gcc 的前置依赖之一。这条链是嵌套的，不是并列的：
+#     gmp  →  mpfr  →  mpc  →  gcc
+# 所以它也是检验依赖机制的更好用例。
+
+[package]
+name        = "gmp"
+version     = "6.3.0"
+release     = 1
+description = "任意精度算术库"
+section     = "libs"
+url         = "https://gmplib.org/"
+license     = "LGPL-3.0-or-later OR GPL-2.0-or-later"
+
+[[source]]
+url    = "https://ftp.gnu.org/gnu/gmp/gmp-$VERSION.tar.xz"
+sha256 = "a3c2b80201b89e68616f4ad30bc66aee4927c3ce50e33929ca819d5c43538898"
+
+[dependencies]
+runtime = ["glibc"]
+build   = ["make"]
+
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["make"]
+
+[build]
+type      = "autotools"
+configure = ["--prefix=/usr", "--enable-shared"]
