@@ -1,0 +1,42 @@
+# binutils —— 二进制工具集
+#
+# 自举链条的第二环，也是 gcc 的前置：没有汇编器 as 和链接器 ld，
+# 任何编译器都产不出可执行文件。
+#
+# 这是第一个真正需要完整编译的包（linux-headers 只是拷贝头文件），
+# 也是第一个会往 /usr/bin 装大量可执行文件的包。
+
+[package]
+name        = "binutils"
+version     = "2.47"
+release     = 1
+description = "二进制工具集：汇编器、链接器、目标文件处理工具"
+section     = "core"
+url         = "https://www.gnu.org/software/binutils/"
+license     = "GPL-3.0-or-later"
+
+[[source]]
+url    = "https://ftp.gnu.org/gnu/binutils/binutils-$VERSION.tar.xz"
+sha256 = "154ab23b60070e8f27013c22977f1129425d67d1e8acd6e13010e617811e4cff"
+
+[dependencies]
+runtime = ["glibc"]
+build   = ["make"]
+
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["make"]
+
+[build]
+type      = "autotools"
+# --disable-werror  ：新编译器对老代码更严格，不加这个会因为警告中断构建
+# --disable-gprofng ：gprofng 剖析器在 arm64 + 新工具链下编译失败
+#                     （mmaptrace.c 报 "sh_offset 不是结构体成员"）。
+#                     它对自举没有任何用处，直接关掉，别浪费构建时间。
+configure = [
+  "--prefix=/usr",
+  "--sysconfdir=/etc",
+  "--disable-nls",
+  "--disable-werror",
+  "--disable-gprofng",
+]

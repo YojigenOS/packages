@@ -323,6 +323,8 @@ def run_in_container(script: str, srcrel: str, arch: str, spec: dict) -> None:
     )
 
     # 需要 root：要把依赖合并进 /usr。容器加 --rm，不会污染宿主。
+    # MAKEFLAGS 通过环境变量传给所有 make（含子 make），省得每个配方各写一遍 -j。
+    jobs = str(os.cpu_count() or 4)
     cmd = [
         "docker", "run", "--rm",
         "-e", f"HOSTUID={os.getuid()}",
@@ -331,6 +333,7 @@ def run_in_container(script: str, srcrel: str, arch: str, spec: dict) -> None:
         "-e", f"PKGARCH={arch}",
         "-e", f"PKGNAME={pkg['name']}",
         "-e", f"PKGVER={pkg['version']}",
+        "-e", f"MAKEFLAGS=-j{jobs}",
         "-v", f"{BUILD_DIR}:/work",
         "-v", f"{sysroot}:/mnt/sysroot:ro",
         "-w", workdir,
@@ -338,7 +341,7 @@ def run_in_container(script: str, srcrel: str, arch: str, spec: dict) -> None:
         "bash", "-c", wrapper,
     ]
 
-    log("构建", f"{BUILDENV_IMAGE}:{arch}  (cwd={workdir})")
+    log("构建", f"{BUILDENV_IMAGE}:{arch}  (cwd={workdir}, -j{jobs})")
     proc = subprocess.run(cmd)
     if proc.returncode != 0:
         die(f"构建失败（退出码 {proc.returncode}）")
