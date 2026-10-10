@@ -151,7 +151,11 @@ def cmd_bootstrap(args) -> None:
             for l in tail:
                 print(f"           {l}")
             log("停止", f"{name} 失败。日志在 /tmp 或上面这些行里")
-            break
+            # 【必须非零退出】原来这里只是 break，于是命令退出码是 0——
+            # CI 把它当成功，继续往下跑，然后在一步无关的命令上以一种看不懂的
+            # 方式失败（实测：`skirt image base-devel` 报"glibc 还没构建"，
+            # 而真正的原因是这个包）。一个报成功的失败比失败更糟。
+            raise SystemExit(1)
 
     total = int(monotonic() - total0)
     print()

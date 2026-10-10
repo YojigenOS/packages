@@ -6,26 +6,27 @@
 name        = "libffi"
 version     = "3.8.0"
 release     = 1
-date        = 2026-10-10T16:50:00Z
+date        = 2026-10-10T17:40:00Z
 description = "可移植的外部函数接口库"
 section     = "libs"
 url         = "https://sourceware.org/libffi/"
 license     = "MIT"
 
 [[source]]
-# ★ 这里【是】例外：用了 release 附件而不是 commit。
+# ★ 这里【是】例外：用发行包，不用 commit。
 #
-# 项目的规则是 GitHub 类源码优先用 commit（附件可以被替换和删除，commit
-# 不能）。但那条路要求 git 树能 autoreconf，而 libffi 做不到：
+# 项目的规则是 GitHub 类源码优先用 commit。libffi 走不通，但理由不是
+# "它的树有问题"——我一开始是那么以为的，错了。
 #
-#   configure.ac:245: error: possibly undefined macro: LT_SYS_SYMBOL_USCORE
+# 试过：git 树 + autoreconf 能跑通（autoconf/automake/libtool 都在，我们
+# 自己建的 libtool 2.6.2 提供了需要的宏）。它倒在后面一步：
 #
-# 那个宏只定义在 libtool 的 ltdl.m4 里，而 libffi 的 configure.ac 没有引入
-# 它（没走 LTDL_INIT 那条路）。所以它的 git 树用现代 libtool 根本生成不出
-# configure——上游是拿更老的工具链生成好、把 configure 放进发行包的。
+#     make[2]: *** [Makefile:405: ../../doc/libffi.info] Error 127
 #
-# 于是退回发行包。等源码镜像（docs/待办.md 6.1）做完，这个问题就不存在了：
-# 那时候我们自己持有那份字节。
+# Error 127 是命令找不到——那是 makeinfo。**git 树要现场生成 info 手册，
+# 而发行包里带着上游生成好的那份。** 这是发行包存在的意义之一。
+#
+# 所以要么建 texinfo（已记进待办），要么用发行包。现在用发行包。
 url    = "https://github.com/libffi/libffi/releases/download/v$VERSION/libffi-$VERSION.tar.gz"
 sha256 = "7da3e2d9a171eb0a038f592ecad3ff2bb2550f3496d87b3b29ad0cf4430c0db4"
 
@@ -39,6 +40,7 @@ build   = ["make", "gcc"]
 
 [build]
 type = "autotools"
+# git 树里没有 configure，现场生成
 # git 树里没有 configure，现场生成（见 docs/配方约定.md）
 configure = [
   "--prefix=/usr",

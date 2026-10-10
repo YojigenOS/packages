@@ -21,31 +21,40 @@ url         = "https://github.com/besser82/libxcrypt"
 license     = "LGPL-2.1-or-later"
 
 [[source]]
-# ★ 用 commit，不用 release 附件。
+# ★ 这里【是】例外：用发行包，不用 commit。
+#
+# 不是为了省事——是环闭不上。libxcrypt 需要 autoreconf 生成 configure，而
+# autoreconf 需要 autoconf，autoconf 是个 Perl 程序，perl 又【运行时链接】
+# libxcrypt：
+#
+#     libxcrypt → autoconf → perl → libxcrypt
+#
+# 发行包里带着上游跑好的 configure，不需要 autoreconf，环就从这里断了。
+# 这是「用发行包」最正当的一个理由：不是这条路不存在，是它会把引导闭上。
+#
+# （另一个已知例外是 libffi，理由不同，见它的配方。）
 #
 # release 附件可以被维护者替换，也可以被删除；commit 不能——那棵树是哈希
 # 钉死的。sha256 仍然要，因为 GitHub 是按需生成 tarball 的，字节不保证
 # 稳定：commit 保证「内容对」，sha256 保证「字节对」。
 #
 # 见 docs/配方约定.md 的「源」一节。
-url    = "https://codeload.github.com/besser82/libxcrypt/tar.gz/db70b42bd7b2a5b00a8580c8dec0aa66791c950a"
-urls = ["https://github.com/besser82/libxcrypt/archive/db70b42bd7b2a5b00a8580c8dec0aa66791c950a.tar.gz"]
-sha256 = "0a54d0e1c9e3c573f009d77bb7b5b9f2884000a4b72b19473058c5d8c80b8fa5"
+url    = "https://github.com/besser82/libxcrypt/releases/download/v$VERSION/libxcrypt-$VERSION.tar.xz"
+sha256 = "71513a31c01a428bccd5367a32fd95f115d6dac50fb5b60c779d5c7942aec071"
 
 [dependencies]
 runtime = ["glibc"]
 # autoreconf 要 autoconf / automake / libtool，它们必须【声明】——
 # 否则会悄悄用构建环境镜像里的那份，那就又是隐式依赖了。
-build   = ["gcc", "make", "perl", "autoconf", "automake", "libtool"]
+build   = ["gcc", "make"]
 
 [dependencies.x86_64]
 runtime = ["glibc"]
-build   = ["gcc", "make", "perl", "autoconf", "automake", "libtool"]
+build   = ["gcc", "make"]
 
 [build]
 type      = "autotools"
 # git 树里没有 configure，现场生成。
-autoreconf = true
 configure = [
   "--prefix=/usr",
   "--disable-static",
