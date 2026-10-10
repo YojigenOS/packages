@@ -1,0 +1,36 @@
+# make —— GNU Make
+#
+# 这个包的特殊之处不在它自己，而在于它是构建其他所有包的工具。
+#
+# 它一旦自建成功，「用 YojigenOS 构建 YojigenOS」在工具层面就成立了：
+# 从此构建任何包所用的 make，都是我们自己构建出来的那一个。
+#
+# 注意 [dependencies] 里的 build = ["make"]：构建 make 需要 make。
+# 第一次构建时 make 还在 host/provides.txt 里，会被跳过；一旦把它从
+# 那份列表里删掉，之后重建 make 用的就是 output/ 里已有的自建 make。
+# 这正是自举该有的样子。
+
+[package]
+name        = "make"
+version     = "4.4.1"
+release     = 1
+description = "GNU Make，构建自动化工具"
+section     = "core"
+url         = "https://www.gnu.org/software/make/"
+license     = "GPL-3.0-or-later"
+
+[[source]]
+url    = "https://ftp.gnu.org/gnu/make/make-$VERSION.tar.gz"
+sha256 = "dd16fb1d67bfab79a72f5e8390735c49e3e8e70b4945a15ab1f81ddb78658fb3"
+
+[dependencies]
+runtime = ["glibc"]
+build   = ["make"]
+
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["make"]
+
+[build]
+type      = "autotools"
+configure = ["--prefix=/usr", "--disable-nls"]

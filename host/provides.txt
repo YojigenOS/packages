@@ -22,6 +22,11 @@
 #                          验证：用自建 as/ld 汇编链接出可运行程序
 #   gcc            16.2.0  ✅ 已由 YojigenOS 自建
 #                          验证：自建 gcc/g++ 编译并运行 C 与 C++ 程序
+#   make           4.4.1   ✅ 已由 YojigenOS 自建
+#                          验证：自建 make 执行 Makefile 正常
+#
+# 只剩 glibc 一项。它一旦替换，这份列表就空了——那是「声明上的自举」
+# 完成的时刻。但真正的验收是另一件事：在一个不含任何 provides 项的环境里
+# 重建整个系统，而那个环境最终只能是 YojigenOS 自己。
 
 glibc
-make
