@@ -273,27 +273,33 @@ def run_in_container(srcrel: str, arch: str, spec: dict, epoch: int) -> None:
         "\n"
         "# 依赖包的 payload 合并进根文件系统（需要 root）\n"
         "#\n"
-        "# 【为什么不是 cp -a /in/sysroot/. /】那会覆盖容器自己的根布局。\n"
-        "# x86_64 上 Debian 的 /lib64 → usr/lib64，动态链接器就住在那里\n"
-        "# （/lib64/ld-linux-x86-64.so.2 → ../lib/x86_64-linux-gnu/…）。我们的\n"
-        "# filesystem 包按 0001 的策略把它改成 /lib64 → usr/lib，于是链接器\n"
-        "# 变成悬空——**容器里所有动态链接的程序立刻全废**。实测的表现是\n"
-        "# glibc 构建 11 秒就死，日志里只有「合并 9715 项到 /」和一句失败，\n"
-        "# 完全看不出原因。\n"
+        "# 【为什么不用 cp -a /in/sysroot/. /】那会覆盖构建容器自己的布局，\n"
+        "# 而容器里有些路径是【它的命根子】：\n"
         "#\n"
-        "# aarch64 上一直没暴露：那里的链接器是 /lib/ld-linux-aarch64.so.1，\n"
-        "# 而 /lib → usr/lib 两边一致，只有 x86_64 的 /lib64 有分歧。\n"
+        "#   x86_64: /lib64 -> usr/lib64，而 usr/lib64/ld-linux-x86-64.so.2\n"
+        "#           是动态链接器。我们的 filesystem 和 gcc 都提供\n"
+        "#           usr/lib64 -> lib，Links 一改，链接器就悬空了——\n"
+        "#           **容器里所有动态链接的程序立刻全废**。\n"
         "#\n"
-        "# 【为什么跳过是对的】这里是「合并进构建容器」，不是「拼装我们的根」。\n"
+        "# 实测的表现：glibc 构建 11 秒就死，日志里只有「合并 N 项到 /」和\n"
+        "# 一句失败，完全看不出原因。查了很久。\n"
+        "#\n"
+        "#   aarch64 一直没暴露：链接器在 /lib/ld-linux-aarch64.so.1，\n"
+        "#   而 /lib -> usr/lib 两边一致。只有 x86_64 的 lib64 家族有分歧。\n"
+        "#\n"
+        "# 【为什么排除是对的】这里是「合并进构建容器」，不是「拼装我们的根」。\n"
         "# filesystem 描述的是【我们的根】，而构建容器的布局是 Debian 的。\n"
-        "# 包的内容照样进 usr/，受影响的只有根上这四条链接。\n"
+        "# 包的内容照样进 usr/，受影响的只有这几个位置。\n"
+        "#\n"
+        "# 用 tar --exclude 而不是 cp：排除项里有的是【子路径】\n"
+        "# （usr/lib64），顶层循环盖不住；而且 tar 处理符号链接的方式正是\n"
+        "# 我们要的（cp -a 会把目标已有的链接替换掉）。\n"
         'if [ -d /in/sysroot ] && [ -n "$(ls -A /in/sysroot 2>/dev/null)" ]; then\n'
-        '  echo "[依赖] 合并 $(find /in/sysroot \\( -type f -o -type l \\) | wc -l | tr -d " ") 项到 /"\n'
-        '  for entry in /in/sysroot/* /in/sysroot/.[!.]*; do\n'
-        '    [ -e "$entry" ] || [ -L "$entry" ] || continue\n'
-        '    case "$(basename "$entry")" in bin|sbin|lib|lib64) continue ;; esac\n'
-        '    cp -a "$entry" /\n'
-        "  done\n"
+        '  echo "[依赖] 合并 $(find /in/sysroot \\( -type f -o -type l \\) | wc -l | tr -d " ") 项到 /（跳过容器自己的布局）"\n'
+        '  tar -C /in/sysroot -cf - \\\n'
+        '      --exclude=./bin --exclude=./sbin --exclude=./lib --exclude=./lib64 \\\n'
+        '      --exclude=./usr/lib64 \\\n'
+        '      . | tar -C / -xf -\n'
         "fi\n"
         "\n"
         "# 容器内工作区：复制源码与脚本，属主交给宿主用户\n"
