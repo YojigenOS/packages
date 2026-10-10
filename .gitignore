@@ -25,3 +25,5 @@ __pycache__/
 /.comet/*
 !/.comet/config.yaml
 # <<< Comet managed project state <<<
+# 每个包的完整构建日志（skirt bootstrap 写的，失败时用来诊断）
+build-logs/

@@ -146,11 +146,27 @@ def cmd_bootstrap(args) -> None:
         ok = r.returncode == 0
         done.append((name, dt, ok))
         print(f"{'✅' if ok else '❌'} {dt // 60:2d} 分 {dt % 60:02d} 秒")
+        # ★ 把每个包的【完整输出】写下来。
+        #
+        # 原来只打印最后 8 行，剩下的丢掉——而且失败信息里写「日志在 /tmp」，
+        # 实际上 skirt 从来不往 /tmp 写任何东西。**那是一句假话**，代价是
+        # 实测一次 x86_64 的 glibc 失败，日志里只剩「合并 9715 项到 /」和
+        # 一句失败，完全查不下去，绕了很久才靠别的手段定位。
+        #
+        # 写进 build-logs/（仓库根下），**不能写 build/**——cmd_build 每个包
+        # 开头都会 rmtree(BUILD_DIR)，写那儿的日志会被下一个包清掉，只剩最后
+        # 一个。也不能写 /tmp：CI 根本不收集它。
+        logdir = ROOT / "build-logs"
+        logdir.mkdir(parents=True, exist_ok=True)
+        logfile = logdir / f"{i:02d}-{name}.log"
+        logfile.write_text(
+            (r.stdout or "") + ("\n--- stderr ---\n" + r.stderr if r.stderr else ""))
+
         if not ok:
             tail = [l for l in r.stdout.splitlines() if l.strip()][-8:]
             for l in tail:
                 print(f"           {l}")
-            log("停止", f"{name} 失败。日志在 /tmp 或上面这些行里")
+            log("停止", f"{name} 失败。完整日志：{logfile}")
             # 【必须非零退出】原来这里只是 break，于是命令退出码是 0——
             # CI 把它当成功，继续往下跑，然后在一步无关的命令上以一种看不懂的
             # 方式失败（实测：`skirt image base-devel` 报"glibc 还没构建"，

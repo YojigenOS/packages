@@ -101,9 +101,12 @@ jobs:
       - name: 收集构建日志
         if: always()
         run: |
+          # skirt bootstrap 把每个包的完整输出写在 build-logs/。
+          # （以前这里抄的是 /tmp——而 skirt 从来不往 /tmp 写任何东西，
+          #   所以 artifact 一直是空的。见 cmd_bootstrap 里的注释。）
           mkdir -p build-logs
-          cp -a /tmp/*.log build-logs/ 2>/dev/null || true
           ls -la build-logs/ | head -20
+          echo "共 $(ls build-logs/ 2>/dev/null | wc -l) 个包的日志"
 
       - name: 上传构建日志
         if: always()
@@ -266,8 +269,7 @@ jobs:
       - name: 收集构建日志
         if: always()
         run: |
-          mkdir -p build-logs
-          cp -a /tmp/*.log build-logs/ 2>/dev/null || true
+          ls -la build-logs/ 2>/dev/null | head -20
 
       - name: 上传构建日志
         if: always()
