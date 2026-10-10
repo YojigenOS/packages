@@ -1,0 +1,58 @@
+# libcap-ng —— 操作进程能力（capabilities）的库
+#
+# 它不是我们想要的东西，是 `setpriv` 要的东西。
+#
+# util-linux 的 configure 里有一句很干脆的判定：
+#
+#     configure: WARNING: libcap-ng library not found; not building setpriv
+#
+# 也就是说 **setpriv 整个程序的存在与否取决于这个库**，不是「少了点功能」。
+# 而 setpriv 是构建脚本降权用的（让容器里的构建以宿主用户身份跑，而不是
+# root），所以它在自举的关键路径上。
+#
+# ## 为什么用 0.8.5 而不是更新的 0.9.6
+#
+# 0.9.x 只在 GitHub 上发，而且 release 没有附件——只有 GitHub 按需生成的
+# `/archive/refs/tags/...tar.gz`。**那种 tarball 不是字节稳定的**：GitHub
+# 重新生成过，压缩参数也变过。
+#
+# sha256 钉死能挡住「悄悄变了」——构建会明确失败，而不是产出一个不一样的
+# 东西。但它挡不住「上游一改，所有人的构建同时失败」。
+#
+# 0.8.5 是上游作者放在自己站点上的正式发布包，URL 稳定。我们只需要它能让
+# setpriv 编出来，版本新旧的差别在这个用途上可以忽略。
+#
+# 等源码镜像（待办 6.1）做完，就可以换成 0.9.6——那时候我们自己持有那份
+# 字节，不再依赖上游的 URL 是否稳定。
+
+[package]
+name        = "libcap-ng"
+version     = "0.8.5"
+release     = 1
+date        = 2026-10-10T14:30:00Z
+description = "操作进程能力的库（setpriv 的构建依赖）"
+section     = "libs"
+url         = "https://people.redhat.com/sgrubb/libcap-ng/"
+license     = "LGPL-2.1-or-later"
+
+[[source]]
+url    = "https://people.redhat.com/sgrubb/libcap-ng/libcap-ng-$VERSION.tar.gz"
+sha256 = "3ba5294d1cbdfa98afaacfbc00b6af9ed2b83e8a21817185dfd844cc8c7ac6ff"
+
+[dependencies]
+runtime = ["glibc"]
+# python3 不在树里——swig 绑定绑不出来，但库本身照样能用。
+build   = ["make", "gcc"]
+
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["make", "gcc"]
+
+[build]
+type = "autotools"
+configure = [
+  "--prefix=/usr",
+  "--without-python",           # 没有 python3
+  "--without-python3",
+  "--disable-static",           # 只要共享库；静态库对 setpriv 没用
+]

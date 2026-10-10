@@ -1,0 +1,95 @@
+# util-linux —— 系统工具集
+#
+# 自举链条上最后缺的一块。实测宿主和构建环境差的工具里，`setpriv` 是另一个
+# （patch 已经补上了）：构建脚本用它降权，让容器里的构建以宿主用户身份跑，
+# 而不是 root。
+#
+# 它同时是里程碑 1 要用的东西：`mount` 挂 /proc /sys /dev，`agetty` 提供
+# 登录界面，`dmesg` 看内核消息。所以这个包不是为自举白做的。
+#
+# 关掉的全部是「树里还没有的可选依赖」——不是嫌它们没用，是它们还不在。
+
+[package]
+name        = "util-linux"
+version     = "2.42.4"
+release     = 1
+date        = 2026-10-10T14:20:00Z
+description = "系统工具集：mount、agetty、setpriv、dmesg 等"
+section     = "base"
+url         = "https://www.kernel.org/pub/linux/utils/util-linux/"
+license     = "GPL-2.0-or-later"
+
+[[source]]
+# util-linux 按【大版本】分目录，点版本放在同一个目录里。
+url    = "https://mirrors.edge.kernel.org/pub/linux/utils/util-linux/v2.42/util-linux-$VERSION.tar.xz"
+urls = [
+  "https://www.kernel.org/pub/linux/utils/util-linux/v2.42/util-linux-$VERSION.tar.xz",
+]
+sha256 = "fbd62a100ab7bb8746ba0661255c3c48185b1e9021507c624da01fbc696330ec"
+
+[dependencies]
+# libcap-ng 是运行时的：setpriv 链接它。
+runtime = ["glibc", "libcap-ng"]
+build   = ["make", "gcc", "gettext", "libcap-ng"]
+
+[dependencies.x86_64]
+runtime = ["glibc", "libcap-ng"]
+build   = ["make", "gcc", "gettext", "libcap-ng"]
+
+[build]
+type = "autotools"
+configure = [
+  "--prefix=/usr",
+
+  # ---- 必须显式覆盖的两个目录 ----
+  #
+  # util-linux 故意不走 autoconf 的默认值。它自己的 configure 会打印：
+  #
+  #     configure: Default --exec-prefix detected.
+  #       --bindir defaults to /bin
+  #       --sbindir defaults to /sbin
+  #
+  # 这么设计是为了让 mount 在 /usr 还没挂载时就能用——把「启动关键」的程序
+  # 放在根分区的 /bin 里。那在非 usr-merge 的系统上是对的。
+  #
+  # 但我们按决策记录 0001 做了 usr-merge：/bin 是指向 usr/bin 的符号链接。
+  # 此时 util-linux 会把 mount、dmesg、lsblk、findmnt 等 39 个程序装进一个
+  # 「真目录 /bin」，而 /bin 本该是链接——拼 rootfs 时 cp 会直接失败：
+  #
+  #     cannot overwrite non-directory '/rootfs/./bin' with directory '.../bin'
+  #
+  # 失败是响亮的，不会静默出错，但构建过不去。显式指到 /usr 就好。
+  "--bindir=/usr/bin",
+  "--sbindir=/usr/sbin",
+  "--libdir=/usr/lib",
+
+  # ---- 树里还没有的可选依赖 ----
+  "--without-python",           # 没有 python3（pylibmount 跟着一起关）
+  "--disable-pylibmount",
+  "--without-ncurses",          # 没有 ncurses；fdisk 的交互界面会退化
+  "--without-readline",
+  "--without-audit",
+  "--without-selinux",
+  "--without-udev",             # 没有 libudev
+  "--disable-liblastlog2",      # 需要 sqlite3
+
+  # 注意【不要】写 --without-cap-ng：util-linux 的判定是全有或全无——
+  #
+  #     configure: WARNING: libcap-ng library not found; not building setpriv
+  #
+  # 加上它等于不编 setpriv，而 setpriv 正是我们构建这个包的主要理由。
+  # libcap-ng 已经在依赖里了。
+
+  # ---- 不要的东西 ----
+  # systemd 还没进树。带上它只会在 /usr/lib/systemd 下留一堆没人用的 unit。
+  "--without-systemd",
+  # bash 补全：没有 bash-completion 包，装了也没人读。
+  "--disable-bash-completion",
+  # 安装时改属主需要 root；我们用 DESTDIR 装，属主交给收集阶段。
+  "--disable-makeinstall-chown",
+
+  # ---- 和已有包冲突的 ----
+  # coreutils 已经提供 kill。两个包都装 /usr/bin/kill 的话，拼 rootfs 时
+  # 后铺的会覆盖先铺的——不会报错，但哪个赢取决于顺序，属于隐患。
+  "--disable-kill",
+]

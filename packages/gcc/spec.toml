@@ -25,11 +25,19 @@ url    = "https://ftp.gnu.org/gnu/gcc/gcc-$VERSION/gcc-$VERSION.tar.xz"
 sha256 = "e6738e29597f733270731aa90600f37ffdc045079dfc27ec7e8192cc81085c3e"
 
 [dependencies]
-runtime = ["glibc", "gmp", "mpfr", "mpc"]
+# binutils 必须是运行时依赖：gcc 自己不汇编也不链接，它调用 `as` 和 `ld`。
+#
+# 这个漏声明是被自举试出来的。换掉构建环境之后，同一个配方产出的 hello 二进制
+# 多了一个 GCS 位（BTI, PAC, GCS 而不是 BTI, PAC）。查下去才发现：声明里没有
+# binutils，所以构建 sysroot 里没有它，gcc 只好用构建环境镜像自带的那份——
+# Debian 的 as 2.44。我们自己的 binutils 2.47 根本没用上，而且没有任何地方报错。
+#
+# 加上它之后，Debian 环境里构建也会用我们自己的 as，两边就一致了。
+runtime = ["glibc", "binutils", "gmp", "mpfr", "mpc"]
 build   = ["make", "gmp", "mpfr", "mpc"]
 
 [dependencies.x86_64]
-runtime = ["glibc", "gmp", "mpfr", "mpc"]
+runtime = ["glibc", "binutils", "gmp", "mpfr", "mpc"]
 build   = ["make", "gmp", "mpfr", "mpc"]
 
 [build]

@@ -1,0 +1,39 @@
+# patch —— 把 diff 应用到源码树上
+#
+# 自举链条上的一环：我们的配方里有带补丁的包（gzip 就有），而打补丁是
+# **构建时**要做的事，不能依赖宿主提供。实测宿主和构建环境差的工具里，
+# 它是两个之一（另一个是 util-linux 的 setpriv）。
+
+[package]
+name        = "patch"
+version     = "2.8"
+release     = 1
+date        = 2026-10-10T14:00:00Z
+description = "把 diff 应用到源码树上的工具"
+section     = "devel"
+url         = "https://ftp.gnu.org/gnu/patch/"
+license     = "GPL-3.0-or-later"
+
+[[source]]
+url    = "https://ftp.gnu.org/gnu/patch/patch-$VERSION.tar.xz"
+# 备选源。实测 ftp.gnu.org 在本机时通时不通——同一个地址，构建 glibc 时通，
+# 加这个配方时不通。sha256 才是身份，所以换源不降低信任。
+#
+# 主源排在最前：CI 在海外，走 ftp.gnu.org 更快；这里不通时才落到镜像。
+urls = [
+  "https://mirrors.tuna.tsinghua.edu.cn/gnu/patch/patch-$VERSION.tar.xz",
+]
+sha256 = "f87cee69eec2b4fcbf60a396b030ad6aa3415f192aa5f7ee84cad5e11f7f5ae3"
+
+[dependencies]
+runtime = ["glibc"]
+# gettext：patch 有自己的翻译（po/ 目录），不带它中文就打不出来。
+build   = ["make", "gcc", "gettext"]
+
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["make", "gcc", "gettext"]
+
+[build]
+type      = "autotools"
+configure = ["--prefix=/usr"]

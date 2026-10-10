@@ -20,6 +20,8 @@ from .collect import collect
 
 from .rootfs import assemble
 
+from .variants import list_variants, load_variant
+
 # ------------------------------------------------------------------ 工具
 
 def _recipe_spec(name: str) -> dict:
@@ -163,20 +165,40 @@ def cmd_clean(args) -> None:
         log("提示", "未指定包名，只清理了 build/（产物保留）")
 
 
-def cmd_rootfs(args) -> None:
-    """把若干包拼成一个完整根文件系统，打成 tar。"""
-    arch = resolve_arch(args.arch)
+def _assemble(packages: list[str], arch: str, output, title: str) -> None:
+    """拼装并汇报。rootfs 和 image 只差在包列表从哪来。"""
     print()
-    log("拼装", f"根文件系统 [{arch}]")
+    log("拼装", f"{title} [{arch}]")
 
-    out, order = assemble(args.packages, arch,
-                          Path(args.output) if args.output else None)
+    out, order = assemble(packages, arch,
+                          Path(output) if output else None)
     for name in order:
         log("包含", name)
 
     print()
-    size = out.stat().st_size
-    log("完成", f"{_shown(out)}  （{len(order)} 个包, {size // 1024} KiB）")
+    log("完成", f"{_shown(out)}  （{len(order)} 个包, {out.stat().st_size // 1024} KiB）")
+
+
+def cmd_rootfs(args) -> None:
+    """把若干包拼成一个完整根文件系统，打成 tar。"""
+    _assemble(args.packages, resolve_arch(args.arch), args.output, "根文件系统")
+
+
+def cmd_image(args) -> None:
+    """按风味定义拼一个镜像。"""
+    arch = resolve_arch(args.arch)
+    v = load_variant(args.variant)
+    print()
+    log("风味", f"{v['name']}  {v.get('description', '')}")
+
+    # 默认产物名带上风味：多个风味不能都叫 yojigenos-rootfs。
+    output = args.output or (OUTPUT_DIR / arch / f"yojigenos-{v['name']}-{arch}.tar.gz")
+    _assemble(v["packages"], arch, output,
+              f"风味 {v['name']}（{len(v['packages'])} 个包）")
+
+
+def cmd_variants(args) -> None:
+    list_variants()
 
 
 def main() -> None:
@@ -204,6 +226,15 @@ def main() -> None:
     p.add_argument("--arch", help="目标架构（默认当前架构）")
     p.add_argument("--output", help="输出的 tar 路径")
     p.set_defaults(func=cmd_rootfs)
+
+    p = sub.add_parser("image", help="按风味定义拼一个镜像（tar）")
+    p.add_argument("variant", help="风味名（variants/<名>.toml）")
+    p.add_argument("--arch", help="目标架构（默认当前架构）")
+    p.add_argument("--output", help="输出的 tar 路径（默认为 output/<架构>/yojigenos-<风味>-<架构>.tar.gz）")
+    p.set_defaults(func=cmd_image)
+
+    p = sub.add_parser("variants", help="列出已定义的风味")
+    p.set_defaults(func=cmd_variants)
 
     p = sub.add_parser("clean", help="清理构建目录 / 指定包的产物")
     p.add_argument("package", nargs="?")
