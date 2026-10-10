@@ -16,12 +16,12 @@ sha256 = "2649b27c0e90e632eadcd757be06c6e9a4f48d941de51e7c0f83ff76408a07b9"
 
 [dependencies]
 runtime = ["glibc"]
-build   = ["make"]
+build   = ["make", "gettext"]
 
 [dependencies.x86_64]
 runtime = ["glibc"]
-build   = ["make"]
+build   = ["make", "gettext"]
 
 [build]
 type      = "autotools"
-configure = ["--prefix=/usr", "--disable-nls"]
+configure = ["--prefix=/usr"]

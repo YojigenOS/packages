@@ -16,15 +16,15 @@ sha256 = "9aa0cc780dec156b8282844833b342ab7cb08c25d2cd9a1869cdd0df31deff48"
 
 [dependencies]
 runtime = ["glibc"]
-build   = ["make"]
+build   = ["make", "gettext"]
 
 [dependencies.x86_64]
 runtime = ["glibc"]
-build   = ["make"]
+build   = ["make", "gettext"]
 
 [build]
 type      = "autotools"
-configure = ["--prefix=/usr", "--disable-nls"]
+configure = ["--prefix=/usr"]
 
 # AArch64 专有的上游 bug（bug#81904）：gzip.h 把 head 定义成宏，而内核头文件
 # asm/sigcontext.h 里有以 head 为字段名的结构体，宏把结构体声明改坏了。

@@ -1,6 +1,10 @@
 # GNU Hello —— 打招呼的示例程序
 #
 # 这是 YojigenOS 的第一个配方，用来验证构建系统本身。
+#
+# 它顺带是**整条国际化链路的冒烟测试**：装了 gettext 之后，hello 的中文
+# 翻译应该被真正编译并安装。跑 `LANG=zh_CN.UTF-8 hello` 看到中文，
+# 就说明 gettext、NLS、locale 三件事都对了——这三件事各自都可能静默失败。
 
 [package]
 name        = "hello"
@@ -18,7 +22,7 @@ sha256 = "0d5f60154382fee10b114a1c34e785d8b1f492073ae2d3a6f7b147687b366aa0"
 
 [dependencies]
 runtime = ["glibc"]
-build   = []
+build   = ["gettext"]
 
 # 架构特定依赖：现在留形状，暂不使用。
 # 展开时会整体覆盖 [dependencies] 里同名的键。
@@ -27,4 +31,4 @@ runtime = ["glibc"]
 
 [build]
 type      = "autotools"
-configure = ["--prefix=/usr", "--disable-nls"]
+configure = ["--prefix=/usr"]

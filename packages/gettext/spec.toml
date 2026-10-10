@@ -1,0 +1,43 @@
+# gettext —— 国际化工具集
+#
+# 它是「中文优先」的前置：其他包装中文翻译，构建时就需要 msgfmt 把 .po
+# 编译成 .mo。没有它，configure 会**静默跳过**整个翻译——而这正是之前
+# 每个配方都带 --disable-nls 的原因（当时为了少一个构建依赖，见决策记录
+# 0004）。
+#
+# gettext 本身是自举的：它的构建树里 msgfmt 先于自己的 po/ 子目录构建，
+# 不需要先装一个 gettext。
+
+[package]
+name        = "gettext"
+version     = "1.0"
+release     = 1
+date        = 2026-10-10T09:45:42Z
+description = "国际化与本地化工具集：msgfmt、xgettext、msgmerge 等"
+section     = "devel"
+url         = "https://www.gnu.org/software/gettext/"
+license     = "GPL-3.0-or-later"
+
+[[source]]
+url    = "https://ftp.gnu.org/gnu/gettext/gettext-$VERSION.tar.xz"
+sha256 = "71132a3fb71e68245b8f2ac4e9e97137d3e5c02f415636eb508ae607bc01add7"
+
+[dependencies]
+runtime = ["glibc"]
+build   = ["gcc", "make"]
+
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["gcc", "make"]
+
+[build]
+type = "autotools"
+# --disable-java / --disable-csharp：gettext 能生成 Java 和 C# 的运行时支持，
+# 但那需要 JDK 和 mono。构建环境里没有，自动探测本来也会跳过——显式关掉，
+# 免得哪天镜像里多了个 JDK，产物就悄悄变了。
+configure = [
+  "--prefix=/usr",
+  "--sysconfdir=/etc",
+  "--disable-java",
+  "--disable-csharp",
+]
