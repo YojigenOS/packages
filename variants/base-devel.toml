@@ -84,6 +84,11 @@ packages = [
   # 内核的构建过程会调用它（linux-headers 就是被它卡住的）
   "rsync",
 
+  # ★ git 树里的 GNU 包要它。那些树没有 info 手册（生成物不进版本控制），
+  #   要从 .texi 现场生成，靠 makeinfo。发行包才带着上游生成好的那份。
+  #   xz 用的是 git + autoreconf，所以【这一条不进去，自举验证就会卡在 xz】。
+  "texinfo",
+
   # ---- 加速 ----
   # ccache 让重复编译从 347 秒降到 82 秒（glibc 实测，4.2 倍）。
   # 它要 zstd（4.x 起强制），自己用 cmake 构建——三个包，一条短链。
