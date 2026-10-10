@@ -17,7 +17,7 @@ OUTPUT_DIR = ROOT / "output"
 CACHE_DIR = ROOT / "cache"
 BUILD_DIR = ROOT / "build"
 HOST_PROVIDES_FILE = ROOT / "host" / "provides.txt"
-BUILDENV_IMAGE = "yojigen/buildenv"
+BUILDENV_IMAGE = "yojigenos/buildenv"
 
 ARCH_ALIASES = {
     "arm64": "aarch64",
@@ -80,5 +80,27 @@ def resolve_arch(requested: str | None) -> str:
             f"       交叉工具链要等工具链自举之后才会加上，见 docs/ 里的架构策略。"
         )
     return want
+
+
+def build_jobs() -> int:
+    """本地构建的并行度：默认留两个核给用户。
+
+    构建吃满 CPU 时，机器会卡到没法做别的事——而这台机器同时也是你写代码
+    的地方。少两个核，gcc 大概慢 20%，但你能一边等一边继续干活。
+
+    用环境变量 SKIRT_JOBS 覆盖（CI 上想全开就设成核数）。
+    """
+    override = os.environ.get("SKIRT_JOBS")
+    if override:
+        try:
+            n = int(override)
+        except ValueError:
+            die(f"SKIRT_JOBS 不是整数: {override!r}")
+        if n < 1:
+            die(f"SKIRT_JOBS 必须 ≥ 1，收到 {n}")
+        return n
+
+    total = os.cpu_count() or 4
+    return max(1, total - 2)
 
 

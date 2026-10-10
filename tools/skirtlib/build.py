@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import subprocess
 
-from .common import BUILDENV_IMAGE, BUILD_DIR, die, log
+from .common import BUILDENV_IMAGE, BUILD_DIR, build_jobs, die, log
 
 from .spec import expand
 
@@ -93,6 +93,32 @@ def run_in_container(srcrel: str, arch: str, spec: dict) -> None:
     # 权限：容器以 root 启动，因为要把依赖合并进根文件系统；合并完成后
     # 立刻降权到宿主用户再执行构建。以 root 构建会踩两部分上游检查
     # （GNU 的 "you should not run configure as root"），也会让产物属主不对。
+    # strip：去掉调试信息。不 strip 的话 gcc 一个包就占 2 GB——
+    # 实测 cc1 407 MB → 36 MB（90%），libstdc++.a 51 MB → 6 MB（87%）。
+    #
+    #   .so / 可执行文件 → --strip-unneeded
+    #   .a              → --strip-debug（用 --strip-unneeded 会破坏静态库）
+    #   .o              → 绝对不碰：链接时需要它们的目标码与重定位信息
+    #
+    # 非 ELF 文件（链接脚本、shell 脚本等）会被 strip 拒绝，不影响构建。
+    # 个别需要保留符号的包可以声明 [build] nostrip = true 退出。
+    b = spec.get("build", {})
+    if b.get("nostrip"):
+        strip_block = ""
+    else:
+        strip_block = (
+            "\n# strip：去掉调试信息\n"
+            'before=$(du -sk "$WORK/dest" | cut -f1)\n'
+            'find "$WORK/dest" -type f \\( -name "*.so" -o -name "*.so.*" -o -perm -u+x \\) \\\n'
+            '     ! -name "*.a" ! -name "*.o" ! -name "*.la" -print0 2>/dev/null \\\n'
+            '  | xargs -0 -r strip --strip-unneeded 2>/dev/null || true\n'
+            'find "$WORK/dest" -type f -name "*.a" -print0 2>/dev/null \\\n'
+            '  | xargs -0 -r strip --strip-debug 2>/dev/null || true\n'
+            'after=$(du -sk "$WORK/dest" | cut -f1)\n'
+            'if [ "$before" -gt 0 ]; then pct=$(( (before-after)*100/before )); else pct=0; fi\n'
+            'echo "[strip] ${before} KB → ${after} KB（省 ${pct}%）"\n'
+        )
+
     wrapper = (
         "set -euo pipefail\n"
         "\n"
@@ -123,13 +149,14 @@ def run_in_container(srcrel: str, arch: str, spec: dict) -> None:
         f'      PKGDEST="$WORK/dest" SRCDIR="$WORK/src/{srcrel}" \\\n'
         '  bash "$WORK/run.sh"\n'
         "\n"
-        "# 产物拷回宿主\n"
+        + strip_block
+        + "# 产物拷回宿主\n"
         "mkdir -p /in/dest\n"
         'cp -a "$WORK/dest/." /in/dest/\n'
     )
 
     # MAKEFLAGS 通过环境变量传给所有 make（含子 make），省得每个配方各写一遍 -j。
-    jobs = str(os.cpu_count() or 4)
+    jobs = str(build_jobs())
     cmd = [
         "docker", "run", "--rm",
         "-e", f"HOSTUID={os.getuid()}",

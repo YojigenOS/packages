@@ -18,14 +18,18 @@ deps.dep_closure()：那里编码的是自举语义，是 skirt 里最容易出�
 
 from __future__ import annotations
 
+import os
 import sys
+import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from skirtlib import deps as deps_mod
-from skirtlib.common import PACKAGES_DIR
+from skirtlib.common import PACKAGES_DIR, build_jobs
+from skirtlib.deps import merge_tree
 from skirtlib.spec import deps_for, direct_deps, expand, load_spec
 
 
@@ -171,6 +175,126 @@ class TestDepClosure(unittest.TestCase):
                 with self.subTest(package=name, dependency=dep):
                     self.assertLess(order.index(dep), order.index(name),
                                     f"{dep} 应该排在 {name} 前面")
+
+
+class TestMergeTree(unittest.TestCase):
+    """依赖合并进 sysroot。
+
+    这里原本用 shutil.copytree，遇到「目标已有同名符号链接」会抛
+    File exists——而 gcc 和 filesystem 都提供 usr/lib64 → lib，正好撞上，
+    导致 glibc 的一次构建失败。以下用例是那次故障的回归测试。
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        root = Path(self._tmp.name)
+        self.src, self.dst = root / "src", root / "dst"
+        self.src.mkdir()
+        self.dst.mkdir()
+
+    def _file(self, base, rel, text):
+        p = base / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(text)
+        return p
+
+    def _link(self, base, rel, target):
+        p = base / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.symlink_to(target)
+        return p
+
+    def test_symlink_over_same_symlink(self):
+        """回归：两个包提供同一个符号链接（gcc 与 filesystem 的 usr/lib64）。"""
+        self._link(self.src, "usr/lib64", "lib")
+        self._link(self.dst, "usr/lib64", "lib")
+        merge_tree(self.src, self.dst)          # 不该抛异常
+        self.assertTrue((self.dst / "usr/lib64").is_symlink())
+        self.assertEqual(os.readlink(self.dst / "usr/lib64"), "lib")
+
+    def test_symlink_overwrites_file(self):
+        self._link(self.src, "x", "target")
+        self._file(self.dst, "x", "我是文件")
+        merge_tree(self.src, self.dst)
+        self.assertTrue((self.dst / "x").is_symlink())
+
+    def test_file_overwrites_symlink(self):
+        """这条最阴：shutil.copy2 遇到符号链接会跟着它跑到链接指向的地方写，
+        而不是替换链接本身。"""
+        self._file(self.src, "x", "我是新文件")
+        self._link(self.dst, "x", "某个地方")
+        merge_tree(self.src, self.dst)
+        self.assertFalse((self.dst / "x").is_symlink())
+        self.assertEqual((self.dst / "x").read_text(), "我是新文件")
+
+    def test_file_overwrites_file(self):
+        self._file(self.src, "x", "新")
+        self._file(self.dst, "x", "旧")
+        merge_tree(self.src, self.dst)
+        self.assertEqual((self.dst / "x").read_text(), "新")
+
+    def test_symlink_overwrites_directory(self):
+        self._link(self.src, "x", "target")
+        self._file(self.dst, "x/inner.txt", "内容")
+        merge_tree(self.src, self.dst)
+        self.assertTrue((self.dst / "x").is_symlink())
+
+    def test_directories_merge_rather_than_replace(self):
+        """两边都有同一个目录时，应该合并内容，而不是覆盖掉一边。"""
+        self._file(self.src, "d/a.txt", "a")
+        self._file(self.dst, "d/b.txt", "b")
+        merge_tree(self.src, self.dst)
+        self.assertEqual((self.dst / "d/a.txt").read_text(), "a")
+        self.assertEqual((self.dst / "d/b.txt").read_text(), "b")
+
+    def test_nested(self):
+        self._file(self.src, "a/b/c.txt", "你好")
+        merge_tree(self.src, self.dst)
+        self.assertEqual((self.dst / "a/b/c.txt").read_text(), "你好")
+
+    def test_directory_modes_preserved(self):
+        """回归：/tmp 是 1777、/root 是 0700。
+
+        merge_tree 用 mkdir 建目录会丢掉这些模式，容器里 cp -a 再把错的
+        权限铺到 /tmp 上，降权执行的构建就写不进去——报的是
+        "cannot create a temporary directory in /tmp"，看不出和权限有关。"""
+        import stat as stat_mod
+        for rel, mode in (("tmp", 0o1777), ("root", 0o700)):
+            d = self.src / rel
+            d.mkdir()
+            d.chmod(mode)
+        merge_tree(self.src, self.dst)
+        for rel, mode in (("tmp", 0o1777), ("root", 0o700)):
+            with self.subTest(dir=rel):
+                actual = stat_mod.S_IMODE((self.dst / rel).stat().st_mode)
+                self.assertEqual(actual, mode, f"/{rel} 的权限应该是 {oct(mode)}")
+
+
+class TestBuildJobs(unittest.TestCase):
+    """并行度：默认留两个核给用户，别把开发机占满。"""
+
+    def test_leaves_two_cores_free(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            with mock.patch("skirtlib.common.os.cpu_count", return_value=10):
+                self.assertEqual(build_jobs(), 8)
+
+    def test_never_below_one(self):
+        """只有 2 核的机器上，留两个核会算出 0——那会让 make 报错。"""
+        with mock.patch.dict(os.environ, {}, clear=True):
+            with mock.patch("skirtlib.common.os.cpu_count", return_value=2):
+                self.assertEqual(build_jobs(), 1)
+
+    def test_env_override(self):
+        with mock.patch.dict(os.environ, {"SKIRT_JOBS": "3"}):
+            self.assertEqual(build_jobs(), 3)
+
+    def test_bad_override_exits(self):
+        for bad in ("abc", "0", "-1", "3.5"):
+            with self.subTest(value=bad):
+                with mock.patch.dict(os.environ, {"SKIRT_JOBS": bad}):
+                    with self.assertRaises(SystemExit):
+                        build_jobs()
 
 
 class TestEveryRealSpec(unittest.TestCase):

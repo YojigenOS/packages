@@ -29,18 +29,23 @@ jobs:
       # 构建环境镜像还是 Debian 底。自举完成之后，这里会换成
       # FROM scratch + 我们自己的 rootfs——文件名和 tag 都不用改。
       - name: 准备构建环境
-        run: docker build -t yojigen/buildenv:aarch64 tools/buildenv
+        run: docker build -t yojigenos/buildenv:aarch64 tools/buildenv
 
       - name: 构建根文件系统
         run: |
+          # skirt 默认留两个核给用户——那是给开发机的体贴，在 CI 上
+          # 就是浪费：整台 runner 都是我们的，全用上。
+          export SKIRT_JOBS=$(nproc)
+          echo "并行度: -j$SKIRT_JOBS"
+
           ./tools/skirt rootfs \
             filesystem glibc bash coreutils \
             sed grep gawk findutils diffutils \
             tar gzip xz make binutils gcc linux-headers \
             gmp mpfr mpc zlib \
-            --output /tmp/yojigen-rootfs.tar.gz
+            --output /tmp/yojigenos-rootfs.tar.gz
           echo "--- 产物 ---"
-          ls -lh /tmp/yojigen-rootfs.tar.gz
+          ls -lh /tmp/yojigenos-rootfs.tar.gz
 
       - name: 导入并打标签
         id: image

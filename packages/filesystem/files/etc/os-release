@@ -1,9 +1,9 @@
 NAME="YojigenOS"
-ID=yojigen
+ID=yojigenos
 PRETTY_NAME="YojigenOS"
 VERSION="development"
 VERSION_ID="0.0.1"
 HOME_URL="https://github.com/YojigenOS"
 BUG_REPORT_URL="https://github.com/YojigenOS/packages/issues"
 ANSI_COLOR="1;36"
-LOGO=yojigen
+LOGO=yojigenos

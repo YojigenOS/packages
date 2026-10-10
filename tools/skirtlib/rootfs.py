@@ -52,7 +52,7 @@ def assemble(packages: list[str], arch: str, output: Path | None = None) -> tupl
         _payload, rel = dep_payload(name, arch)
         rels.append(rel)
 
-    out = output or (OUTPUT_DIR / arch / f"yojigen-rootfs-{arch}.tar.gz")
+    out = output or (OUTPUT_DIR / arch / f"yojigenos-rootfs-{arch}.tar.gz")
     out.parent.mkdir(parents=True, exist_ok=True)
 
     script = (

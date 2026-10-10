@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 from pathlib import Path
 
-from .common import BUILD_DIR, HOST_PROVIDES_FILE, OUTPUT_DIR, PACKAGES_DIR, ROOT, die, log
+from .common import BUILD_DIR, HOST_PROVIDES_FILE, OUTPUT_DIR, PACKAGES_DIR, ROOT, die, log, rmtree_force
 
 from .spec import direct_deps, load_spec
 
@@ -87,15 +88,60 @@ def dep_payload(name: str, arch: str) -> tuple[Path, str]:
     return payload, rel
 
 
+def merge_tree(src: Path, dst: Path) -> None:
+    """把 src 合并进 dst，同名项覆盖。
+
+    不能用 shutil.copytree：它的 dirs_exist_ok 只对目录生效，遇到
+    「目标已有同名符号链接」会直接抛 File exists。而 gcc 和 filesystem
+    都提供 /usr/lib64 → lib，正好撞上——这不是罕见情况，任何两个包
+    提供同一路径都会触发。
+    """
+    dst.mkdir(parents=True, exist_ok=True)
+    for entry in src.iterdir():
+        target = dst / entry.name
+
+        # 目标已存在就先清掉。三种类型的覆盖规则各不相同，而 shutil 和 os
+        # 都不会替我们处理：os.symlink 不覆盖任何东西；shutil.copy2 遇到
+        # 符号链接会跟着它跑到链接指向的地方去写。
+        if target.is_symlink() or (target.exists() and not target.is_dir()):
+            target.unlink()
+        elif target.is_dir() and (not entry.is_dir() or entry.is_symlink()):
+            rmtree_force(target)
+
+        if entry.is_symlink():
+            target.symlink_to(os.readlink(entry))
+        elif entry.is_dir():
+            merge_tree(entry, target)
+            # 目录的权限也要带过来。mkdir 用的是默认的 0755，而 /tmp 是
+            # 1777、/root 是 0700——丢了这些模式，构建会以莫名其妙的
+            # "Permission denied" 失败，而且看不出和权限有关。
+            shutil.copystat(entry, target)
+        else:
+            shutil.copy2(entry, target)
+
+
 def build_sysroot(order: list[str], arch: str) -> Path:
     """把依赖按顺序叠加成 sysroot。后面的包会覆盖前面同路径的文件。"""
     sysroot = BUILD_DIR / "sysroot"
     sysroot.mkdir(parents=True, exist_ok=True)
     for name in order:
         payload, rel = dep_payload(name, arch)
-        shutil.copytree(payload, sysroot, symlinks=True, dirs_exist_ok=True)
+        merge_tree(payload, sysroot)
         n = sum(1 for _ in payload.rglob("*"))
         log("依赖", f"{rel}  ({n} 项)")
+
+    # 容器里的挂载点不该出现在 sysroot 里。
+    #
+    # filesystem 包会提供 /proc /sys /dev 这些空目录做占位（成品系统需要
+    # 它们），但在构建容器里它们是只读挂载——合并时 cp -a 会试图给只读
+    # 挂载点设置时间戳，报 "Read-only file system" 让整个构建失败。
+    #
+    # 构建需要的是头文件和库，这些挂载点一个都用不上，直接去掉。
+    for mount in ("proc", "sys", "dev", "run"):
+        p = sysroot / mount
+        if p.exists() or p.is_symlink():
+            log("依赖", f"跳过 /{mount}（容器里的挂载点）")
+            rmtree_force(p)
     return sysroot
 
 
