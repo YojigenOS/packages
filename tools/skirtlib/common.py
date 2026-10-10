@@ -97,11 +97,16 @@ def resolve_arch(requested: str | None) -> str:
     if requested is None:
         return host
     want = ARCH_ALIASES.get(requested, requested)
-    if want != host:
-        die(
-            f"暂不支持交叉构建：宿主是 {host}，请求的是 {want}。\n"
-            f"       交叉工具链要等工具链自举之后才会加上，见 docs/ 里的架构策略。"
-        )
+    if want not in ARCH_ALIASES.values():
+        die(f"不认识的架构: {requested}")
+    # 【这里原来会拒绝非宿主架构】理由是"暂不支持交叉构建"。
+    #
+    # 那个理由把问题想复杂了：我们不是换工具链，是换容器。aarch64 的包在
+    # x86_64 上构建，靠的是 `docker run --platform linux/x86_64` 跑一个
+    # x86_64 的构建环境镜像——工具链是那个镜像里的，不是交叉工具链。
+    #
+    # 所以不拦。真正需要平台选择的是 run_in_container（那里加 --platform），
+    # 而在原生 runner 上连那个都不需要。
     return want
 
 

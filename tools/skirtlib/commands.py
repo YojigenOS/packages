@@ -277,14 +277,16 @@ def main() -> None:
 
     p = sub.add_parser("bootstrap", help="按推导出的顺序建完所有包（顺序是算的）")
     p.add_argument("targets", nargs="*", help="只建这些包及其依赖闭包")
-    p.add_argument("--arch", default="aarch64")
+    p.add_argument("--arch", default=None,
+                   help="默认是宿主架构（多平台容器，不需要交叉编译）")
     p.add_argument("--report", action="store_true", help="结束时打印耗时表")
     p.set_defaults(func=cmd_bootstrap)
 
     p = sub.add_parser("order", help="按依赖算出构建顺序（说明环断在哪里）")
     p.add_argument("targets", nargs="*",
                    help="只排这些包及其依赖闭包（默认全部）")
-    p.add_argument("--arch", default="aarch64")
+    p.add_argument("--arch", default=None,
+                   help="默认是宿主架构（多平台容器，不需要交叉编译）")
     p.set_defaults(func=cmd_order)
 
     p = sub.add_parser("deps", help="查看依赖解析结果（不构建）")

@@ -64,10 +64,25 @@ packages = [
   # 在那之前我一直以为自举只缺 setpriv 和 patch 两个——那是按命令查的结论，
   # 而真实需求得让构建设一遍才知道。
   "bison",      # glibc 要 → 它自己要 m4
-  "m4",         # bison 运行时调用它；将来的 autoconf/libtool 也是 m4 宏
+  "m4",         # bison 运行时调用它；autoconf/libtool 也是 m4 宏
   "python3",    # glibc 要 → 它自己要 expat 和 libffi
   "expat",      # python3 的 pyexpat
   "libffi",     # python3 的 ctypes
+  "libxcrypt",  # perl 链接 libcrypt（glibc 2.28 起不再提供）
+
+  # ---- 从 git 树构建 autotools 项目要的（见 docs/配方约定.md）----
+  # git 树里没有 configure，得现场 autoreconf。而 autoconf 是 Perl 程序，
+  # automake 调用 autoconf，libtool 靠 m4 宏——所以是这四个一起。
+  #
+  # 它们也在 host/provides.txt 里：libxcrypt → autoconf → perl → libxcrypt
+  # 是个真的环，靠排序解不开。和工具链同族。
+  "perl",
+  "autoconf",
+  "automake",
+  "libtool",
+
+  # 内核的构建过程会调用它（linux-headers 就是被它卡住的）
+  "rsync",
 
   # ---- 加速 ----
   # ccache 让重复编译从 347 秒降到 82 秒（glibc 实测，4.2 倍）。
