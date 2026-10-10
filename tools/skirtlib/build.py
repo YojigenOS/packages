@@ -11,6 +11,29 @@ from .common import (BUILDENV_IMAGE, BUILD_DIR, CCACHE_DIR, CCACHE_MAXSIZE,
 
 from .spec import expand
 
+#: 合并依赖到构建容器时，这些顶层名字【不覆盖】容器已有的。
+#:
+#: 【为什么】x86_64 上 Debian 的 /lib64 → usr/lib64，而动态链接器就住在
+#: 那里（/lib64/ld-linux-x86-64.so.2 → ../lib/x86_64-linux-gnu/...）。
+#: 我们的 filesystem 包按 0001 的策略把它改成 /lib64 → usr/lib，于是
+#: /lib64/ld-linux-x86-64.so.2 变成悬空——**容器里所有动态链接的程序立刻
+#: 全废**。实测的表现是 glibc 构建 11 秒就死，而日志里只有「合并 9715 项
+#: 到 /」和一句失败，完全看不出原因。
+#:
+#: aarch64 上一直没暴露：那里的链接器是 /lib/ld-linux-aarch64.so.1，而
+#: /lib → usr/lib 两边一致。只有 x86_64 的 /lib64 有分歧。
+#:
+#: 【为什么保护是对的】「合并进构建容器」和「拼装我们的根」是两件事。
+#: filesystem 描述的是**我们的根**，而构建容器不是我们的根——它的布局是
+#: Debian 的。包的**内容**照样进 usr/，受影响的只是根的四条链接。
+CONTAINER_PROTECTED = ("bin", "sbin", "lib", "lib64")
+
+#: 我们的架构名 → docker 的平台名。两套命名不一样，别混。
+DOCKER_PLATFORM = {
+    "aarch64": "linux/arm64",
+    "x86_64": "linux/amd64",
+}
+
 # ------------------------------------------------------------ 生成构建脚本
 
 def make_build_script(spec: dict) -> str:
@@ -249,9 +272,28 @@ def run_in_container(srcrel: str, arch: str, spec: dict, epoch: int) -> None:
         "trap cleanup EXIT\n"
         "\n"
         "# 依赖包的 payload 合并进根文件系统（需要 root）\n"
+        "#\n"
+        "# 【为什么不是 cp -a /in/sysroot/. /】那会覆盖容器自己的根布局。\n"
+        "# x86_64 上 Debian 的 /lib64 → usr/lib64，动态链接器就住在那里\n"
+        "# （/lib64/ld-linux-x86-64.so.2 → ../lib/x86_64-linux-gnu/…）。我们的\n"
+        "# filesystem 包按 0001 的策略把它改成 /lib64 → usr/lib，于是链接器\n"
+        "# 变成悬空——**容器里所有动态链接的程序立刻全废**。实测的表现是\n"
+        "# glibc 构建 11 秒就死，日志里只有「合并 9715 项到 /」和一句失败，\n"
+        "# 完全看不出原因。\n"
+        "#\n"
+        "# aarch64 上一直没暴露：那里的链接器是 /lib/ld-linux-aarch64.so.1，\n"
+        "# 而 /lib → usr/lib 两边一致，只有 x86_64 的 /lib64 有分歧。\n"
+        "#\n"
+        "# 【为什么跳过是对的】这里是「合并进构建容器」，不是「拼装我们的根」。\n"
+        "# filesystem 描述的是【我们的根】，而构建容器的布局是 Debian 的。\n"
+        "# 包的内容照样进 usr/，受影响的只有根上这四条链接。\n"
         'if [ -d /in/sysroot ] && [ -n "$(ls -A /in/sysroot 2>/dev/null)" ]; then\n'
         '  echo "[依赖] 合并 $(find /in/sysroot \\( -type f -o -type l \\) | wc -l | tr -d " ") 项到 /"\n'
-        "  cp -a /in/sysroot/. /\n"
+        '  for entry in /in/sysroot/* /in/sysroot/.[!.]*; do\n'
+        '    [ -e "$entry" ] || [ -L "$entry" ] || continue\n'
+        '    case "$(basename "$entry")" in bin|sbin|lib|lib64) continue ;; esac\n'
+        '    cp -a "$entry" /\n'
+        "  done\n"
         "fi\n"
         "\n"
         "# 容器内工作区：复制源码与脚本，属主交给宿主用户\n"
@@ -308,6 +350,10 @@ def run_in_container(srcrel: str, arch: str, spec: dict, epoch: int) -> None:
     jobs = str(build_jobs())
     cmd = [
         "docker", "run", "--rm",
+        # 指定平台。**这不是交叉编译**——是让 docker 跑一个该架构的构建
+        # 环境镜像，工具链是那个镜像里的。原生 runner 上是空操作；
+        # 别的架构上（本机测 x86_64 走 Rosetta）它负责选对镜像。
+        "--platform", DOCKER_PLATFORM.get(arch, f"linux/{arch}"),
         # 固定主机名。docker 默认给容器一个随机主机名（容器 ID），
         # 于是任何调用 gethostname() 的构建都会嵌入一个随机值——实测两次
         # 分别是 0fdeea78b33b 和 97ec2399f6f9。名字本身不重要（它是构建

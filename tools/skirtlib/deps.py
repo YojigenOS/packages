@@ -125,8 +125,12 @@ def dep_payload(name: str, arch: str) -> tuple[Path, str]:
     return payload, rel
 
 
-def merge_tree(src: Path, dst: Path) -> None:
+def merge_tree(src: Path, dst: Path, protect: tuple[str, ...] = ()) -> None:
     """把 src 合并进 dst，同名项覆盖。
+
+    `protect` 里的**顶层名字**不覆盖目标已有的项。这是给「合并进构建容器」
+    用的——见 build.py 里 CONTAINER_PROTECTED 的注释，那里有一个花了很久
+    才找出来的坑。
 
     不能用 shutil.copytree：它的 dirs_exist_ok 只对目录生效，遇到
     「目标已有同名符号链接」会直接抛 File exists。而 gcc 和 filesystem
