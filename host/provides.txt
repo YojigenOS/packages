@@ -15,9 +15,11 @@
 
 # --- 第一阶段：完全依赖宿主的工具链 ---
 # 这些是自举的起点。工具链自举阶段会逐个换成 YojigenOS 自己的包。
+#
+# 已替换掉的（删一行 = 自举进度 +1）：
+#   linux-headers  7.2.9   ✅ 已由 YojigenOS 自建
 
 glibc
-linux-headers
 binutils
 gcc
 make

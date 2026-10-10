@@ -1,0 +1,36 @@
+# linux-headers —— Linux 内核用户空间 API 头文件
+#
+# 这是自举链条的第一环：glibc 编译时需要知道系统调用长什么样，
+# 靠的就是这些头文件。
+#
+# 注意：本包只安装头文件，不编译内核。内核镜像（vmlinuz）是链条最后
+# 才出场的东西——内核在这条路上出现两次，一次最早（头文件），一次最晚
+# （可启动的内核）。
+
+[package]
+name        = "linux-headers"
+version     = "7.2.9"
+release     = 1
+description = "Linux 内核用户空间 API 头文件"
+section     = "core"
+url         = "https://www.kernel.org/"
+license     = "GPL-2.0-only WITH Linux-syscall-note"
+
+[[source]]
+# v7.x 是按主版本号分目录的。主版本升级时需要改这里。
+url    = "https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-$VERSION.tar.xz"
+sha256 = "b4c5dfbe51a364a6c7f03869200f88c8e1f77403539005f14b7fc6bc91b8d8ba"
+
+[dependencies]
+runtime = []
+# make 目前在 host/provides.txt 里，会被跳过而不报错。
+# 等我们自建出 make 之后，把那一行删掉，这里就会真的去解析它。
+build   = ["make"]
+
+[dependencies.x86_64]
+runtime = []
+build   = ["make"]
+
+[build]
+# custom：headers_install 是内核自己的目标，不套 autotools 那套映射
+type = "custom"
