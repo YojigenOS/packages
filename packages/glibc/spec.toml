@@ -1,0 +1,47 @@
+# glibc —— GNU C 库
+#
+# 工具链的最后一块，也是地基。它提供动态链接器
+# （ld-linux-aarch64.so.1）和 libc，并定义运行时库的搜索路径——
+# 和 docs/决策记录/0001 的 /usr/lib 布局直接相关。
+#
+# 这个包的构建有个特点值得注意：binutils、gcc、linux-headers 都已经不在
+# host/provides.txt 里了，所以它们会被 sysroot 叠进构建环境。也就是说，
+# glibc 是**用我们自己的工具链和内核头文件构建出来的**——这正是自举该有的
+# 样子，也是 glibc 之前那些包没有经历过的。
+
+[package]
+name        = "glibc"
+version     = "2.44"
+release     = 1
+description = "GNU C 库：动态链接器与标准 C 库"
+section     = "core"
+url         = "https://www.gnu.org/software/libc/"
+license     = "LGPL-2.1-or-later"
+
+[[source]]
+url    = "https://ftp.gnu.org/gnu/glibc/glibc-$VERSION.tar.xz"
+sha256 = "37f600f2bef3c5e8300147059568b2a2e40a7ad6ccc65ce942556d49429cc667"
+
+[dependencies]
+# 运行时无依赖——它自己就是运行时
+runtime = []
+build   = ["make", "linux-headers", "binutils", "gcc"]
+
+[dependencies.x86_64]
+runtime = []
+build   = ["make", "linux-headers", "binutils", "gcc"]
+
+[build]
+type = "autotools"
+# glibc 自己就拒绝在源码目录里 configure，必须离开源码树
+out_of_tree = true
+configure = [
+  "--prefix=/usr",
+  "--libdir=/usr/lib",
+  "--with-headers=/usr/include",
+  "--disable-nls",
+  "--disable-werror",
+  # 最低支持的运行时内核版本。取 5.4（LTS）：比它旧的内核不保证可用，
+  # 比它新的都能用。
+  "--enable-kernel=5.4",
+]

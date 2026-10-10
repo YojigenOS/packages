@@ -18,6 +18,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         gettext \
         bison \
         flex \
+        gawk \
         meson \
         ninja-build \
         cmake \

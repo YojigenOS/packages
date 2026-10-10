@@ -314,9 +314,7 @@ def make_build_script(spec: dict) -> str:
         die(f"{spec['package']['name']}: out_of_tree 目前只支持 autotools"
             f"（meson 和 cmake 本来就是离开源码树构建的）")
 
-    header = "export PKGDEST=/work/dest\n"
-    if oot:
-        header += 'BUILDDIR="$SRCDIR/_build"\n'
+    header = 'BUILDDIR="$SRCDIR/_build"\n' if oot else ""
 
     if kind == "autotools":
         opts = " ".join(b.get("configure", ["--prefix=/usr"]))
@@ -352,7 +350,7 @@ def make_build_script(spec: dict) -> str:
         "package() {\n" + pkgstep + "\n}\n"
         "\n"
         "# steps.sh 若存在，可以通过重定义上面任意函数来覆盖默认行为\n"
-        "if [ -f /work/steps.sh ]; then . /work/steps.sh; fi\n"
+        'if [ -f "$WORK/steps.sh" ]; then . "$WORK/steps.sh"; fi\n'
         "\n"
         "build\n"
         "package\n"
@@ -361,48 +359,63 @@ def make_build_script(spec: dict) -> str:
 
 def run_in_container(script: str, srcrel: str, arch: str, spec: dict) -> None:
     pkg = spec["package"]
-    workdir = "/work/src" if srcrel == "." else f"/work/src/{srcrel}"
-    (BUILD_DIR / "home").mkdir(parents=True, exist_ok=True)
-    sysroot = BUILD_DIR / "sysroot"
-    sysroot.mkdir(parents=True, exist_ok=True)
+    (BUILD_DIR / "sysroot").mkdir(parents=True, exist_ok=True)
 
+    # 整个构建过程发生在容器内的 Linux 原生文件系统里，只把源码送进去、
+    # 把产物取出来。两个原因：
+    #
+    #   1. macOS 的 APFS 默认大小写不敏感。glibc 的构建会产生 stamp.oS 和
+    #      stamp.oST 这类只差大小写的文件，在绑定挂载上会互相覆盖，报
+    #      "are the same file"。见 docs/决策记录/0002。
+    #   2. 绑定挂载上的海量小文件 I/O 比容器内慢一个数量级——而构建过程
+    #      恰好就是海量小文件读写。
     wrapper = (
         "set -euo pipefail\n"
         "\n"
-        "# 结束时把 /work 的属主还给宿主用户，否则宿主无法清理\n"
-        'cleanup() { chown -R "$HOSTUID:$HOSTGID" /work 2>/dev/null || true; }\n'
+        'cleanup() { chown -R "$HOSTUID:$HOSTGID" /in 2>/dev/null || true; }\n'
         "trap cleanup EXIT\n"
         "\n"
-        "# 把依赖包的 payload 合并进根文件系统\n"
-        'if [ -d /mnt/sysroot ] && [ -n "$(ls -A /mnt/sysroot 2>/dev/null)" ]; then\n'
-        '  echo "[依赖] 合并 $(find /mnt/sysroot \\( -type f -o -type l \\) | wc -l | tr -d " ") 项到 /"\n'
-        "  cp -a /mnt/sysroot/. /\n"
+        "# 依赖包的 payload 合并进根文件系统\n"
+        'if [ -d /in/sysroot ] && [ -n "$(ls -A /in/sysroot 2>/dev/null)" ]; then\n'
+        '  echo "[依赖] 合并 $(find /in/sysroot \\( -type f -o -type l \\) | wc -l | tr -d " ") 项到 /"\n'
+        "  cp -a /in/sysroot/. /\n"
         "fi\n"
         "\n"
+        "# 源码与步骤脚本搬进容器原生文件系统\n"
+        "WORK=/work-local\n"
+        'mkdir -p "$WORK"\n'
+        'cp -a /in/src "$WORK/src"\n'
+        '[ -f /in/steps.sh ] && cp /in/steps.sh "$WORK/steps.sh"\n'
+        'mkdir -p "$WORK/dest"\n'
+        "\n"
+        'export PKGDEST="$WORK/dest"\n'
+        f'export SRCDIR="$WORK/src/{srcrel}"\n'
+        'cd "$SRCDIR"\n'
+        "\n"
         + script
+        + "\n"
+        "# 产物拷回宿主\n"
+        "mkdir -p /in/dest\n"
+        'cp -a "$WORK/dest/." /in/dest/\n'
     )
 
-    # 需要 root：要把依赖合并进 /usr。容器加 --rm，不会污染宿主。
+    # 需要 root：要把依赖合并进 /。容器带 --rm，不会污染宿主。
     # MAKEFLAGS 通过环境变量传给所有 make（含子 make），省得每个配方各写一遍 -j。
     jobs = str(os.cpu_count() or 4)
     cmd = [
         "docker", "run", "--rm",
         "-e", f"HOSTUID={os.getuid()}",
         "-e", f"HOSTGID={os.getgid()}",
-        "-e", "HOME=/work/home",
         "-e", f"PKGARCH={arch}",
         "-e", f"PKGNAME={pkg['name']}",
         "-e", f"PKGVER={pkg['version']}",
-        "-e", f"SRCDIR={workdir}",
         "-e", f"MAKEFLAGS=-j{jobs}",
-        "-v", f"{BUILD_DIR}:/work",
-        "-v", f"{sysroot}:/mnt/sysroot:ro",
-        "-w", workdir,
+        "-v", f"{BUILD_DIR}:/in",
         f"{BUILDENV_IMAGE}:{arch}",
         "bash", "-c", wrapper,
     ]
 
-    log("构建", f"{BUILDENV_IMAGE}:{arch}  (cwd={workdir}, -j{jobs})")
+    log("构建", f"{BUILDENV_IMAGE}:{arch}  (容器内构建, -j{jobs})")
     proc = subprocess.run(cmd)
     if proc.returncode != 0:
         die(f"构建失败（退出码 {proc.returncode}）")
