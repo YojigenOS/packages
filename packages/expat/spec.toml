@@ -1,0 +1,34 @@
+# expat —— XML 解析库
+#
+# python3 要它（pyexpat 模块）。python 自己也带一份 expat 源码，但我们已经有
+# 真的包了，用它更合理——一份代码在树里只该有一个出处。
+
+[package]
+name        = "expat"
+version     = "2.9.0"
+release     = 1
+date        = 2026-10-10T15:14:00Z
+description = "流式 XML 解析库（C 语言）"
+section     = "libs"
+url         = "https://libexpat.github.io/"
+license     = "MIT"
+
+[[source]]
+# GitHub 的 release 附件（维护者上传的字节），见 docs/配方约定.md。
+url    = "https://github.com/libexpat/libexpat/releases/download/R_2_9_0/expat-$VERSION.tar.gz"
+sha256 = "16afbb9cefead2aa278105cf27d9f597bde7fbf3dbb85015857ca7ca6a4e89ba"
+
+[dependencies]
+runtime = ["glibc"]
+build   = ["make", "gcc"]
+
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["make", "gcc"]
+
+[build]
+type = "autotools"
+configure = [
+  "--prefix=/usr",
+  "--disable-static",     # 只有 python3 用，动态链接就够
+]

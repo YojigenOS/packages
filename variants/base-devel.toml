@@ -54,6 +54,21 @@ packages = [
   "util-linux",
   "gettext",
 
+  # ---- configure 会【检查】的程序 ----
+  #
+  # 这一类按命令是查不出来的：它们不是构建时被调用的命令，而是 configure
+  # 会主动去找的程序。glibc 的 configure 直接把话说清楚了：
+  #
+  #     *** These critical programs are missing or too old: bison python
+  #
+  # 在那之前我一直以为自举只缺 setpriv 和 patch 两个——那是按命令查的结论，
+  # 而真实需求得让构建设一遍才知道。
+  "bison",      # glibc 要 → 它自己要 m4
+  "m4",         # bison 运行时调用它；将来的 autoconf/libtool 也是 m4 宏
+  "python3",    # glibc 要 → 它自己要 expat 和 libffi
+  "expat",      # python3 的 pyexpat
+  "libffi",     # python3 的 ctypes
+
   # ---- 加速 ----
   # ccache 让重复编译从 347 秒降到 82 秒（glibc 实测，4.2 倍）。
   # 它要 zstd（4.x 起强制），自己用 cmake 构建——三个包，一条短链。

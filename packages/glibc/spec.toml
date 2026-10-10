@@ -13,7 +13,7 @@
 name        = "glibc"
 version     = "2.44"
 release     = 1
-date        = 2026-10-10T06:57:33Z
+date        = 2026-10-10T15:00:00Z
 description = "GNU C 库：动态链接器与标准 C 库"
 section     = "core"
 url         = "https://www.gnu.org/software/libc/"

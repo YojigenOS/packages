@@ -1,0 +1,49 @@
+# libffi —— 外部函数接口库
+#
+# python3 要它（_ctypes 模块，也就是 ctypes）。
+
+[package]
+name        = "libffi"
+version     = "3.8.0"
+release     = 1
+date        = 2026-10-10T15:30:00Z
+description = "可移植的外部函数接口库"
+section     = "libs"
+url         = "https://sourceware.org/libffi/"
+license     = "MIT"
+
+[[source]]
+url    = "https://github.com/libffi/libffi/releases/download/v$VERSION/libffi-$VERSION.tar.gz"
+sha256 = "7da3e2d9a171eb0a038f592ecad3ff2bb2550f3496d87b3b29ad0cf4430c0db4"
+
+[dependencies]
+runtime = ["glibc"]
+build   = ["make", "gcc"]
+
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["make", "gcc"]
+
+[build]
+type = "autotools"
+configure = [
+  "--prefix=/usr",
+  "--disable-static",
+
+  # ★ 必须加这个，否则它会装到 /usr/lib64 去。
+  #
+  # --libdir=/usr/lib 对它【无效】。它的 configure.ac 里是这么写的：
+  #
+  #     if test x"$enable_multi_os_directory" != x"no"; then
+  #       multi_os_directory=`$CC $CFLAGS -print-multi-os-directory`
+  #       case $multi_os_directory in
+  #         ../*) toolexeclibdir=$toolexeclibdir/$multi_os_directory ;;
+  #
+  # 也就是说它去问 gcc「多架构的库该放哪个子目录」，而我们的 gcc 回答
+  # `../lib64`。于是它在 libdir 后面又接了一层，成了 /usr/lib64——和 0001
+  # 的 usr-merge 符号链接撞车，拼 rootfs 时 cp 直接失败。
+  #
+  # 上游为这种情况留了开关（multi-os-directory 是 GCC 的概念，libffi 只是
+  # 跟随它）。关掉就老老实实听 --libdir 的。
+  "--disable-multi-os-directory",
+]

@@ -1,0 +1,68 @@
+# python3 —— Python 解释器
+#
+# 为什么构建环境需要它：
+#
+#   glibc      configure 直接要求（自举时它报 missing: bison python）
+#   meson      本身就是 Python 写的
+#
+# 为什么【不在成品系统里】：它是构建环境的工具，不是运行时的一部分。
+# base（容器基础镜像）的包列表里没有它，17 MB 那个数字不受影响。
+#
+# 版本选 3.14.8 而不是刚发布的 3.15.0：它只在构建环境里跑，稳比新重要。
+# 等它进了 minimal 那条线、真的给用户用，再谈要不要跟最新。
+#
+# ## 没有开的东西，都是有意的
+#
+#   --enable-optimizations   PGO：要跑一整套测试来采集剖面，慢好几倍。
+#                            构建环境的解释器不值得。
+#   --with-lto               同理。
+#   --enable-shared          默认静态更简单，没有 rpath 那堆事。构建脚本
+#                            只是拿它当解释器用。
+#   ensurepip                不带 pip。树里没有 wheel/setuptools，
+#                            而且构建不该从网上拿东西。
+#
+# ## 没有的模块
+#
+#   _ssl      要 openssl（还没建）
+#   readline  要 readline（还没建）
+#   curses    要 ncurses（还没建）
+#
+# 三个都是可选的，python 会自己跳过并列出没编成的模块。glibc 的构建脚本
+# 只需要解释器本身。等 minimal 那条线走到 ncurses/readline/openssl 时，
+# 重建一次就会带上。
+
+[package]
+name        = "python3"
+version     = "3.14.8"
+release     = 1
+date        = 2026-10-10T15:32:00Z
+description = "Python 解释器"
+section     = "devel"
+url         = "https://www.python.org/"
+license     = "PSF-2.0"
+
+[[source]]
+# 主源 python.org（它自己托管的正式发布包，字节稳定）。
+# 备选是它在新加坡的镜像。见 docs/配方约定.md。
+url    = "https://www.python.org/ftp/python/$VERSION/Python-$VERSION.tar.xz"
+urls = ["https://mirrors.aliyun.com/python-release/source/Python-$VERSION.tar.xz"]
+sha256 = "c2215904f02b175596dc49351585104f4bc20341e1c47378b26a2c274360ce73"
+
+[dependencies]
+runtime = ["glibc", "expat", "libffi", "zlib"]
+build   = ["make", "gcc", "expat", "libffi", "zlib"]
+
+[dependencies.x86_64]
+runtime = ["glibc", "expat", "libffi", "zlib"]
+build   = ["make", "gcc", "expat", "libffi", "zlib"]
+
+[build]
+type = "autotools"
+configure = [
+  "--prefix=/usr",
+  "--without-ensurepip",
+  # 用树里已经有的 expat 和 libffi，不用它自带的那两份副本——
+  # 同一份代码在树里只该有一个出处。
+  "--with-system-expat",
+  "--with-system-ffi",
+]

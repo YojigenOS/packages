@@ -38,8 +38,24 @@ def make_build_script(spec: dict) -> str:
         header += (f'echo "[补丁] {p}"\n'
                    f'patch -p1 --fuzz=0 --no-backup-if-mismatch -i "$PKGDIR/{p}"\n')
 
+    # 库目录必须显式钉死成 /usr/lib，三个构建系统都是。
+    #
+    # 按决策记录 0001，我们做 usr-merge：/usr/lib64 是指向 lib 的符号链接。
+    # 而 autoconf 有个启发式——64 位系统上如果编译器的默认搜索路径里有
+    # lib64，它就把 libdir 定成 ${prefix}/lib64。于是包会装出一个【真目录】
+    # /usr/lib64，拼 rootfs 时和那个符号链接撞车：
+    #
+    #     cp: cannot overwrite non-directory '/rootfs/./usr/lib64'
+    #         with directory '.../libffi-3.8.0-1/payload/./usr/lib64'
+    #
+    # 实测中招的是 libffi（4 个文件）。但这是一类问题，不是它一个包的问题，
+    # 所以在默认值里钉死，而不是每个配方各写一遍——写一遍就会有人忘。
+    #
+    # cmake 的 GNUInstallDirs 和 meson 也有各自的 multiarch 习惯，一并钉住。
+    LIBDIR = "--libdir=/usr/lib"
+
     if kind == "autotools":
-        opts = " ".join(b.get("configure", ["--prefix=/usr"]))
+        opts = " ".join(b.get("configure", ["--prefix=/usr", LIBDIR]))
         if oot:
             body = ('  mkdir -p "$BUILDDIR"\n'
                     '  cd "$BUILDDIR"\n'
@@ -51,11 +67,14 @@ def make_build_script(spec: dict) -> str:
             body = f"  ./configure {opts}\n  make"
             pkgstep = '  make DESTDIR="$PKGDEST" install'
     elif kind == "meson":
-        opts = " ".join(b.get("configure", ["--prefix=/usr", "--buildtype=release"]))
+        opts = " ".join(b.get("configure",
+                              ["--prefix=/usr", "--libdir=lib", "--buildtype=release"]))
         body = f"  meson setup _build {opts}\n  meson compile -C _build"
         pkgstep = '  DESTDIR="$PKGDEST" meson install -C _build'
     elif kind == "cmake":
-        opts = " ".join(b.get("configure", ["-DCMAKE_INSTALL_PREFIX=/usr"]))
+        opts = " ".join(b.get("configure",
+                              ["-DCMAKE_INSTALL_PREFIX=/usr",
+                               "-DCMAKE_INSTALL_LIBDIR=lib"]))
         body = f"  cmake -B _build {opts}\n  cmake --build _build"
         pkgstep = '  DESTDIR="$PKGDEST" cmake --install _build'
     elif kind == "custom":

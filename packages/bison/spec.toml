@@ -1,0 +1,38 @@
+# bison —— 语法分析器生成器
+#
+# glibc 的 configure 明确要求它：
+#
+#     *** These critical programs are missing or too old: bison python
+#
+# 这是自举撞到的第五个没声明的依赖，也是第一个「平时看不见」的——bison
+# 不是构建时被调用的命令，而是 configure 会【检查】的程序。按命令查缺什么
+# 是查不出它的。
+
+[package]
+name        = "bison"
+version     = "3.8.2"
+release     = 1
+date        = 2026-10-10T15:12:00Z
+description = "语法分析器生成器（GNU Bison）"
+section     = "devel"
+url         = "https://www.gnu.org/software/bison/"
+license     = "GPL-3.0-or-later"
+
+[[source]]
+url    = "https://ftp.gnu.org/gnu/bison/bison-$VERSION.tar.xz"
+urls = ["https://mirrors.tuna.tsinghua.edu.cn/gnu/bison/bison-$VERSION.tar.xz"]
+sha256 = "9bba0214ccf7f1079c5d59210045227bcf619519840ebfa80cd3849cff5a5bf2"
+
+[dependencies]
+# m4 是【运行时】依赖：bison 生成分析器的时候会调用它，那是它的工作原理，
+# 不是编译它时才需要。
+runtime = ["glibc", "m4"]
+build   = ["make", "gcc", "m4"]
+
+[dependencies.x86_64]
+runtime = ["glibc", "m4"]
+build   = ["make", "gcc", "m4"]
+
+[build]
+type = "autotools"
+configure = ["--prefix=/usr"]

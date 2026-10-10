@@ -28,6 +28,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from skirtlib import build as build_mod
 from skirtlib import collect as collect_mod
 from skirtlib import deps as deps_mod
 from skirtlib.build import run_in_container
@@ -538,6 +539,44 @@ class TestRecipeOf(unittest.TestCase):
         self.assertTrue(is_subpackage("glibc-dev"))
         self.assertFalse(is_subpackage("glibc"))
         self.assertFalse(is_subpackage("没有这个包"))
+
+
+class TestBuildScriptDefaults(unittest.TestCase):
+    """三个构建系统的默认参数。
+
+    【为什么默认值本身要测】库目录曾经是个坑：autoconf 在 64 位系统上会把
+    libdir 定成 ${prefix}/lib64，于是包装出一个真目录 /usr/lib64，和我们按
+    0001 做的 usr-merge 符号链接撞车——拼 rootfs 时 cp 直接失败：
+
+        cp: cannot overwrite non-directory '/rootfs/./usr/lib64'
+            with directory '.../libffi-3.8.0-1/payload/./usr/lib64'
+
+    实测中招的是 libffi。但这是一类问题，所以在默认值里钉死。这一条测试
+    就是钉住那个钉子——不然哪天默认值被改回去，要等拼装时才炸。
+    """
+
+    def script(self, build):
+        return build_mod.make_build_script({"package": {"name": "x"}, "build": build})
+
+    def test_autotools_pins_libdir(self):
+        s = self.script({"type": "autotools"})
+        self.assertIn("--libdir=/usr/lib", s)
+        self.assertIn("--prefix=/usr", s)
+
+    def test_meson_pins_libdir(self):
+        s = self.script({"type": "meson"})
+        self.assertIn("--libdir=lib", s)
+
+    def test_cmake_pins_libdir(self):
+        s = self.script({"type": "cmake"})
+        self.assertIn("-DCMAKE_INSTALL_LIBDIR=lib", s)
+
+    def test_配方可以覆盖默认值(self):
+        s = self.script({"type": "autotools",
+                         "configure": ["--prefix=/opt"]})
+        self.assertIn("--prefix=/opt", s)
+        # 覆盖时用配方给的整套，不再附加默认值
+        self.assertNotIn("--libdir=/usr/lib", s)
 
 
 class TestEveryRealSpec(unittest.TestCase):

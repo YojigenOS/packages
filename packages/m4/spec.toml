@@ -1,0 +1,36 @@
+# m4 —— 宏处理器
+#
+# 它自己没什么用，但两个地方非它不可：
+#   bison     运行时调用 m4（那是它的工作原理）
+#   autoconf  本身就是一堆 m4 宏；libtool 也是
+#
+# 自举过程中它是被 glibc 逼出来的第一个：glibc 的 configure 报
+# 「missing or too old: bison python」，而 bison 要 m4。
+
+[package]
+name        = "m4"
+version     = "1.4.21"
+release     = 1
+date        = 2026-10-10T15:10:00Z
+description = "宏处理器：GNU m4"
+section     = "devel"
+url         = "https://www.gnu.org/software/m4/"
+license     = "GPL-3.0-or-later"
+
+[[source]]
+# 主源在海外（CI 快），备选在国内不通时兜底。见 docs/配方约定.md。
+url    = "https://ftp.gnu.org/gnu/m4/m4-$VERSION.tar.xz"
+urls = ["https://mirrors.tuna.tsinghua.edu.cn/gnu/m4/m4-$VERSION.tar.xz"]
+sha256 = "f25c6ab51548a73a75558742fb031e0625d6485fe5f9155949d6486a2408ab66"
+
+[dependencies]
+runtime = ["glibc"]
+build   = ["make", "gcc"]
+
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["make", "gcc"]
+
+[build]
+type = "autotools"
+configure = ["--prefix=/usr"]

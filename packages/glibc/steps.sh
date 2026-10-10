@@ -34,12 +34,19 @@ package() {
   # install-locales 会把 SUPPORTED 里全部两百多个 locale 都装上（约 200 MB）。
   # 这里改用 install-locale-files（--no-archive --no-hard-links，生成独立目录
   # 而不是打包成一个 locale-archive），并用命令行覆盖 SUPPORTED-LOCALES 只装
-  # 三个。这是 localedata/Makefile 官方的选装方式，不是自己拼 localedef 命令。
+  # 四个。这是 localedata/Makefile 官方的选装方式，不是自己拼 localedef 命令。
   #
-  # C.UTF-8 不在列表里：glibc 2.35 起它是编译进 libc 的，不需要数据文件。
+  # **C.UTF-8 必须在列表里。** 我原来以为不用：glibc 2.35 起 C.UTF-8 是「内置」
+  # 的。那个说法只对了一半——setlocale 认它，但**它仍然需要装进 locale 数据**，
+  # 否则会这样：
+  #
+  #     bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8)
+  #
+  # 而驱动给每个构建都设了 LC_ALL=C.UTF-8（可复现构建的一部分，见 0005）。
+  # 它悄悄退回 C 的话，虽然仍然确定、但那份保证就不是我们写下的那一份了。
   #
   # 没装的 locale 不影响使用——用户可以自己用 localedef 生成，
   # 那个工具就在 /usr/bin 里。
   make DESTDIR="$PKGDEST" localedata/install-locale-files \
-       SUPPORTED-LOCALES="zh_CN.UTF-8/UTF-8 zh_TW.UTF-8/UTF-8 en_US.UTF-8/UTF-8"
+       SUPPORTED-LOCALES="C.UTF-8/UTF-8 zh_CN.UTF-8/UTF-8 zh_TW.UTF-8/UTF-8 en_US.UTF-8/UTF-8"
 }
