@@ -1,0 +1,74 @@
+name: publish
+
+# 手动触发。发版是一个动作，不是一个副作用——写成 on: push 的话，
+# 每提交一次代码就推一个镜像，edge 立刻退化成流水账，
+# 「这一版是什么」这个信息就没了。
+on:
+  workflow_dispatch:
+
+# 这个 job 只需要读代码。显式收紧 GITHUB_TOKEN 的权限——
+# 工作流里的第三方代码（action）能拿到它，权限越小越好。
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    # 必须是 arm64：我们构建的是 aarch64 的包。
+    # 默认 runner 是 x86_64，在上面跑 skirt 会去模拟 aarch64，
+    # glibc 要编 40 分钟、gcc 可能要几小时——不可用。
+    #
+    # 这些 runner 只在公开仓库可用，私有仓库里加了会直接失败。
+    #
+    # 显式 pin 版本，不用 ubuntu-latest：它只跟踪 x64 镜像（我们本来
+    # 就用不了），而且 2026 年 10-11 月正在迁移到 26.04，会带来意外变化。
+    runs-on: ubuntu-26.04-arm
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # 构建环境镜像还是 Debian 底。自举完成之后，这里会换成
+      # FROM scratch + 我们自己的 rootfs——文件名和 tag 都不用改。
+      - name: 准备构建环境
+        run: docker build -t yojigen/buildenv:aarch64 tools/buildenv
+
+      - name: 构建根文件系统
+        run: |
+          ./tools/skirt rootfs \
+            filesystem glibc bash coreutils \
+            sed grep gawk findutils diffutils \
+            tar gzip xz make binutils gcc linux-headers \
+            gmp mpfr mpc zlib \
+            --output /tmp/yojigen-rootfs.tar.gz
+          echo "--- 产物 ---"
+          ls -lh /tmp/yojigen-rootfs.tar.gz
+
+      - name: 导入并打标签
+        id: image
+        run: |
+          DATE=$(date -u +%Y.%m.%d)
+          echo "date=$DATE" >> "$GITHUB_OUTPUT"
+
+          docker import /tmp/yojigen-rootfs.tar.gz yojigenos/base-devel:edge
+          docker tag yojigenos/base-devel:edge "yojigenos/base-devel:$DATE"
+
+          echo "--- 镜像 ---"
+          docker images yojigenos/base-devel --format '{{.Repository}}:{{.Tag}}  {{.Size}}'
+
+      # 推送前先证明它真的能用。宁可发现推不出去，也不要推出去一个坏的。
+      - name: 验证镜像能构建软件
+        run: |
+          docker run --rm yojigenos/base-devel:edge /bin/bash -c '
+            set -e
+            printf "#include <stdio.h>\nint main(void){puts(\"ok\");return 0;}\n" > /tmp/t.c
+            gcc /tmp/t.c -o /tmp/t
+            /tmp/t
+            gcc --version | head -1
+          '
+
+      - name: 推送到 Docker Hub
+        env:
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          echo "$DOCKERHUB_TOKEN" | docker login -u yojigenos --password-stdin
+          docker push yojigenos/base-devel:edge
+          docker push "yojigenos/base-devel:${{ steps.image.outputs.date }}"
