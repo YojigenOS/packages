@@ -279,10 +279,18 @@ def run_in_container(srcrel: str, arch: str, spec: dict, epoch: int) -> None:
         "# 我们要的（cp -a 会把目标已有的链接替换掉）。\n"
         'if [ -d /in/sysroot ] && [ -n "$(ls -A /in/sysroot 2>/dev/null)" ]; then\n'
         '  echo "[依赖] 合并 $(find /in/sysroot \\( -type f -o -type l \\) | wc -l | tr -d " ") 项到 /（跳过容器自己的布局）"\n'
-        '  tar -C /in/sysroot -cf - \\\n'
-        '      --exclude=./bin --exclude=./sbin --exclude=./lib --exclude=./lib64 \\\n'
-        '      --exclude=./usr/lib64 \\\n'
-        '      . | tar -C / -xf -\n'
+        '  # 排除容器的挂载点——往那里写没意义，而且 tar 会因为只读或\n'
+        '  # 「File exists」（Docker 把 /etc/hostname、/etc/hosts 之类绑定挂载进来）\n'
+        '  # 而失败。**动态算，不写死清单**：写死的清单在别的运行时上就不对了。\n'
+        '  EXCLUDES=""\n'
+        '  while read -r _dev mnt _rest; do\n'
+        '    [ "$mnt" = "/" ] && continue\n'
+        '    EXCLUDES="$EXCLUDES --exclude=.$mnt"\n'
+        '  done < /proc/mounts\n'
+        '  # 加上我们自己定的布局（见上面的注释）\n'
+        '  EXCLUDES="$EXCLUDES --exclude=./bin --exclude=./sbin --exclude=./lib"\n'
+        '  EXCLUDES="$EXCLUDES --exclude=./lib64 --exclude=./usr/lib64"\n'
+        '  tar -C /in/sysroot -cf - $EXCLUDES . | tar -C / -xf -\n'
         "fi\n"
         "\n"
         "# 容器内工作区：复制源码与脚本，属主交给宿主用户\n"
