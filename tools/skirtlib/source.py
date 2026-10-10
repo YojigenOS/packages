@@ -6,7 +6,7 @@ import tarfile
 import urllib.request
 from pathlib import Path
 
-from .common import CACHE_DIR, GNU_MIRROR, die, log, rmtree_force, sha256_of
+from .common import CACHE_DIR, GNU_MIRRORS, die, log, rmtree_force, sha256_of
 
 from .spec import expand
 
@@ -124,14 +124,17 @@ def _candidates(spec: dict, src: dict) -> list[str]:
         if e not in out:
             out.append(e)
 
-    # GNU 的包自动补一个镜像备选。理由见 common.py 的 GNU_MIRROR。
+    # GNU 的包自动补上镜像备选。理由和顺序见 common.py 的 GNU_MIRRORS。
     # 放在最后：主源优先（上游自己的承诺），镜像只是兜底。
-    if GNU_MIRROR:
+    if GNU_MIRRORS:
         for u in list(out):
-            if u.startswith("https://ftp.gnu.org/gnu/"):
-                mirror = GNU_MIRROR.rstrip("/") + "/gnu/" + u[len("https://ftp.gnu.org/gnu/"):]
-                if mirror not in out:
-                    out.append(mirror)
+            if not u.startswith("https://ftp.gnu.org/gnu/"):
+                continue
+            rest = u[len("https://ftp.gnu.org/gnu/"):]
+            for m in GNU_MIRRORS:
+                cand = f"{m}/gnu/{rest}"
+                if cand not in out:
+                    out.append(cand)
 
     if not out:
         die(f"{spec['package']['name']}: [[source]] 缺少 url")

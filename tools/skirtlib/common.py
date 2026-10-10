@@ -33,6 +33,61 @@ BUILDENV_IMAGE = os.environ.get("SKIRT_BUILDENV", "yojigenos/buildenv")
 # 用环境变量 SKIRT_CCACHE 覆盖。
 CCACHE_DIR = Path(os.environ.get("SKIRT_CCACHE", ROOT.parent / "ccache"))
 
+#: GNU 包的备用镜像【列表】。
+#:
+#: 为什么是列表而不是一个：**哪个镜像快取决于机器在哪**。实测（同一台中国
+#: 的机器，gettext-1.0.tar.xz，10 MB）：
+#:
+#:     ftp.gnu.org       2.9s      阿里云         56.1s  ← 有，但慢 70 倍
+#:     mirrors.ustc.edu.cn 1.0s    mirrors.kernel.org  3.1s
+#:     mirror.nju.edu.cn   0.8s    ftpmirror.gnu.org   4.3s（它指到了巴西）
+#:
+#: 而所有镜像的 sha256 是【同一个】——所以换镜像不降低信任，只是换条路。
+#: （这也是为什么校验不用跟着改。）
+#:
+#: CI 跑在 GitHub 的 runner 上（美国/欧洲），中文镜像对它是【慢】的。所以
+#: 顺序里 ftp.gnu.org 排第一——它对哪儿都不算差，而中文镜像只在前面都失败
+#: 时才轮到。真要按环境调，用 SKIRT_GNU_MIRROR 覆盖。
+#:
+#: 格式：逗号分隔。主源的路径是 https://ftp.gnu.org/gnu/<路径>，
+#: 镜像站对应 <镜像>/gnu/<路径>。设成空串关掉这个行为。
+GNU_MIRRORS = [
+    m.strip().rstrip("/")
+    for m in os.environ.get(
+        "SKIRT_GNU_MIRROR",
+        #: 顺序就是偏好顺序。清华不在第一位：实测它有限速。
+        "https://mirrors.ustc.edu.cn,"
+        "https://mirror.nju.edu.cn,"
+        "https://mirrors.tuna.tsinghua.edu.cn,"
+        "https://mirrors.kernel.org,"
+        "https://mirrors.aliyun.com",
+    ).split(",")
+    if m.strip()
+]
+
+#: 兼容旧名字。
+GNU_MIRROR = GNU_MIRRORS[0] if GNU_MIRRORS else ""
+
+VARIANTS_DIR = ROOT / "variants"
+OUTPUT_DIR = ROOT / "output"
+CACHE_DIR = ROOT / "cache"
+BUILD_DIR = ROOT / "build"
+HOST_PROVIDES_FILE = ROOT / "host" / "provides.txt"
+#: 构建环境镜像。默认是 Debian 底的那个（tools/buildenv 构建出来的）。
+#:
+#: 用 SKIRT_BUILDENV 可以换掉它——这正是自举的验证方式：把 base-devel 拼出来
+#: 导入成镜像，然后 `SKIRT_BUILDENV=yojigenos/base-devel ./tools/skirt build ...`。
+#: 跑得通，就说明我们的系统能构建我们自己的东西；跑不通，第一个报错就是答案。
+BUILDENV_IMAGE = os.environ.get("SKIRT_BUILDENV", "yojigenos/buildenv")
+
+# ccache 缓存放在仓库外面（工作区根目录下）。
+#
+# 两个理由：它体积大且完全可再生，不该进版本控制；同时也不能放 Docker
+# 命名卷——docker volume prune 和磁盘清理会连它一起扫掉，而缓存的全部
+# 价值就在「能留住」。挂在宿主目录里，它跟着工作区走，能看见、能备份。
+# 用环境变量 SKIRT_CCACHE 覆盖。
+CCACHE_DIR = Path(os.environ.get("SKIRT_CCACHE", ROOT.parent / "ccache"))
+
 #: GNU 包的备用镜像。
 #:
 #: ftp.gnu.org 实测时通时不通——同一台机器上、同一个 URL，构建 glibc 时是通
