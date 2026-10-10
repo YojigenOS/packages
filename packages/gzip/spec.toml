@@ -1,0 +1,32 @@
+# gzip —— GNU zip 压缩工具
+
+[package]
+name        = "gzip"
+version     = "1.15"
+release     = 1
+description = "GNU zip 压缩工具"
+section     = "base"
+url         = "https://ftp.gnu.org/gnu/gzip/gzip-$VERSION.tar.xz"
+license     = "GPL-3.0-or-later"
+
+[[source]]
+url    = "https://ftp.gnu.org/gnu/gzip/gzip-$VERSION.tar.xz"
+sha256 = "9aa0cc780dec156b8282844833b342ab7cb08c25d2cd9a1869cdd0df31deff48"
+
+[dependencies]
+runtime = ["glibc"]
+build   = ["make"]
+
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["make"]
+
+[build]
+type      = "autotools"
+configure = ["--prefix=/usr", "--disable-nls"]
+
+# AArch64 专有的上游 bug（bug#81904）：gzip.h 把 head 定义成宏，而内核头文件
+# asm/sigcontext.h 里有以 head 为字段名的结构体，宏把结构体声明改坏了。
+# 1.15 给 gzip.c 加了 #include <signal.h>，间接引入那个头文件，冲突才暴露。
+# 上游已修（改 include 顺序）但尚未发布；这里用更彻底的修法——把宏改名。
+patches   = ["fix-head-macro.patch"]

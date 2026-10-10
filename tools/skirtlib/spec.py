@@ -46,11 +46,17 @@ def deps_for(spec: dict, arch: str) -> dict:
     return deps
 
 
-def direct_deps(spec: dict, arch: str) -> list[str]:
-    """直接依赖 = runtime + build，去重且保持声明顺序。"""
+def direct_deps(spec: dict, arch: str,
+                kinds: tuple[str, ...] = ("runtime", "build")) -> list[str]:
+    """直接依赖：去重且保持声明顺序。
+
+    默认取 runtime + build（构建一个包时两者都要）。拼运行时的根文件系统
+    时传 kinds=("runtime",)——构建依赖不该进最终系统：glibc 的构建依赖里
+    有 gcc，但它运行起来不需要编译器。
+    """
     d = deps_for(spec, arch)
     out: list[str] = []
-    for key in ("runtime", "build"):
+    for key in kinds:
         for name in d.get(key, []):
             if name not in out:
                 out.append(name)

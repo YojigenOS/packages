@@ -23,12 +23,16 @@ def load_host_provides() -> set[str]:
     return out
 
 
-def dep_closure(spec: dict, arch: str, host_provides: set[str]) -> list[str]:
+def dep_closure(spec: dict, arch: str, host_provides: set[str],
+                kinds: tuple[str, ...] = ("runtime", "build")) -> list[str]:
     """返回按安装顺序排列的依赖包名（依赖在前，不含自身，已剔除宿主提供的）。
 
     自依赖不算成环，它是自举的常态：构建 make 需要 make，构建 gcc 需要 gcc
     （gcc 的 stage1 → stage2 正是这个模式）。此时用「上一轮构建出的自己」；
     若还没构建过，说明是第一次，交由当前构建环境提供即可。
+
+    kinds 决定跟哪些依赖。默认 runtime + build（构建一个包时需要两者）；
+    拼运行时的根文件系统时传 kinds=("runtime",)。
     """
     order: list[str] = []
     done: set[str] = set()
@@ -42,7 +46,7 @@ def dep_closure(spec: dict, arch: str, host_provides: set[str]) -> list[str]:
             die(f"依赖成环: {' → '.join(stack + [name])}")
         child_spec = load_spec(name)
         stack.append(name)
-        for child in direct_deps(child_spec, arch):
+        for child in direct_deps(child_spec, arch, kinds):
             if child == name:
                 continue        # 自己依赖自己 = 用上一轮构建产物，不是环
             visit(child)
@@ -50,7 +54,7 @@ def dep_closure(spec: dict, arch: str, host_provides: set[str]) -> list[str]:
         done.add(name)
         order.append(name)
 
-    for name in direct_deps(spec, arch):
+    for name in direct_deps(spec, arch, kinds):
         if name == self_name:
             if built_payload(name, arch) is not None:
                 order.append(name)      # 有上一轮的自己，就用它

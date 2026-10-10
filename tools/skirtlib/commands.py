@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import shutil
+from pathlib import Path
 
 from .common import BUILD_DIR, OUTPUT_DIR, PACKAGES_DIR, ROOT, die, log, resolve_arch, rmtree_force
 
@@ -16,6 +17,8 @@ from .source import extract, fetch
 from .build import make_build_script, run_in_container
 
 from .collect import collect
+
+from .rootfs import assemble
 
 # ------------------------------------------------------------------ 命令
 
@@ -45,14 +48,24 @@ def cmd_build(args) -> None:
         log("解析", "无自建依赖（全部由宿主提供）")
     build_sysroot(order, arch)
 
-    # 源码
+    # 源码。没有 [[source]] 的包（例如 filesystem）不下载任何东西——
+    # 它构建的是「系统的形状」而不是软件，所以给它一个空的源码树。
     print()
-    archive = fetch(spec)
-    srcrel = extract(archive, BUILD_DIR / "src")
+    if spec.get("source"):
+        archive = fetch(spec)
+        srcrel = extract(archive, BUILD_DIR / "src")
+    else:
+        (BUILD_DIR / "src").mkdir(parents=True, exist_ok=True)
+        srcrel = "."
+        log("源码", "无（纯元数据包）")
 
     if steps.is_file():
         shutil.copy2(steps, BUILD_DIR / "steps.sh")
         log("步骤", "已加载 steps.sh")
+
+    # 整个配方目录也送进容器：步骤脚本可以通过 $PKGDIR 取用其中的补丁、
+    # conffiles、静态资源等，不必把内容塞进 steps.sh 的 heredoc。
+    shutil.copytree(spec["_dir"], BUILD_DIR / "pkg", dirs_exist_ok=True)
 
     # 生成的构建脚本先落成文件再送进容器。这样 steps.sh 里的 heredoc、
     # 引号、变量展开都不必经过任何转义——脚本就是脚本。
@@ -118,6 +131,22 @@ def cmd_clean(args) -> None:
         log("提示", "未指定包名，只清理了 build/（产物保留）")
 
 
+def cmd_rootfs(args) -> None:
+    """把若干包拼成一个完整根文件系统，打成 tar。"""
+    arch = resolve_arch(args.arch)
+    print()
+    log("拼装", f"根文件系统 [{arch}]")
+
+    out, order = assemble(args.packages, arch,
+                          Path(args.output) if args.output else None)
+    for name in order:
+        log("包含", name)
+
+    print()
+    size = out.stat().st_size
+    log("完成", f"{out.relative_to(ROOT)}  （{len(order)} 个包, {size // 1024} KiB）")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(
         prog="skirt",
@@ -137,6 +166,12 @@ def main() -> None:
 
     p = sub.add_parser("list", help="列出所有包")
     p.set_defaults(func=cmd_list)
+
+    p = sub.add_parser("rootfs", help="把若干包拼成完整根文件系统（tar）")
+    p.add_argument("packages", nargs="+", help="要包含的包（依赖会自动带上）")
+    p.add_argument("--arch", help="目标架构（默认当前架构）")
+    p.add_argument("--output", help="输出的 tar 路径")
+    p.set_defaults(func=cmd_rootfs)
 
     p = sub.add_parser("clean", help="清理构建目录 / 指定包的产物")
     p.add_argument("package", nargs="?")

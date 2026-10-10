@@ -7,6 +7,8 @@ import subprocess
 
 from .common import BUILDENV_IMAGE, BUILD_DIR, die, log
 
+from .spec import expand
+
 # ------------------------------------------------------------ 生成构建脚本
 
 def make_build_script(spec: dict) -> str:
@@ -23,6 +25,16 @@ def make_build_script(spec: dict) -> str:
     header = 'cd "$SRCDIR"\n'
     if oot:
         header += 'BUILDDIR="$SRCDIR/_build"\n'
+
+    # 补丁：源码树就位之后、configure 之前应用。
+    # 路径相对配方目录，配方目录通过 $PKGDIR 已送进容器。
+    for entry in b.get("patches", []):
+        p = expand(spec, entry)
+        # --fuzz=0：必须精确匹配。patch 默认容忍 2 行模糊匹配，那样一个已经
+        # 不适用的补丁会被「差不多」地贴上去，产出无声的错误代码——等到运行
+        # 时才以看不懂的方式炸掉。宁可在构建时响亮地失败。
+        header += (f'echo "[补丁] {p}"\n'
+                   f'patch -p1 --fuzz=0 --no-backup-if-mismatch -i "$PKGDIR/{p}"\n')
 
     if kind == "autotools":
         opts = " ".join(b.get("configure", ["--prefix=/usr"]))
@@ -99,9 +111,11 @@ def run_in_container(srcrel: str, arch: str, spec: dict) -> None:
         'mkdir -p "$WORK/dest"\n'
         'cp -a /in/src "$WORK/src"\n'
         '[ -f /in/steps.sh ] && cp /in/steps.sh "$WORK/steps.sh"\n'
+        '[ -d /in/pkg ] && cp -a /in/pkg "$WORK/pkg"\n'
         'cp /in/run.sh "$WORK/run.sh"\n'
         'chown -R "$HOSTUID:$HOSTGID" "$WORK"\n'
         "export WORK\n"
+        'export PKGDIR="$WORK/pkg"\n'
         "\n"
         "# 降权执行构建\n"
         'setpriv --reuid="$HOSTUID" --regid="$HOSTGID" --clear-groups \\\n'
