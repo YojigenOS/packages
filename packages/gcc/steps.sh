@@ -44,6 +44,15 @@ build() {
   mkdir -p "$BUILDDIR"
   cd "$BUILDDIR"
 
+  # 加固的默认值。各发行版都这么配，而从源码构建时默认是关的：
+  #
+  #   --enable-default-pie  地址随机化。本目标上本来就是默认（实测编出来的
+  #                         是 DYN），显式写出来是为了换目标时不会悄悄丢掉。
+  #   --enable-default-ssp  栈保护。这个默认确实是关的——实测我们编出来的
+  #                         目标文件里没有 __stack_chk_fail 引用。
+  #
+  # 这两个是兜底：构建环境里的 CFLAGS 管大多数包，但有些包的构建系统会
+  # 忽略环境 CFLAGS，编译器自己的默认值能兜住它们。
   "$SRCDIR/configure" \
     --prefix=/usr \
     --libdir=/usr/lib \
@@ -54,7 +63,9 @@ build() {
     --disable-bootstrap \
     --disable-nls \
     --disable-werror \
-    --without-isl
+    --without-isl \
+    --enable-default-pie \
+    --enable-default-ssp
 
   # 第一步：只构建编译器，让 host-<triplet>/gcc/ 这个目录出现
   make all-gcc

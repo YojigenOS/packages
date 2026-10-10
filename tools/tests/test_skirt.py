@@ -29,6 +29,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from skirtlib import deps as deps_mod
+from skirtlib.build import run_in_container
 from skirtlib.common import PACKAGES_DIR, build_jobs
 from skirtlib.deps import load_host_provides, merge_tree, source_date_epoch
 from skirtlib.spec import (deps_for, direct_deps, expand, latest_date, load_spec,
@@ -348,6 +349,62 @@ class TestLatestDate(unittest.TestCase):
     def test_no_deps(self):
         own = _pkg("app", _dt("2026-06-01T00:00:00Z"))
         self.assertEqual(latest_date(own, []), package_date(own))
+
+
+class TestContainerCommand(unittest.TestCase):
+    """构建容器收到的环境变量与加固标志。
+
+    这一组参数决定产物是否可复现、是否有加固——而它们**丢掉时不会有任何
+    报错**，只会让产物悄悄变得不一样。所以值得逐条钉住。
+    """
+
+    EPOCH = 1791646200
+
+    def _cmd(self, arch: str = "aarch64") -> list[str]:
+        spec = {"package": {"name": "x", "version": "1", "release": 1},
+                "_dir": PACKAGES_DIR}
+        with mock.patch("skirtlib.build.subprocess.run") as run:
+            run.return_value.returncode = 0
+            run_in_container(".", arch, spec, self.EPOCH)
+        return run.call_args[0][0]
+
+    def _wrapper(self, arch: str = "aarch64") -> str:
+        return self._cmd(arch)[-1]
+
+    def test_reproducibility_env(self):
+        joined = " ".join(self._cmd())
+        for expected in (f"SOURCE_DATE_EPOCH={self.EPOCH}",
+                         "LC_ALL=C.UTF-8",
+                         "TZ=UTC"):
+            with self.subTest(arg=expected):
+                self.assertIn(expected, joined)
+
+    def test_hostname_is_fixed(self):
+        """docker 默认给容器随机主机名，调用 gethostname() 的构建会嵌入它。"""
+        cmd = self._cmd()
+        self.assertIn("--hostname", cmd)
+        self.assertEqual(cmd[cmd.index("--hostname") + 1], "build")
+
+    def test_umask_and_workdir(self):
+        wrapper = self._wrapper()
+        self.assertIn("umask 022", wrapper)
+        self.assertIn("WORK=/build", wrapper)
+
+    def test_hardening_flags(self):
+        wrapper = self._wrapper()
+        for flag in ("-g0",
+                     "-fstack-protector-strong",
+                     "-U_FORTIFY_SOURCE",
+                     "-D_FORTIFY_SOURCE=3",
+                     "-Wl,-z,relro",
+                     "-Wl,-z,now"):
+            with self.subTest(flag=flag):
+                self.assertIn(flag, wrapper)
+
+    def test_arch_specific_hardening(self):
+        """加固标志是分架构的：arm64 用 BTI/PAC，x86_64 用 CET。"""
+        self.assertIn("-mbranch-protection=standard", self._wrapper("aarch64"))
+        self.assertIn("-fcf-protection=full", self._wrapper("x86_64"))
 
 
 class TestBuildJobs(unittest.TestCase):

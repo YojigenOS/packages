@@ -138,6 +138,37 @@ def run_in_container(srcrel: str, arch: str, spec: dict, epoch: int) -> None:
     wrapper = (
         "set -euo pipefail\n"
         "\n"
+        "# 固定的 umask。不同机器的 umask 不同，会让产物里的文件权限跟着变——\n"
+        "# 而权限是产物的一部分。\n"
+        "umask 022\n"
+        "\n"
+        "# 加固与调试信息策略。集中写在这里，而不是每个配方各写一遍。\n"
+        "#\n"
+        "#   -g0                       不生成调试信息。我们最后一律 strip，\n"
+        "#                             留着它只是白付编译时间和磁盘——而 gcc\n"
+        "#                             那一步是构建的大头，这里省得最多。\n"
+        "#   -fstack-protector-strong  栈保护。\n"
+        "#   -U_FORTIFY_SOURCE         先撤销再定义：少数包会自己定义它，\n"
+        "#   -D_FORTIFY_SOURCE=3       不撤销就会重复定义、报警告。\n"
+        "#   -mbranch-protection=standard\n"
+        "#                             arm64 的 BTI + PAC。指令编码在 HINT\n"
+        "#                             空间里，老 CPU 当 NOP 执行——不牺牲\n"
+        "#                             兼容性。x86_64 的对应物是 CET。\n"
+        "#   LDFLAGS 的 relro/now       完整 RELRO。实测我们原本只有部分\n"
+        "#                             （有 GNU_RELRO 但没有 BIND_NOW）。\n"
+        "#\n"
+        "# 不用 -ffile-prefix-map：容器内的路径本来就是固定的（/build/...），\n"
+        "# 别人用同一个驱动构建也会得到同样的路径。可复现构建的标准做法是\n"
+        "# 「让路径可预测」，我们已经做到了——映射是路径不可控时的补救手段。\n"
+        'case "$PKGARCH" in\n'
+        '  aarch64) ARCH_HARDEN="-mbranch-protection=standard" ;;\n'
+        '  x86_64)  ARCH_HARDEN="-fcf-protection=full" ;;\n'
+        '  *)       ARCH_HARDEN="" ;;\n'
+        "esac\n"
+        'export CFLAGS="-g0 -O2 -fstack-protector-strong -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3 $ARCH_HARDEN"\n'
+        'export CXXFLAGS="$CFLAGS"\n'
+        'export LDFLAGS="-Wl,-z,relro -Wl,-z,now"\n'
+        "\n"
         'cleanup() { chown -R "$HOSTUID:$HOSTGID" /in 2>/dev/null || true; }\n'
         "trap cleanup EXIT\n"
         "\n"
@@ -148,7 +179,11 @@ def run_in_container(srcrel: str, arch: str, spec: dict, epoch: int) -> None:
         "fi\n"
         "\n"
         "# 容器内工作区：复制源码与脚本，属主交给宿主用户\n"
-        "WORK=/work-local\n"
+        "#\n"
+        "# 路径定成 /build 而不是 /work-local：它是容器自己的文件系统（不是\n"
+        "# 绑定挂载，原因见本函数开头的注释），用标准名字便于别人复现，也让\n"
+        "# 产物里出现的路径看起来正常。\n"
+        "WORK=/build\n"
         'rm -rf "$WORK"\n'
         'mkdir -p "$WORK/dest"\n'
         'cp -a /in/src "$WORK/src"\n'
@@ -176,6 +211,11 @@ def run_in_container(srcrel: str, arch: str, spec: dict, epoch: int) -> None:
     jobs = str(build_jobs())
     cmd = [
         "docker", "run", "--rm",
+        # 固定主机名。docker 默认给容器一个随机主机名（容器 ID），
+        # 于是任何调用 gethostname() 的构建都会嵌入一个随机值——实测两次
+        # 分别是 0fdeea78b33b 和 97ec2399f6f9。名字本身不重要（它是构建
+        # 容器的，不是成品系统的），重要的是它不变。
+        "--hostname", "build",
         "-e", f"HOSTUID={os.getuid()}",
         "-e", f"HOSTGID={os.getgid()}",
         "-e", f"PKGARCH={arch}",

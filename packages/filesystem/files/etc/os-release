@@ -1,8 +1,7 @@
 NAME="YojigenOS"
 ID=yojigenos
 PRETTY_NAME="YojigenOS"
-VERSION="development"
-VERSION_ID="0.0.1"
+BUILD_ID=rolling
 HOME_URL="https://github.com/YojigenOS"
 BUG_REPORT_URL="https://github.com/YojigenOS/packages/issues"
 ANSI_COLOR="1;36"
