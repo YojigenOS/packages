@@ -4,6 +4,7 @@
 name        = "grep"
 version     = "3.12"
 release     = 1
+date        = 2026-10-10T06:39:13Z
 description = "文本搜索工具"
 section     = "base"
 url         = "https://www.gnu.org/software/grep/"

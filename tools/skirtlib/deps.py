@@ -8,7 +8,7 @@ from pathlib import Path
 
 from .common import BUILD_DIR, HOST_PROVIDES_FILE, OUTPUT_DIR, PACKAGES_DIR, ROOT, die, log, rmtree_force
 
-from .spec import direct_deps, load_spec
+from .spec import direct_deps, latest_date, load_spec
 
 # ---------------------------------------------------------------- 依赖解析
 
@@ -64,6 +64,16 @@ def dep_closure(spec: dict, arch: str, host_provides: set[str],
             continue
         visit(name)
     return order
+
+
+def source_date_epoch(spec: dict, arch: str, host_provides: set[str]) -> int:
+    """本包的 SOURCE_DATE_EPOCH。
+
+    「为什么吃整个依赖链而不是只看自己」写在 spec.latest_date 的注释里，
+    这里只负责把依赖闭包翻译成一份配方列表——环由 dep_closure 处理。
+    """
+    deps = [load_spec(name) for name in dep_closure(spec, arch, host_provides)]
+    return latest_date(spec, deps)
 
 
 def built_payload(name: str, arch: str) -> Path | None:

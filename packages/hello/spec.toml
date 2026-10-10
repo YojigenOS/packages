@@ -6,6 +6,7 @@
 name        = "hello"
 version     = "2.12.3"
 release     = 1
+date        = 2026-10-10T05:26:32Z
 description = "GNU Hello，打招呼的示例程序"
 section     = "utils"
 url         = "https://www.gnu.org/software/hello/"

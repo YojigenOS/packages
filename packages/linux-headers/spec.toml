@@ -11,6 +11,7 @@
 name        = "linux-headers"
 version     = "7.2.9"
 release     = 1
+date        = 2026-10-10T04:21:14Z
 description = "Linux 内核用户空间 API 头文件"
 section     = "core"
 url         = "https://www.kernel.org/"

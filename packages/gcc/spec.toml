@@ -13,6 +13,7 @@
 name        = "gcc"
 version     = "16.2.0"
 release     = 1
+date        = 2026-10-10T05:13:26Z
 description = "GNU 编译器集合（C / C++）"
 section     = "core"
 url         = "https://gcc.gnu.org/"

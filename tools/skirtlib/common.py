@@ -19,6 +19,14 @@ BUILD_DIR = ROOT / "build"
 HOST_PROVIDES_FILE = ROOT / "host" / "provides.txt"
 BUILDENV_IMAGE = "yojigenos/buildenv"
 
+# ccache 缓存放在仓库外面（工作区根目录下）。
+#
+# 两个理由：它体积大且完全可再生，不该进版本控制；同时也不能放 Docker
+# 命名卷——docker volume prune 和磁盘清理会连它一起扫掉，而缓存的全部
+# 价值就在「能留住」。挂在宿主目录里，它跟着工作区走，能看见、能备份。
+# 用环境变量 SKIRT_CCACHE 覆盖。
+CCACHE_DIR = Path(os.environ.get("SKIRT_CCACHE", ROOT.parent / "ccache"))
+
 ARCH_ALIASES = {
     "arm64": "aarch64",
     "aarch64": "aarch64",

@@ -1,10 +1,11 @@
-"""配方：加载 spec.toml、展开 $NAME/$VERSION 占位符、解析依赖字段。"""
+"""配方：加载 spec.toml、展开 $NAME/$VERSION 占位符、解析依赖字段、构建时间戳。"""
 
 from __future__ import annotations
 
+import datetime
 import tomllib
 
-from .common import PACKAGES_DIR, die
+from .common import PACKAGES_DIR, die, log
 
 # ------------------------------------------------------------------ 配方
 
@@ -63,3 +64,66 @@ def direct_deps(spec: dict, arch: str,
     return out
 
 
+# ------------------------------------------------------------ 构建时间戳
+
+def package_date(spec: dict) -> int:
+    """读取配方声明的日期（`[package] date`），返回 Unix 秒。
+
+    这个日期必须**写在配方里**，不能从 git 提交时间或文件 mtime 推导。
+    那些是「关于内容的元数据」：改动还没提交时它们指向旧值，提交之后才
+    变成新值——于是同一个配方在本地和 CI 上会算出不同的时间戳，每次提交
+    都产出一份不同的字节。写进文件里，它就随同一次提交一起生效，
+    提交前和提交后一致。
+
+    对应 Debian 的 debian/changelog 和 Fedora 的 %changelog：**日期是源码
+    的一部分，不是源码的属性。**
+    """
+    pkg = spec["package"]
+    name = pkg.get("name", "?")
+
+    if "date" not in pkg:
+        die(f"{name}: [package] 缺少 date\n"
+            f"       它是 SOURCE_DATE_EPOCH 的来源，必须写在配方里。\n"
+            f"       格式（TOML 原生日期时间，不要加引号）:\n"
+            f"           date = 2026-10-10T15:30:00Z")
+
+    value = pkg["date"]
+    if not isinstance(value, datetime.datetime):
+        die(f"{name}: date 必须是 TOML 日期时间，收到 {value!r}\n"
+            f"       加了引号就会被当成普通字符串。去掉引号：\n"
+            f"           date = 2026-10-10T15:30:00Z\n"
+            f"       而不是 date = \"2026-10-10T15:30:00Z\"")
+
+    if value.tzinfo is None:
+        die(f"{name}: date 必须带时区\n"
+            f"       否则同一个时刻在不同时区会算出不同的时间戳。\n"
+            f"           date = 2026-10-10T15:30:00Z          （UTC）\n"
+            f"           date = 2026-10-10T23:30:00+08:00      （北京时间）")
+
+    return int(value.timestamp())
+
+
+def latest_date(spec: dict, dep_specs: list[dict]) -> int:
+    """本包的 SOURCE_DATE_EPOCH：自己与**所有依赖**里最晚的那个日期。
+
+    为什么不只看自己：配方一个字没改、但依赖更新了，产出的字节**确实**
+    会变——链接进去的库换了。时间戳要是纹丝不动，就会产出「同名、同 mtime、
+    内容不同」的包，而那正是所有靠 mtime 判断变化的同步与备份工具的杀手。
+
+    Debian 到今天还在靠人在 binNMU 时手工把时间戳加一来绕开这件事。让时间戳
+    跟着依赖走，它就自动对了：依赖的日期一变，所有下游跟着变。
+
+    闭包里的环（glibc → make → glibc 是自举的常态）由调用方处理，
+    这里只消费结果。
+    """
+    mine = spec["package"]["name"]
+    best, origin = package_date(spec), mine
+
+    for dep in dep_specs:
+        d = package_date(dep)
+        if d > best:
+            best, origin = d, dep["package"]["name"]
+
+    if origin != mine:
+        log("时间戳", f"SOURCE_DATE_EPOCH 取自依赖 {origin}（它比本包的 date 更晚）")
+    return best

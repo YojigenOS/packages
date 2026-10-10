@@ -18,6 +18,7 @@ deps.dep_closure()：那里编码的是自举语义，是 skirt 里最容易出�
 
 from __future__ import annotations
 
+import datetime
 import os
 import sys
 import tempfile
@@ -29,8 +30,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from skirtlib import deps as deps_mod
 from skirtlib.common import PACKAGES_DIR, build_jobs
-from skirtlib.deps import merge_tree
-from skirtlib.spec import deps_for, direct_deps, expand, load_spec
+from skirtlib.deps import load_host_provides, merge_tree, source_date_epoch
+from skirtlib.spec import (deps_for, direct_deps, expand, latest_date, load_spec,
+                           package_date)
 
 
 class TestExpand(unittest.TestCase):
@@ -271,6 +273,83 @@ class TestMergeTree(unittest.TestCase):
                 self.assertEqual(actual, mode, f"/{rel} 的权限应该是 {oct(mode)}")
 
 
+def _dt(text: str) -> datetime.datetime:
+    """把 "2026-10-10T15:30:00Z" 这种写法变成带时区的 datetime。"""
+    return datetime.datetime.fromisoformat(text.replace("Z", "+00:00"))
+
+
+def _pkg(name: str, date, **extra) -> dict:
+    return {"package": {"name": name, "version": "1", "release": 1,
+                        "date": date, **extra}}
+
+
+class TestPackageDate(unittest.TestCase):
+    """配方日期 —— SOURCE_DATE_EPOCH 的来源。
+
+    它必须**写在配方里**，不能从 git 提交时间或文件 mtime 推导：那些是
+    「关于内容的元数据」，改动提交之前指向旧值、提交之后才变成新值，于是
+    同一份配方在本地和 CI 上会算出不同的时间戳。写进文件，它就随同一次
+    提交一起生效，提交前后一致。
+    """
+
+    def test_utc(self):
+        self.assertEqual(package_date(_pkg("x", _dt("2026-10-10T15:30:00Z"))),
+                         1791646200)
+
+    def test_offset_is_the_same_instant(self):
+        """北京时间和 UTC 指向同一时刻，必须算出同一个值。"""
+        utc = _pkg("x", _dt("2026-10-10T15:30:00Z"))
+        bj = _pkg("x", _dt("2026-10-10T23:30:00+08:00"))
+        self.assertEqual(package_date(utc), package_date(bj))
+
+    def test_missing_date_dies(self):
+        with self.assertRaises(SystemExit):
+            package_date({"package": {"name": "x", "version": "1", "release": 1}})
+
+    def test_quoted_string_dies(self):
+        """加了引号就是普通字符串，不是时间——很容易犯，必须报错。"""
+        with self.assertRaises(SystemExit):
+            package_date(_pkg("x", "2026-10-10T15:30:00Z"))
+
+    def test_naive_datetime_dies(self):
+        """不带时区的话，同一时刻在不同时区会算出不同时间戳。"""
+        with self.assertRaises(SystemExit):
+            package_date(_pkg("x", datetime.datetime(2026, 10, 10, 15, 30)))
+
+
+class TestLatestDate(unittest.TestCase):
+    """SOURCE_DATE_EPOCH 吃整个依赖链，而不是只看自己。
+
+    理由：配方一个字没改、但依赖更新了，产出的字节**确实**会变——链接进去
+    的库换了。时间戳要是纹丝不动，就会产出「同名、同 mtime、内容不同」的包，
+    而那正是所有靠 mtime 判断变化的同步与备份工具的杀手。Debian 到今天还在
+    靠人在 binNMU 时手工把时间戳加一来绕开它。
+    """
+
+    def test_own_date_wins_when_deps_are_older(self):
+        own = _pkg("app", _dt("2026-06-01T00:00:00Z"))
+        deps = [_pkg("lib", _dt("2026-01-01T00:00:00Z"))]
+        self.assertEqual(latest_date(own, deps), package_date(own))
+
+    def test_dependency_bump_propagates(self):
+        """核心行为：依赖的日期变晚，本包跟着变晚。"""
+        own = _pkg("app", _dt("2026-01-01T00:00:00Z"))
+        before = latest_date(own, [_pkg("lib", _dt("2026-01-01T00:00:00Z"))])
+        after = latest_date(own, [_pkg("lib", _dt("2026-06-01T00:00:00Z"))])
+        self.assertLess(before, after)
+
+    def test_takes_the_latest_of_many(self):
+        own = _pkg("app", _dt("2026-01-01T00:00:00Z"))
+        deps = [_pkg("a", _dt("2026-03-01T00:00:00Z")),
+                _pkg("b", _dt("2026-09-01T00:00:00Z")),   # 最晚
+                _pkg("c", _dt("2026-05-01T00:00:00Z"))]
+        self.assertEqual(latest_date(own, deps), package_date(deps[1]))
+
+    def test_no_deps(self):
+        own = _pkg("app", _dt("2026-06-01T00:00:00Z"))
+        self.assertEqual(latest_date(own, []), package_date(own))
+
+
 class TestBuildJobs(unittest.TestCase):
     """并行度：默认留两个核给用户，别把开发机占满。"""
 
@@ -320,6 +399,34 @@ class TestEveryRealSpec(unittest.TestCase):
                 release = load_spec(name)["package"].get("release")
                 self.assertIsInstance(release, int,
                                       f"{name} 的 [package] 缺少 release（或不是整数）")
+
+    def test_date_present_and_parseable(self):
+        """每个配方都要有 date，且能算出 SOURCE_DATE_EPOCH。
+
+        缺了它构建会直接失败——这是刻意的：宁可报错，也不要悄悄产出一个
+        不可复现的包。
+        """
+        host_provides = load_host_provides()
+        for name in self.specs():
+            with self.subTest(package=name):
+                spec = load_spec(name)
+                self.assertIsInstance(
+                    spec["package"].get("date"), datetime.datetime,
+                    f"{name} 的 [package] 缺少 date（或不是 TOML 日期时间）")
+                self.assertGreater(
+                    source_date_epoch(spec, "aarch64", host_provides), 0)
+                # 不该是「刚刚」或某个越界的默认值
+                self.assertLess(
+                    source_date_epoch(spec, "aarch64", host_provides), 2000000000)
+
+    def test_dependency_can_push_it_later(self):
+        """在真实配方上验证传播：glibc 的构建依赖里有 binutils。"""
+        host_provides = load_host_provides()
+        glibc = load_spec("glibc")
+        deps = [load_spec(n)
+                for n in deps_mod.dep_closure(glibc, "aarch64", host_provides)]
+        self.assertIn("binutils", [s["package"]["name"] for s in deps])
+        self.assertGreaterEqual(latest_date(glibc, deps), package_date(glibc))
 
     def test_sources_expand_cleanly(self):
         for name in self.specs():

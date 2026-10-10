@@ -10,6 +10,7 @@
 name        = "binutils"
 version     = "2.47"
 release     = 1
+date        = 2026-10-10T09:14:44Z
 description = "二进制工具集：汇编器、链接器、目标文件处理工具"
 section     = "core"
 url         = "https://www.gnu.org/software/binutils/"
@@ -33,10 +34,17 @@ type      = "autotools"
 # --disable-gprofng ：gprofng 剖析器在 arm64 + 新工具链下编译失败
 #                     （mmaptrace.c 报 "sh_offset 不是结构体成员"）。
 #                     它对自举没有任何用处，直接关掉，别浪费构建时间。
+# --enable-deterministic-archives：
+#                     ar 默认把每个成员的 mtime 写进归档头。从源码构建时
+#                     这个默认是关的（各发行版都会显式打开），后果是同样的
+#                     源码两次构建产出不同的字节——实测 glibc 的 libc.a
+#                     差 6117 字节，全是归档头里的时间戳数字。
+#                     打开后时间戳恒为 0，归档只由内容决定。
 configure = [
   "--prefix=/usr",
   "--sysconfdir=/etc",
   "--disable-nls",
   "--disable-werror",
   "--disable-gprofng",
+  "--enable-deterministic-archives",
 ]

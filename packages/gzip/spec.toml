@@ -4,6 +4,7 @@
 name        = "gzip"
 version     = "1.15"
 release     = 1
+date        = 2026-10-10T07:10:43Z
 description = "GNU zip 压缩工具"
 section     = "base"
 url         = "https://ftp.gnu.org/gnu/gzip/gzip-$VERSION.tar.xz"

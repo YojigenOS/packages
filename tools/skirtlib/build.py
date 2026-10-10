@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import datetime
 import os
 import subprocess
 
-from .common import BUILDENV_IMAGE, BUILD_DIR, build_jobs, die, log
+from .common import BUILDENV_IMAGE, BUILD_DIR, CCACHE_DIR, build_jobs, die, log
 
 from .spec import expand
 
@@ -77,9 +78,10 @@ def make_build_script(spec: dict) -> str:
     )
 
 
-def run_in_container(srcrel: str, arch: str, spec: dict) -> None:
+def run_in_container(srcrel: str, arch: str, spec: dict, epoch: int) -> None:
     pkg = spec["package"]
     (BUILD_DIR / "sysroot").mkdir(parents=True, exist_ok=True)
+    CCACHE_DIR.mkdir(parents=True, exist_ok=True)
 
     # 整个构建过程发生在容器内的 Linux 原生文件系统里，只把源码送进去、
     # 把产物取出来。两个原因：
@@ -119,6 +121,20 @@ def run_in_container(srcrel: str, arch: str, spec: dict) -> None:
             'echo "[strip] ${before} KB → ${after} KB（省 ${pct}%）"\n'
         )
 
+    # ccache 统计。冷缓存时全是 miss，这是正常的——价值在第二次构建。
+    ccache_stats = (
+        "\n# ccache 统计\n"
+        "if command -v ccache >/dev/null 2>&1; then\n"
+        "  ccache --print-stats 2>/dev/null | awk -F'\\t' '\n"
+        '    $1=="direct_cache_hit"       { d = $2 }\n'
+        '    $1=="preprocessed_cache_hit" { p = $2 }\n'
+        '    $1=="cache_miss"             { m = $2 }\n'
+        "    END { n = d + p + m\n"
+        '          if (n > 0) printf "[ccache] 命中 %d / %d（%.0f%%）\\n", d+p, n, (d+p)*100/n }\'\n'
+        '  echo "[ccache] 缓存体积 $(du -sh "$CCACHE_DIR" 2>/dev/null | cut -f1)"\n'
+        "fi\n"
+    )
+
     wrapper = (
         "set -euo pipefail\n"
         "\n"
@@ -149,6 +165,7 @@ def run_in_container(srcrel: str, arch: str, spec: dict) -> None:
         f'      PKGDEST="$WORK/dest" SRCDIR="$WORK/src/{srcrel}" \\\n'
         '  bash "$WORK/run.sh"\n'
         "\n"
+        + ccache_stats
         + strip_block
         + "# 产物拷回宿主\n"
         "mkdir -p /in/dest\n"
@@ -165,12 +182,26 @@ def run_in_container(srcrel: str, arch: str, spec: dict) -> None:
         "-e", f"PKGNAME={pkg['name']}",
         "-e", f"PKGVER={pkg['version']}",
         "-e", f"MAKEFLAGS=-j{jobs}",
+        # 把「构建发生在什么时候」从产物里抹掉，换成「这份源码是什么时候的」。
+        # 没有它，同样的源码每次编译都产出不同的字节——可复现构建无从谈起，
+        # 而且这种差异会淹没真正的差异。见 docs/决策记录/0005。
+        "-e", f"SOURCE_DATE_EPOCH={epoch}",
+        # 区域和时区同样是不可复现的来源：某个工具按本地时区格式化日期，
+        # 输出就会随「在哪台机器上构建」而变。
+        # 用 C.UTF-8 而不是 C——保持确定性，同时不牺牲 UTF-8 支持
+        #（有些包的自检会因为非 ASCII 字符而失败）。
+        "-e", "LC_ALL=C.UTF-8",
+        "-e", "LANG=C.UTF-8",
+        "-e", "TZ=UTC",
         "-v", f"{BUILD_DIR}:/in",
+        "-v", f"{CCACHE_DIR}:/ccache",
         f"{BUILDENV_IMAGE}:{arch}",
         "bash", "-c", wrapper,
     ]
 
+    when = datetime.datetime.fromtimestamp(epoch, datetime.timezone.utc)
     log("构建", f"{BUILDENV_IMAGE}:{arch}  (容器内构建, -j{jobs})")
+    log("时间戳", f"SOURCE_DATE_EPOCH={epoch}  ({when:%Y-%m-%d %H:%M:%S} UTC)")
     proc = subprocess.run(cmd)
     if proc.returncode != 0:
         die(f"构建失败（退出码 {proc.returncode}）")

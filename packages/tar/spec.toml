@@ -4,6 +4,7 @@
 name        = "tar"
 version     = "1.35"
 release     = 1
+date        = 2026-10-10T06:39:13Z
 description = "归档工具"
 section     = "base"
 url         = "https://www.gnu.org/software/tar/"

@@ -4,6 +4,7 @@
 name        = "sed"
 version     = "4.10"
 release     = 1
+date        = 2026-10-10T06:39:12Z
 description = "流式文本编辑器"
 section     = "base"
 url         = "https://www.gnu.org/software/sed/"

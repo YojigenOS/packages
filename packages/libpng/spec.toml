@@ -7,6 +7,7 @@
 name        = "libpng"
 version     = "1.6.59"
 release     = 1
+date        = 2026-10-10T05:26:32Z
 description = "PNG 图像格式参考库"
 section     = "libs"
 url         = "http://www.libpng.org/pub/png/libpng.html"

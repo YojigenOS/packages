@@ -10,7 +10,7 @@ from .common import BUILD_DIR, OUTPUT_DIR, PACKAGES_DIR, ROOT, die, log, resolve
 
 from .spec import direct_deps, load_spec
 
-from .deps import build_sysroot, dep_closure, dep_payload, load_host_provides
+from .deps import build_sysroot, dep_closure, dep_payload, load_host_provides, source_date_epoch
 
 from .source import extract, fetch
 
@@ -72,7 +72,7 @@ def cmd_build(args) -> None:
     (BUILD_DIR / "run.sh").write_text(make_build_script(spec), encoding="utf-8")
 
     print()
-    run_in_container(srcrel, arch, spec)
+    run_in_container(srcrel, arch, spec, source_date_epoch(spec, arch, host_provides))
 
     out, count = collect(spec, arch)
     print()

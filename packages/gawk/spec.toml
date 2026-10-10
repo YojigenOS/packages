@@ -4,6 +4,7 @@
 name        = "gawk"
 version     = "5.4.1"
 release     = 1
+date        = 2026-10-10T06:39:13Z
 description = "GNU awk，文本处理语言"
 section     = "base"
 url         = "https://www.gnu.org/software/gawk/"
