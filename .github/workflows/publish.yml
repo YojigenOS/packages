@@ -67,8 +67,16 @@ jobs:
 
       - name: 推送到 Docker Hub
         env:
-          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          DOCKER_HUB_TOKEN: ${{ secrets.DOCKER_HUB_TOKEN }}
         run: |
-          echo "$DOCKERHUB_TOKEN" | docker login -u yojigenos --password-stdin
+          # secret 名字写错不会报错，只会静默变成空字符串，然后在
+          # docker login 那里以一个看不懂的方式失败。先挡一道，
+          # 把"名字错了"和"网络不通"这两种失败区分开。
+          if [ -z "$DOCKER_HUB_TOKEN" ]; then
+            echo "::error::secret DOCKER_HUB_TOKEN 是空的——名字写错了，或者还没配置"
+            exit 1
+          fi
+
+          echo "$DOCKER_HUB_TOKEN" | docker login -u yojigenos --password-stdin
           docker push yojigenos/base-devel:edge
           docker push "yojigenos/base-devel:${{ steps.image.outputs.date }}"
