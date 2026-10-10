@@ -11,23 +11,6 @@ from .common import (BUILDENV_IMAGE, BUILD_DIR, CCACHE_DIR, CCACHE_MAXSIZE,
 
 from .spec import expand
 
-#: 合并依赖到构建容器时，这些顶层名字【不覆盖】容器已有的。
-#:
-#: 【为什么】x86_64 上 Debian 的 /lib64 → usr/lib64，而动态链接器就住在
-#: 那里（/lib64/ld-linux-x86-64.so.2 → ../lib/x86_64-linux-gnu/...）。
-#: 我们的 filesystem 包按 0001 的策略把它改成 /lib64 → usr/lib，于是
-#: /lib64/ld-linux-x86-64.so.2 变成悬空——**容器里所有动态链接的程序立刻
-#: 全废**。实测的表现是 glibc 构建 11 秒就死，而日志里只有「合并 9715 项
-#: 到 /」和一句失败，完全看不出原因。
-#:
-#: aarch64 上一直没暴露：那里的链接器是 /lib/ld-linux-aarch64.so.1，而
-#: /lib → usr/lib 两边一致。只有 x86_64 的 /lib64 有分歧。
-#:
-#: 【为什么保护是对的】「合并进构建容器」和「拼装我们的根」是两件事。
-#: filesystem 描述的是**我们的根**，而构建容器不是我们的根——它的布局是
-#: Debian 的。包的**内容**照样进 usr/，受影响的只是根的四条链接。
-CONTAINER_PROTECTED = ("bin", "sbin", "lib", "lib64")
-
 #: 我们的架构名 → docker 的平台名。两套命名不一样，别混。
 DOCKER_PLATFORM = {
     "aarch64": "linux/arm64",
