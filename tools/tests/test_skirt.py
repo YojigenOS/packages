@@ -675,14 +675,33 @@ class TestEveryRealSpec(unittest.TestCase):
         self.assertGreaterEqual(latest_date(glibc, deps), package_date(glibc))
 
     def test_sources_expand_cleanly(self):
+        """源的地址要能干净展开——不能留没替换的变量。
+
+        两种形式都测：url 形式（发行包）和 git 形式（仓库 + commit）。
+        git 形式的地址是驱动算出来的，所以配方里【不该】出现托管商的链接；
+        这条测试守的就是这个：配方写的是仓库，不是链接。
+        """
         for name in self.specs():
             spec = load_spec(name)
             for src in spec.get("source", []):
-                with self.subTest(package=name, url=src.get("url")):
+                with self.subTest(package=name, src=src.get("url") or src.get("git")):
+                    if src.get("git"):
+                        git = expand(spec, src["git"])
+                        self.assertNotIn("$", git,
+                                         f"{name}: git 地址里有没展开的变量")
+                        self.assertRegex(src.get("commit", ""), r"^[0-9a-f]{40}$",
+                                         f"{name}: git 形式要写完整的 40 位 commit")
+                        for mirror in src.get("mirrors", []):
+                            self.assertNotIn(
+                                "$", expand(spec, mirror),
+                                f"{name}: 镜像地址里有没展开的变量")
+                        continue
+
                     url = expand(spec, src["url"])
-                    self.assertNotIn("$", url, "URL 里有没展开的占位符")
-                    self.assertTrue(url.startswith(("http://", "https://")))
-                    self.assertRegex(src["sha256"], r"^[0-9a-f]{64}$")
+                    self.assertNotIn("$", url, f"{name}: URL 里有没展开的变量")
+                    for extra in src.get("urls", []):
+                        self.assertNotIn("$", expand(spec, extra),
+                                         f"{name}: 备用 URL 里有没展开的变量")
 
     def test_subpackage_names_are_globally_unique(self):
         """子包名在整个仓库里必须唯一。

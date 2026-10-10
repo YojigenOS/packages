@@ -27,13 +27,13 @@ url         = "https://ccache.dev/"
 license     = "GPL-3.0-or-later"
 
 [[source]]
-# ★ 用 commit，不用 release 附件：附件可以被替换和删除，commit 不能。
-# sha256 仍要，因为 GitHub 按需生成 tarball，字节不保证稳定。
-url    = "https://codeload.github.com/ccache/ccache/tar.gz/c67954b7729c2a7a350c80e7634d704b669307dc"
-urls = [
-  "https://github.com/ccache/ccache/archive/c67954b7729c2a7a350c80e7634d704b669307dc.tar.gz",
-]
-sha256 = "df4248b5b2c3ea5072f66d684a45dbbf54b9357cfa5b6ae4eb20252cae001ddb"
+# 写「哪个仓库的哪个 commit」，不写托管商的链接——
+# 链接格式各托管不同（GitHub 是 codeload，Gitea 是 /archive/<sha>，
+# GitLab 又是另一种），那是驱动的事，不该让配方作者记。
+# 校验由 git 自己完成：commit hash 就是那棵树的内容哈希，比 sha256
+# 更强——sha256 钉的是一份字节，而不同托管的归档字节可以不一样。
+git     = "https://github.com/ccache/ccache"
+commit  = "c67954b7729c2a7a350c80e7634d704b669307dc"
 
 [dependencies]
 # xxhash 和 zstd 都是运行时的：ccache 链接它们。
