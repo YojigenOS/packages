@@ -1,0 +1,378 @@
+#!/usr/bin/env python3
+"""skirt —— YojigenOS 构建驱动
+
+短裙里装着四次元空间；这里装着所有的包。
+
+用法:
+    tools/skirt build <包名>              构建一个包（默认当前架构）
+    tools/skirt build --arch x86_64 <包名>
+    tools/skirt list                      列出所有包
+    tools/skirt clean [包名]              清理构建目录 / 该包的产物
+
+首次使用前需要准备构建环境:
+    docker build -t yojigen/buildenv:$(uname -m | sed 's/arm64/aarch64/') tools/buildenv
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import platform
+import shutil
+import subprocess
+import sys
+import tarfile
+import time
+import tomllib
+import urllib.request
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+PACKAGES_DIR = ROOT / "packages"
+OUTPUT_DIR = ROOT / "output"
+CACHE_DIR = ROOT / "cache"
+BUILD_DIR = ROOT / "build"
+BUILDENV_IMAGE = "yojigen/buildenv"
+
+ARCH_ALIASES = {
+    "arm64": "aarch64",
+    "aarch64": "aarch64",
+    "x86_64": "x86_64",
+    "amd64": "x86_64",
+}
+
+
+# --------------------------------------------------------------- 基础工具
+
+def log(stage: str, msg: str) -> None:
+    print(f"\033[1m[{stage}]\033[0m {msg}", flush=True)
+
+
+def die(msg: str) -> None:
+    print(f"\033[31mskirt: 错误\033[0m {msg}", file=sys.stderr)
+    sys.exit(1)
+
+
+def sha256_of(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def resolve_arch(requested: str | None) -> str:
+    host = ARCH_ALIASES.get(platform.machine())
+    if host is None:
+        die(f"不认识的宿主架构: {platform.machine()}")
+    if requested is None:
+        return host
+    want = ARCH_ALIASES.get(requested, requested)
+    if want != host:
+        die(
+            f"暂不支持交叉构建：宿主是 {host}，请求的是 {want}。\n"
+            f"       交叉工具链要等工具链自举之后才会加上，见 docs/ 里的架构策略。"
+        )
+    return want
+
+
+# ------------------------------------------------------------------ 配方
+
+def load_spec(name: str) -> dict:
+    path = PACKAGES_DIR / name / "spec.toml"
+    if not path.is_file():
+        die(f"找不到配方: {path}")
+    with path.open("rb") as f:
+        spec = tomllib.load(f)
+    if "package" not in spec:
+        die(f"{path}: 缺少 [package] 段")
+    for key in ("name", "version"):
+        if key not in spec["package"]:
+            die(f"{path}: [package] 缺少 {key}")
+    spec["_dir"] = path.parent
+    return spec
+
+
+def expand(spec: dict, value):
+    """展开 $NAME / $VERSION 占位符。"""
+    pkg = spec["package"]
+    if isinstance(value, str):
+        return (value
+                .replace("$NAME", pkg["name"])
+                .replace("$VERSION", pkg["version"]))
+    if isinstance(value, list):
+        return [expand(spec, v) for v in value]
+    if isinstance(value, dict):
+        return {k: expand(spec, v) for k, v in value.items()}
+    return value
+
+
+def deps_for(spec: dict, arch: str) -> dict:
+    """合并通用依赖与架构特定依赖（架构特定值整体覆盖同名键）。"""
+    deps = dict(spec.get("dependencies", {}))
+    per_arch = deps.pop(arch, None)
+    if isinstance(per_arch, dict):
+        deps.update(per_arch)
+    return deps
+
+
+# -------------------------------------------------------------- 下载校验
+
+def fetch(spec: dict) -> Path:
+    pkg = spec["package"]
+    sources = spec.get("source") or []
+    if not sources:
+        die(f"{pkg['name']}: 配方没有声明 source")
+
+    src = sources[0]
+    url = expand(spec, src["url"])
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    dest = CACHE_DIR / url.rsplit("/", 1)[-1]
+
+    if dest.is_file():
+        log("下载", f"缓存命中 {dest.name}")
+    else:
+        log("下载", url)
+        tmp = dest.with_name(dest.name + ".part")
+        urllib.request.urlretrieve(url, tmp)
+        tmp.rename(dest)
+
+    want = str(src.get("sha256", "")).strip().lower()
+    if len(want) != 64:
+        die(f"{pkg['name']}: 源码没有声明有效的 sha256"
+            f"（不接受未校验的源码，当前值: {want!r}）")
+
+    got = sha256_of(dest)
+    if got != want:
+        die(f"{pkg['name']}: sha256 不匹配\n"
+            f"       期望 {want}\n"
+            f"       实际 {got}\n"
+            f"       文件 {dest}")
+    log("校验", "sha256 匹配")
+    return dest
+
+
+def extract(archive: Path, into: Path) -> str:
+    """解压到 into，返回源码根目录相对名（'.' 表示就是 into 本身）。"""
+    if into.exists():
+        shutil.rmtree(into)
+    into.mkdir(parents=True)
+    log("解压", archive.name)
+    with tarfile.open(archive) as tf:
+        try:
+            tf.extractall(into, filter="data")
+        except TypeError:      # Python < 3.12
+            tf.extractall(into)
+    entries = list(into.iterdir())
+    if len(entries) == 1 and entries[0].is_dir():
+        return entries[0].name
+    return "."
+
+
+# ------------------------------------------------------------ 生成构建脚本
+
+def make_build_script(spec: dict) -> str:
+    """把 [build] 表翻译成 shell。steps.sh 可通过重定义函数覆盖。"""
+    b = spec.get("build", {})
+    kind = b.get("type", "custom")
+
+    if kind == "autotools":
+        opts = " ".join(b.get("configure", ["--prefix=/usr"]))
+        body = f"  ./configure {opts}\n  make"
+        pkgstep = '  make DESTDIR="$PKGDEST" install'
+    elif kind == "meson":
+        opts = " ".join(b.get("configure", ["--prefix=/usr", "--buildtype=release"]))
+        body = f"  meson setup _build {opts}\n  meson compile -C _build"
+        pkgstep = '  DESTDIR="$PKGDEST" meson install -C _build'
+    elif kind == "cmake":
+        opts = " ".join(b.get("configure", ["-DCMAKE_INSTALL_PREFIX=/usr"]))
+        body = f"  cmake -B _build {opts}\n  cmake --build _build"
+        pkgstep = '  DESTDIR="$PKGDEST" cmake --install _build'
+    elif kind == "custom":
+        body = "  : # 由 steps.sh 提供"
+        pkgstep = "  : # 由 steps.sh 提供"
+    else:
+        die(f"{spec['package']['name']}: 不认识的构建类型 {kind!r}")
+
+    return (
+        "set -euo pipefail\n"
+        "export PKGDEST=/work/dest\n"
+        "\n"
+        "build() {\n" + body + "\n}\n"
+        "\n"
+        "package() {\n" + pkgstep + "\n}\n"
+        "\n"
+        "# steps.sh 若存在，可以重定义上面任意函数\n"
+        "if [ -f /work/steps.sh ]; then . /work/steps.sh; fi\n"
+        "\n"
+        "build\n"
+        "package\n"
+    )
+
+
+def run_in_container(script: str, srcrel: str, arch: str, spec: dict) -> None:
+    pkg = spec["package"]
+    workdir = "/work/src" if srcrel == "." else f"/work/src/{srcrel}"
+    (BUILD_DIR / "home").mkdir(parents=True, exist_ok=True)
+
+    cmd = [
+        "docker", "run", "--rm",
+        "--user", f"{os.getuid()}:{os.getgid()}",
+        "-e", "HOME=/work/home",
+        "-e", "PKGDEST=/work/dest",
+        "-e", f"PKGARCH={arch}",
+        "-e", f"PKGNAME={pkg['name']}",
+        "-e", f"PKGVER={pkg['version']}",
+        "-v", f"{BUILD_DIR}:/work",
+        "-w", workdir,
+        f"{BUILDENV_IMAGE}:{arch}",
+        "bash", "-c", script,
+    ]
+
+    log("构建", f"{BUILDENV_IMAGE}:{arch}  (cwd={workdir})")
+    proc = subprocess.run(cmd)
+    if proc.returncode != 0:
+        die(f"构建失败（退出码 {proc.returncode}）")
+
+
+# ------------------------------------------------------------------ 收集
+
+def collect(spec: dict, arch: str) -> tuple[Path, int]:
+    pkg = spec["package"]
+    destdir = BUILD_DIR / "dest"
+    out = OUTPUT_DIR / arch / f"{pkg['name']}-{pkg['version']}-{pkg['release']}"
+
+    if out.exists():
+        shutil.rmtree(out)
+    payload = out / "payload"
+    payload.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(destdir, payload, symlinks=True)
+
+    files = []
+    for p in sorted(payload.rglob("*")):
+        rel = str(p.relative_to(payload))
+        if p.is_symlink():
+            files.append({"path": rel, "type": "symlink", "target": os.readlink(p)})
+        elif p.is_file():
+            files.append({
+                "path": rel,
+                "type": "file",
+                "size": p.stat().st_size,
+                "sha256": sha256_of(p),
+            })
+        elif p.is_dir():
+            files.append({"path": rel + "/", "type": "dir"})
+
+    deps = deps_for(spec, arch)
+    meta = {
+        "name": pkg["name"],
+        "version": pkg["version"],
+        "release": pkg["release"],
+        "arch": arch,
+        "description": pkg.get("description", ""),
+        "section": pkg.get("section", ""),
+        "license": pkg.get("license", ""),
+        "url": pkg.get("url", ""),
+        "depends": deps.get("runtime", []),
+        "build_depends": deps.get("build", []),
+        "built_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+        "files": files,
+    }
+    (out / "meta.json").write_text(
+        json.dumps(meta, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return out, len(files)
+
+
+# ------------------------------------------------------------------ 命令
+
+def cmd_build(args) -> None:
+    arch = resolve_arch(args.arch)
+    spec = load_spec(args.package)
+    pkg = spec["package"]
+    name, ver, rel = pkg["name"], pkg["version"], pkg["release"]
+
+    steps = spec["_dir"] / "steps.sh"
+    kind = spec.get("build", {}).get("type", "custom")
+    if kind == "custom" and not steps.is_file():
+        die(f"{name}: type = \"custom\" 但没有 steps.sh，没有任何构建步骤")
+
+    print()
+    log("开始", f"{name} {ver}-{rel} [{arch}]")
+
+    if BUILD_DIR.exists():
+        shutil.rmtree(BUILD_DIR)
+    (BUILD_DIR / "dest").mkdir(parents=True)
+
+    archive = fetch(spec)
+    srcrel = extract(archive, BUILD_DIR / "src")
+
+    if steps.is_file():
+        shutil.copy2(steps, BUILD_DIR / "steps.sh")
+        log("步骤", "已加载 steps.sh")
+
+    run_in_container(make_build_script(spec), srcrel, arch, spec)
+
+    out, count = collect(spec, arch)
+    print()
+    log("完成", f"{out.relative_to(ROOT)}/  （{count} 项）")
+
+
+def cmd_list(args) -> None:
+    if not PACKAGES_DIR.is_dir():
+        print("(还没有 packages/ 目录)")
+        return
+    names = sorted(
+        p.name for p in PACKAGES_DIR.iterdir()
+        if p.is_dir() and (p / "spec.toml").is_file()
+    )
+    if not names:
+        print("(还没有任何包)")
+        return
+    for n in names:
+        pkg = load_spec(n)["package"]
+        print(f"  {pkg['name']:<16} {pkg['version']}-{pkg['release']:<5} "
+              f"{pkg.get('description', '')}")
+
+
+def cmd_clean(args) -> None:
+    if BUILD_DIR.exists():
+        shutil.rmtree(BUILD_DIR)
+        log("清理", "build/")
+    if args.package and OUTPUT_DIR.is_dir():
+        for arch_dir in sorted(OUTPUT_DIR.iterdir()):
+            if not arch_dir.is_dir():
+                continue
+            for d in sorted(arch_dir.glob(f"{args.package}-*")):
+                shutil.rmtree(d)
+                log("清理", f"{d.relative_to(ROOT)}/")
+    if not args.package:
+        log("提示", "未指定包名，只清理了 build/（产物保留）")
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(
+        prog="skirt",
+        description="YojigenOS 构建驱动 —— 短裙里装着四次元空间",
+    )
+    sub = ap.add_subparsers(dest="cmd", required=True)
+
+    p = sub.add_parser("build", help="构建一个包")
+    p.add_argument("package")
+    p.add_argument("--arch", help="目标架构（默认当前架构）")
+    p.set_defaults(func=cmd_build)
+
+    p = sub.add_parser("list", help="列出所有包")
+    p.set_defaults(func=cmd_list)
+
+    p = sub.add_parser("clean", help="清理构建目录 / 指定包的产物")
+    p.add_argument("package", nargs="?")
+    p.set_defaults(func=cmd_clean)
+
+    args = ap.parse_args()
+    args.func(args)
+
+
+if __name__ == "__main__":
+    main()

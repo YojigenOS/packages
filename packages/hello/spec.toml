@@ -1,0 +1,29 @@
+# GNU Hello —— 打招呼的示例程序
+#
+# 这是 YojigenOS 的第一个配方，用来验证构建系统本身。
+
+[package]
+name        = "hello"
+version     = "2.12.1"
+release     = 1
+description = "GNU Hello，打招呼的示例程序"
+section     = "utils"
+url         = "https://www.gnu.org/software/hello/"
+license     = "GPL-3.0-or-later"
+
+[[source]]
+url    = "https://ftp.gnu.org/gnu/hello/hello-$VERSION.tar.gz"
+sha256 = "8d99142afd92576f30b0cd7cb42a8dc6809998bc5d607d88761f512e26c7db20"
+
+[dependencies]
+runtime = ["glibc"]
+build   = []
+
+# 架构特定依赖：现在留形状，暂不使用。
+# 展开时会整体覆盖 [dependencies] 里同名的键。
+[dependencies.x86_64]
+runtime = ["glibc"]
+
+[build]
+type      = "autotools"
+configure = ["--prefix=/usr", "--disable-nls"]
