@@ -80,9 +80,37 @@ jobs:
       # 现在是一条完整的链：从 Debian 底出发，把 41 个包全建出来。
       # 顺序不是写着的，是从配方的依赖关系算出来的（skirt order）。
       - name: 引导 —— 建出全部包
+        id: bootstrap
         run: |
           ./tools/skirt order | head -50
-          ./tools/skirt bootstrap --report
+          # bootstrap 失败时非零退出（这是它该做的）。但我们要先把日志传出去，
+          # 所以这里不让它中断，改成记下结论、后面再失败。
+          ./tools/skirt bootstrap --report || echo "bootstrap_failed=1" >> "$GITHUB_OUTPUT"
+
+      # ★ 失败那一刻就把日志拿到手。
+      #
+      # 以前只能等整个 job 结束再用 gh api 取日志——实测被卡过两次，一次等了
+      # 20 分钟。而 cmd_bootstrap 只打印失败包的【最后 8 行】，那点信息往往
+      # 不够（libxcrypt 那次就只看到 libtoolize 的输出，真正的错误在更上面）。
+      #
+      # 所以：把每个包的完整日志和失败包的尾部一起传出来。传不出去也没关系
+      # ——如果这一步自己失败，才轮到后面那步报错。
+      - name: 上传构建日志
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs-${{ matrix.arch }}
+          path: |
+            /tmp/*.log
+            /tmp/**/*.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: 引导失败了就停在这里
+        if: steps.bootstrap.outputs.bootstrap_failed == '1'
+        run: |
+          echo "::error::引导失败。完整日志见这个 job 的 build-logs-${{ matrix.arch }} artifact。"
+          exit 1
 
       - name: 拼出 base-devel 镜像
         run: |
@@ -220,9 +248,28 @@ jobs:
       # ★ 唯一的区别就是这一行 SKIRT_BUILDENV。
       #   命令、顺序、配方全都没变——变的只是「谁来当构建环境」。
       - name: ★ 用我们自己的系统再建一轮
+        id: selfhost
         env:
           SKIRT_BUILDENV: yojigenos/base-devel
-        run: ./tools/skirt bootstrap --report
+        run: |
+          ./tools/skirt bootstrap --report || echo "bootstrap_failed=1" >> "$GITHUB_OUTPUT"
+
+      - name: 上传构建日志
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: selfhost-logs-${{ matrix.arch }}
+          path: |
+            /tmp/*.log
+            /tmp/**/*.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: 自举失败了就停在这里
+        if: steps.selfhost.outputs.bootstrap_failed == '1'
+        run: |
+          echo "::error::自举失败。完整日志见 selfhost-logs-${{ matrix.arch }} artifact。"
+          exit 1
 
       - name: 和上一轮比对
         run: |
