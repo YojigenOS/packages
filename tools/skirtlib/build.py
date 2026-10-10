@@ -6,7 +6,8 @@ import datetime
 import os
 import subprocess
 
-from .common import BUILDENV_IMAGE, BUILD_DIR, CCACHE_DIR, build_jobs, die, log
+from .common import (BUILDENV_IMAGE, BUILD_DIR, CCACHE_DIR, CCACHE_MAXSIZE,
+                     CCACHE_MOUNT, build_jobs, die, log)
 
 from .spec import expand
 
@@ -129,17 +130,23 @@ def run_in_container(srcrel: str, arch: str, spec: dict, epoch: int) -> None:
             'echo "[strip] ${before} KB → ${after} KB（省 ${pct}%）"\n'
         )
 
-    # ccache 统计。冷缓存时全是 miss，这是正常的——价值在第二次构建。
+    # ccache 统计。
+    #
+    # 【只报能验证的东西。】原来这里读 `ccache --print-stats` 的命中率，但
+    # 实测它不可靠：ccache 4.14 把统计分片存在每个缓存子目录的 `stats` 文件里
+    # （0/0/stats … f/f/stats），而我们的构建确实在写它们——构建前后分片 md5
+    # 变了、一分钟内 215 个分片被动过。可 `--print-stats` 汇总出来的数字纹丝
+    # 不动，连着四次构建一模一样。
+    #
+    # 一行会骗人的日志比没有日志更糟：它让人以为缓存没生效，然后去查一个不
+    # 存在的问题（我就查了半天）。所以换成两个直接可数的量。
     ccache_stats = (
-        "\n# ccache 统计\n"
-        "if command -v ccache >/dev/null 2>&1; then\n"
-        "  ccache --print-stats 2>/dev/null | awk -F'\\t' '\n"
-        '    $1=="direct_cache_hit"       { d = $2 }\n'
-        '    $1=="preprocessed_cache_hit" { p = $2 }\n'
-        '    $1=="cache_miss"             { m = $2 }\n'
-        "    END { n = d + p + m\n"
-        '          if (n > 0) printf "[ccache] 命中 %d / %d（%.0f%%）\\n", d+p, n, (d+p)*100/n }\'\n'
-        '  echo "[ccache] 缓存体积 $(du -sh "$CCACHE_DIR" 2>/dev/null | cut -f1)"\n'
+        "\n# ccache 状态\n"
+        "if [ -d /usr/lib/ccache ]; then\n"
+        '  echo "[ccache] 缓存体积 $(du -sh "$CCACHE_DIR" 2>/dev/null | cut -f1'
+        ' || echo 未知)"\n'
+        '  echo "[ccache] 缓存条目 $(find "$CCACHE_DIR" -name stats 2>/dev/null'
+        ' | wc -l | tr -d " ")"\n'
         "fi\n"
     )
 
@@ -252,8 +259,16 @@ def run_in_container(srcrel: str, arch: str, spec: dict, epoch: int) -> None:
         "-e", "LC_ALL=C.UTF-8",
         "-e", "LANG=C.UTF-8",
         "-e", "TZ=UTC",
+        # ccache 的两个设置也显式传，不靠镜像的 ENV——理由同上面那段 PATH：
+        # base-devel 是 docker import 出来的，那种镜像不带 ENV。
+        #
+        # 实测过一次：导入的 base-devel 里 CCACHE_DIR 是空的。后果有两层——
+        # 缓存写进容器内临时的 ~/.cache/ccache（白挂载），而且包装脚本末尾
+        # 那句 `du -sh "$CCACHE_DIR"` 在 set -u 下会直接把构建搞崩。
+        "-e", f"CCACHE_DIR={CCACHE_MOUNT}",
+        "-e", f"CCACHE_MAXSIZE={CCACHE_MAXSIZE}",
         "-v", f"{BUILD_DIR}:/in",
-        "-v", f"{CCACHE_DIR}:/ccache",
+        "-v", f"{CCACHE_DIR}:{CCACHE_MOUNT}",
         f"{BUILDENV_IMAGE}:{arch}",
         "bash", "-c", wrapper,
     ]

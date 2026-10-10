@@ -33,6 +33,15 @@ BUILDENV_IMAGE = os.environ.get("SKIRT_BUILDENV", "yojigenos/buildenv")
 # 用环境变量 SKIRT_CCACHE 覆盖。
 CCACHE_DIR = Path(os.environ.get("SKIRT_CCACHE", ROOT.parent / "ccache"))
 
+#: ccache 在容器里看到的缓存目录。宿主的 CCACHE_DIR 挂到这里。
+#:
+#: 驱动会把它显式传进容器（`-e CCACHE_DIR=...`），不靠镜像的 ENV——
+#: base-devel 是 docker import 出来的，那种镜像不带 ENV。
+CCACHE_MOUNT = "/ccache"
+
+#: 缓存上限。16 GB 是按最坏情况定的：gcc 一个包的中间产物就有几个 GB。
+CCACHE_MAXSIZE = os.environ.get("SKIRT_CCACHE_MAXSIZE", "16G")
+
 ARCH_ALIASES = {
     "arm64": "aarch64",
     "aarch64": "aarch64",

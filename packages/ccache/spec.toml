@@ -20,7 +20,7 @@
 name        = "ccache"
 version     = "4.14.1"
 release     = 1
-date        = 2026-10-10T14:40:00Z
+date        = 2026-10-10T14:55:00Z
 description = "编译器缓存：把重复编译的结果存下来复用"
 section     = "devel"
 url         = "https://ccache.dev/"
@@ -32,13 +32,13 @@ url    = "https://github.com/ccache/ccache/releases/download/v$VERSION/ccache-$V
 sha256 = "29f10de481ac2c41c91bfabead63d803bd2fe823e09752aade5b0b8704cc4f30"
 
 [dependencies]
-# zstd 是运行时的：ccache 链接它，用来压缩缓存条目。
-runtime = ["glibc", "zstd"]
-build   = ["make", "gcc", "cmake", "zstd"]
+# xxhash 和 zstd 都是运行时的：ccache 链接它们。
+runtime = ["glibc", "zstd", "xxhash"]
+build   = ["make", "gcc", "cmake", "zstd", "xxhash"]
 
 [dependencies.x86_64]
-runtime = ["glibc", "zstd"]
-build   = ["make", "gcc", "cmake", "zstd"]
+runtime = ["glibc", "zstd", "xxhash"]
+build   = ["make", "gcc", "cmake", "zstd", "xxhash"]
 
 [build]
 type = "cmake"
@@ -48,6 +48,18 @@ configure = [
   "-DENABLE_TESTING=OFF",           # 测试要 doctest，没有
   "-DENABLE_DOCUMENTATION=OFF",     # 文档要 asciidoctor，没有
   "-DREDIS_STORAGE_BACKEND=OFF",    # 远程存储要 hiredis，没有也不需要
-  # 用树里的 zstd，不让它去网上拉一份——构建不该依赖网络拿第三方库。
-  "-DZSTD_FROM_INTERNET=OFF",
+
+  # ★ 只用本地依赖，永不下载。
+  #
+  # 第一次构建时它报了「Downloading Xxhash from the internet since Xxhash
+  # was not found locally and DEPS=AUTO」，然后去拉
+  # https://github.com/Cyan4973/xxhash/archive/refs/tags/v0.8.3.tar.gz ——
+  # 正是配方约定里禁止的 tag 归档。
+  #
+  # 那次它**失败了**，因为我们的 cmake 是 -DCMAKE_USE_OPENSSL=OFF 编的，
+  # 没有 HTTPS 能力。那是个幸运的意外，不是设计。等 cmake 带上 openssl，
+  # 这个防线就没了——那时它会悄悄拉一份 tag 归档进来构建，产物不可复现。
+  #
+  # 所以显式堵死。ccache 的 DEPS 有三个取值：AUTO / DOWNLOAD / LOCAL。
+  "-DDEPS=LOCAL",
 ]

@@ -1,0 +1,48 @@
+# xxhash —— 极快的非加密哈希算法
+#
+# ccache 要它（4.x 起，用哈希做缓存键）。它没有 release 附件，只有 GitHub
+# 按需生成的归档——所以这是**第一个用 commit 归档的配方**，也是
+# docs/配方约定.md 里那条规则的实际例子：
+#
+#     项目是纯 Makefile → 原始 git 树就是完整的 → commit 归档可用 ✓
+#     项目是 autotools → 缺 configure      → 必须用发行包     ✗
+#
+# 实测它的树里有 Makefile、xxhash.h、xxhash.c、cli/ 下的源码，115 个文件，
+# 不缺东西。
+#
+# ## 两层钉
+#
+# commit hash 写进 URL：内容不可能变，那棵树是哈希钉死的。
+# sha256 仍然要：GitHub 按需生成 tarball，字节不保证稳定。
+#
+# 两者管的不是一回事——commit 保证「内容对」，sha256 保证「字节对」。
+
+[package]
+name        = "xxhash"
+version     = "0.8.4"
+release     = 1
+date        = 2026-10-10T14:50:00Z
+description = "极快的非加密哈希算法（xxHash）"
+section     = "libs"
+url         = "https://github.com/Cyan4973/xxhash"
+license     = "BSD-2-Clause"
+
+[[source]]
+# v0.8.4 对应的 commit。不用 tag 归档：tag 可以移动。
+url    = "https://codeload.github.com/Cyan4973/xxhash/tar.gz/c87183a77d67f7d37e3d2d1b7eaac5e7c695e4f0"
+urls = [
+  "https://github.com/Cyan4973/xxhash/archive/c87183a77d67f7d37e3d2d1b7eaac5e7c695e4f0.tar.gz",
+]
+sha256 = "ed9fa05b338a5b308eca0c25e93fe4ba8e3adfaa6f94bedf1f39b0a0d1010751"
+
+[dependencies]
+runtime = ["glibc"]
+build   = ["make", "gcc"]
+
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["make", "gcc"]
+
+[build]
+# 顶层就是一个 Makefile，没有 configure，也没有顶层 CMakeLists。
+type = "custom"
