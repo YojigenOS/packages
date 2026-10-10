@@ -5,56 +5,112 @@ name: publish
 # 「这一版是什么」这个信息就没了。
 on:
   workflow_dispatch:
+    inputs:
+      selfhost:
+        description: '跑自举验证（再建一轮，和这一轮比对。会让总时长翻倍）'
+        type: boolean
+        default: true
 
-# 这个 job 只需要读代码。显式收紧 GITHUB_TOKEN 的权限——
-# 工作流里的第三方代码（action）能拿到它，权限越小越好。
+# 显式收紧 GITHUB_TOKEN 的权限——工作流里的第三方代码（action）能拿到它，
+# 权限越小越好。
 permissions:
   contents: read
 
+
 jobs:
-  publish:
-    # 必须是 arm64：我们构建的是 aarch64 的包。
-    # 默认 runner 是 x86_64，在上面跑 skirt 会去模拟 aarch64，
-    # glibc 要编 40 分钟、gcc 可能要几小时——不可用。
-    #
-    # 这些 runner 只在公开仓库可用，私有仓库里加了会直接失败。
-    #
-    # 显式 pin 版本，不用 ubuntu-latest：它只跟踪 x64 镜像（我们本来
-    # 就用不了），而且 2026 年 10-11 月正在迁移到 26.04，会带来意外变化。
-    runs-on: ubuntu-26.04-arm
+  # ==========================================================================
+  # 一、把每个架构的构建环境建出来并发布
+  # ==========================================================================
+  #
+  # 【为什么每个架构是完整独立的一条链】
+  #
+  # 这不是「多架构镜像」，是「多平台容器」。aarch64 的产物在 x86_64 上一个都
+  # 用不上——每个架构都要从 Debian 底的 buildenv 出发，走完整的 41 步引导。
+  # 这也正是我们不需要交叉编译工具链的原因。
+  #
+  build:
+    strategy:
+      fail-fast: false          # 一个架构挂了，另一个照跑完——它的日志有诊断价值
+      matrix:
+        include:
+          # 显式 pin 版本，不用 ubuntu-latest：它是个移动别名，
+          # 构建环境会静默变化；而且它只跟踪 x64 镜像。
+          #
+          # 这些 runner 只在公开仓库可用，私有仓库里加了会直接失败。
+          - arch: aarch64
+            runner: ubuntu-26.04-arm
+            platform: linux/arm64
+          - arch: x86_64
+            runner: ubuntu-26.04
+            platform: linux/amd64
+
+    runs-on: ${{ matrix.runner }}
 
     steps:
       - uses: actions/checkout@v7
 
-      # 构建环境镜像还是 Debian 底。自举完成之后，这里会换成
-      # FROM scratch + 我们自己的 rootfs——文件名和 tag 都不用改。
-      - name: 准备构建环境
-        run: docker build -t yojigenos/buildenv:aarch64 tools/buildenv
+      # 源码和编译缓存可以跨运行复用——它们不影响「这次构建到底建了什么」。
+      # 【产物 output/ 故意不缓存】：那正是每次要重新证明的东西。
+      - name: 缓存源码与 ccache
+        uses: actions/cache@v4
+        with:
+          path: |
+            cache
+            ccache
+          key: src-${{ matrix.arch }}-${{ hashFiles('packages/**/spec.toml') }}
+          restore-keys: src-${{ matrix.arch }}-
 
-      - name: 构建根文件系统
+      - name: 用满整台 runner 的核
         run: |
-          # skirt 默认留两个核给用户——那是给开发机的体贴，在 CI 上
-          # 就是浪费：整台 runner 都是我们的，全用上。
-          export SKIRT_JOBS=$(nproc)
-          echo "并行度: -j$SKIRT_JOBS"
+          # skirt 默认留两个核给用户——那是给开发机的体贴，在 CI 上就是浪费。
+          echo "SKIRT_JOBS=$(nproc)" >> "$GITHUB_ENV"
+          echo "并行度: -j$(nproc)"
 
-          ./tools/skirt rootfs \
-            filesystem glibc bash coreutils \
-            sed grep gawk findutils diffutils \
-            tar gzip xz make binutils gcc linux-headers \
-            gmp mpfr mpc zlib \
-            --output /tmp/yojigenos-rootfs.tar.gz
-          echo "--- 产物 ---"
-          ls -lh /tmp/yojigenos-rootfs.tar.gz
+      - name: 建 Debian 底的构建环境
+        run: |
+          # Dockerfile 是 FROM debian:stable-slim——架构中立，
+          # 在哪台 runner 上建就是哪个架构的。
+          docker build -t yojigenos/buildenv:${{ matrix.arch }} tools/buildenv
+
+      # 【这一步是整条流水线的核心】
+      #
+      # 以前这里写的是 `skirt rootfs` 加一串硬编码的包名 ✗ ——它假设产物
+      # 已经存在，而 CI 是干净环境，output/ 不在那里。所以它从来没跑通过。
+      #
+      # 现在是一条完整的链：从 Debian 底出发，把 41 个包全建出来。
+      # 顺序不是写着的，是从配方的依赖关系算出来的（skirt order）。
+      - name: 引导 —— 建出全部包
+        run: |
+          ./tools/skirt order | head -50
+          ./tools/skirt bootstrap --report
+
+      - name: 拼出 base-devel 镜像
+        run: |
+          ./tools/skirt image base-devel
+          ls -lh output/${{ matrix.arch }}/yojigenos-base-devel-${{ matrix.arch }}.tar.gz
 
       - name: 导入并打标签
         id: image
+        env:
+          # GitHub 提供这两个；runner 镜像变了要能在产物里查出来。
+          # 这正是 Debian 的 .buildinfo 在做的事（见待办 3.3）。
+          IMAGE_OS: ${{ runner.os }}
+          IMAGE_VERSION: ${{ runner.arch }}
         run: |
           DATE=$(date -u +%Y.%m.%d)
           echo "date=$DATE" >> "$GITHUB_OUTPUT"
 
-          docker import /tmp/yojigen-rootfs.tar.gz yojigenos/base-devel:edge
-          docker tag yojigenos/base-devel:edge "yojigenos/base-devel:$DATE"
+          ARCH=${{ matrix.arch }}
+          TARBALL=output/$ARCH/yojigenos-base-devel-$ARCH.tar.gz
+
+          # 用 docker import 而不是 build：产物是个 rootfs tar，没有 Dockerfile。
+          # --change 让它带上 LABEL——tag 是接口，LABEL 是注释（见 0003）。
+          docker import \
+            --change "LABEL org.yojigenos.arch=$ARCH" \
+            --change "LABEL org.yojigenos.runner-image=$IMAGE_VERSION" \
+            "$TARBALL" "yojigenos/base-devel:edge-$ARCH"
+          docker tag "yojigenos/base-devel:edge-$ARCH" \
+                     "yojigenos/base-devel:$DATE-$ARCH"
 
           echo "--- 镜像 ---"
           docker images yojigenos/base-devel --format '{{.Repository}}:{{.Tag}}  {{.Size}}'
@@ -62,7 +118,8 @@ jobs:
       # 推送前先证明它真的能用。宁可发现推不出去，也不要推出去一个坏的。
       - name: 验证镜像能构建软件
         run: |
-          docker run --rm yojigenos/base-devel:edge /bin/bash -c '
+          docker run --rm --platform ${{ matrix.platform }} \
+            yojigenos/base-devel:edge-${{ matrix.arch }} /bin/bash -c '
             set -e
             printf "#include <stdio.h>\nint main(void){puts(\"ok\");return 0;}\n" > /tmp/t.c
             gcc /tmp/t.c -o /tmp/t
@@ -70,7 +127,16 @@ jobs:
             gcc --version | head -1
           '
 
-      - name: 推送到 Docker Hub
+      # 把这一轮的 tar 传下去给自举验证比对。它同时也是「这一版到底是什么」
+      # 的直接证据——比镜像层摘要更直白。
+      - name: 上传产物供比对
+        uses: actions/upload-artifact@v4
+        with:
+          name: base-devel-${{ matrix.arch }}
+          path: output/${{ matrix.arch }}/yojigenos-base-devel-${{ matrix.arch }}.tar.gz
+          retention-days: 14
+
+      - name: 推送 buildenv 与 base-devel
         env:
           DOCKER_HUB_TOKEN: ${{ secrets.DOCKER_HUB_TOKEN }}
         run: |
@@ -82,6 +148,131 @@ jobs:
             exit 1
           fi
 
+          ARCH=${{ matrix.arch }}
           echo "$DOCKER_HUB_TOKEN" | docker login -u yojigenos --password-stdin
-          docker push yojigenos/base-devel:edge
-          docker push "yojigenos/base-devel:${{ steps.image.outputs.date }}"
+
+          # buildenv 也发。它是「从零开始」的起点：任何人拉下它，
+          # 跑一次 skirt bootstrap 就能重建整个系统。
+          docker push "yojigenos/buildenv:$ARCH"
+          docker push "yojigenos/base-devel:edge-$ARCH"
+          docker push "yojigenos/base-devel:${{ steps.image.outputs.date }}-$ARCH"
+
+  # ==========================================================================
+  # 二、自举验证 —— 用刚发布的构建环境，再建一轮
+  # ==========================================================================
+  #
+  # 【为什么这一步才是自举的完成】
+  #
+  # 上面那一轮，构建环境是 Debian 底的 buildenv——「我们的系统是在 Debian 里
+  # 生出来的」。这一步换成【刚发布的 base-devel】，再跑一遍同一条命令：
+  #
+  #     用 base-devel 能构建出 base-devel 本身
+  #
+  # 跑通了，这条路才闭合（docs/决策记录/0011）。而且跑通之后，构建环境不再
+  # 依赖任何本机产物——任何人都能从 registry 拉下来继续，这才是「发布」真正
+  # 解决的问题。
+  #
+  # 【关于逐字节比对】第一轮和第二轮【不会】完全一致：第一轮里编译器、汇编
+  # 器这些工具自己是 Debian 的工具编出来的，第二轮才是自己的。真正的固定点
+  # 要看第二轮和第三轮。所以这里只报告差异，不作为失败条件——它是个成熟度
+  # 指标，不是门禁。
+  selfhost:
+    needs: build
+    if: ${{ inputs.selfhost }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: aarch64
+            runner: ubuntu-26.04-arm
+          - arch: x86_64
+            runner: ubuntu-26.04
+
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: 拉取刚发布的构建环境
+        run: |
+          docker pull "yojigenos/base-devel:edge-${{ matrix.arch }}"
+          docker tag "yojigenos/base-devel:edge-${{ matrix.arch }}" \
+                     "yojigenos/base-devel:${{ matrix.arch }}"
+
+      - name: 取回第一轮的产物
+        uses: actions/download-artifact@v4
+        with:
+          name: base-devel-${{ matrix.arch }}
+          path: before
+
+      - name: 用满整台 runner 的核
+        run: echo "SKIRT_JOBS=$(nproc)" >> "$GITHUB_ENV"
+
+      - name: 缓存源码与 ccache
+        uses: actions/cache@v4
+        with:
+          path: |
+            cache
+            ccache
+          key: src-${{ matrix.arch }}-${{ hashFiles('packages/**/spec.toml') }}
+          restore-keys: src-${{ matrix.arch }}-
+
+      # ★ 唯一的区别就是这一行 SKIRT_BUILDENV。
+      #   命令、顺序、配方全都没变——变的只是「谁来当构建环境」。
+      - name: ★ 用我们自己的系统再建一轮
+        env:
+          SKIRT_BUILDENV: yojigenos/base-devel
+        run: ./tools/skirt bootstrap --report
+
+      - name: 和上一轮比对
+        run: |
+          ARCH=${{ matrix.arch }}
+          ./tools/skirt image base-devel
+          NEW=output/$ARCH/yojigenos-base-devel-$ARCH.tar.gz
+
+          echo "### 自举验证 [$ARCH]" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          ls -l "$NEW" >> "$GITHUB_STEP_SUMMARY"
+
+          # 和第一轮那份比。两边都是 rootfs tar，可以直接比 sha256。
+          # （不能拿 docker save 的输出比——那是另一种格式。）
+          printf '%s\n' "第一轮（构建环境是 Debian 底）: $(sha256sum before/yojigenos-base-devel-$ARCH.tar.gz | cut -d' ' -f1)"
+          printf '%s\n' "第二轮（构建环境是我们自己）  : $(sha256sum "$NEW" | cut -d' ' -f1)"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+          if cmp -s "before/yojigenos-base-devel-$ARCH.tar.gz" "$NEW"; then
+            echo "::notice::★ $ARCH 两轮逐字节一致——固定点已经到了。"
+          else
+            echo "::notice::$ARCH 自举跑通了。两轮不一致是【预期】的：第一轮里 gcc/binutils 这些工具自己是 Debian 的工具编出来的，第二轮才是自己的。真正的固定点要看第二和第三轮。"
+          fi
+
+  # ==========================================================================
+  # 三、合成多架构清单
+  # ==========================================================================
+  #
+  # 用户写 FROM yojigenos/base-devel 时，Docker 按平台自动选——这正是 0003
+  # 说的「tag 是接口」。
+  manifest:
+    needs: [build]
+    runs-on: ubuntu-26.04         # 只做 manifest 操作，什么架构都行
+    steps:
+      - name: 从 Docker Hub 取凭据
+        env:
+          DOCKER_HUB_TOKEN: ${{ secrets.DOCKER_HUB_TOKEN }}
+        run: |
+          if [ -z "$DOCKER_HUB_TOKEN" ]; then
+            echo "::error::secret DOCKER_HUB_TOKEN 是空的"
+            exit 1
+          fi
+          echo "$DOCKER_HUB_TOKEN" | docker login -u yojigenos --password-stdin
+
+      - name: 合成清单
+        run: |
+          for TAG in edge "$(date -u +%Y.%m.%d)"; do
+            docker manifest create "yojigenos/base-devel:$TAG" \
+              --amend "yojigenos/base-devel:$TAG-aarch64" \
+              --amend "yojigenos/base-devel:$TAG-x86_64"
+            docker manifest push "yojigenos/base-devel:$TAG"
+            echo "--- $TAG ---"
+            docker manifest inspect "yojigenos/base-devel:$TAG" | head -30
+          done
