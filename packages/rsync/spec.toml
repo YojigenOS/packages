@@ -1,0 +1,50 @@
+# rsync —— 增量文件同步工具
+#
+# 进构建环境的直接原因：**内核的构建过程会调用它**。
+# linux-headers 在自举环境里报：
+#
+#     /bin/sh: line 1: rsync: command not found
+#
+# 它不在我们的 steps.sh 里，是内核自己的 Makefile 调的——所以这又是一次
+# 「按命令查不出来」的依赖。
+#
+# 它自带一份 popt，树里没有系统 popt 时用自己那份，所以不需要额外的包。
+
+[package]
+name        = "rsync"
+version     = "3.5.1"
+release     = 1
+date        = 2026-10-10T16:00:00Z
+description = "增量文件传输与同步工具"
+section     = "devel"
+url         = "https://rsync.samba.org/"
+license     = "GPL-3.0-or-later"
+
+[[source]]
+# GitHub 的 release 附件（维护者上传的字节），见 docs/配方约定.md。
+url    = "https://github.com/RsyncProject/rsync/releases/download/v$VERSION/rsync-$VERSION.tar.gz"
+sha256 = "c55f9c9dc10fb8bec397b399a0fdded53cc9a2d8e30891bb0d63724d25c37bef"
+
+[dependencies]
+runtime = ["glibc"]
+build   = ["gcc", "make"]
+
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["gcc", "make"]
+
+[build]
+type = "autotools"
+configure = [
+  "--prefix=/usr",
+  "--disable-xxhash",       # 树里有 xxhash，但 rsync 用它只为增量传输的校验，
+                            # 不是必需；关掉少一个依赖
+  "--disable-zstd",         # 同理
+  "--disable-lz4",
+  "--disable-openssl",      # SSL 支持要 openssl，还没建
+  "--disable-md2man",       # 文档要 md2man（Ruby），没有
+  "--disable-asm",          # 汇编优化在 aarch64 上要额外的 configure 探测
+  "--disable-idn",          # IDN 要 libidn2，没有。rsync 的 configure 很严：
+                            # 缺可选库它会直接中止并列出「--disable-xxx」，
+                            # 而不是降级继续——所以这个必须显式关
+]

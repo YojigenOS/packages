@@ -111,6 +111,68 @@ def cmd_build(args) -> None:
         log("完成", f"{_shown(out)}/  （{count} 项）")
 
 
+def cmd_bootstrap(args) -> None:
+    """按推导出的顺序建完所有包。
+
+    **顺序是算出来的，不是写着的。** 起因是一个担心：重建顺序只存在于某条
+    执行过的命令里。现在它在 order.py 里，从配方的依赖关系推导。
+
+    这就是 docs/自举.md 说的那条路：换掉 SKIRT_BUILDENV 指向自己的产物，
+    跑同一条命令，就是一次自举。
+    """
+    import subprocess
+    import sys
+    from .order import build_order
+    from .common import BUILDENV_IMAGE
+
+    arch = resolve_arch(args.arch)
+    order, _ = build_order(arch, args.targets or None)
+
+    print()
+    log("自举", f"{len(order)} 个包，构建环境 {BUILDENV_IMAGE}:{arch}")
+    print()
+
+    from time import monotonic
+    done: list[tuple[str, int, bool]] = []
+    total0 = monotonic()
+
+    for i, name in enumerate(order, 1):
+        print(f"  [{i:2d}/{len(order)}] {name:<16}", end="", flush=True)
+        t0 = monotonic()
+        r = subprocess.run([sys.executable, str(ROOT / "tools" / "skirt"),
+                            "build", name, "--arch", arch],
+                           capture_output=True, text=True)
+        dt = int(monotonic() - t0)
+        ok = r.returncode == 0
+        done.append((name, dt, ok))
+        print(f"{'✅' if ok else '❌'} {dt // 60:2d} 分 {dt % 60:02d} 秒")
+        if not ok:
+            tail = [l for l in r.stdout.splitlines() if l.strip()][-8:]
+            for l in tail:
+                print(f"           {l}")
+            log("停止", f"{name} 失败。日志在 /tmp 或上面这些行里")
+            break
+
+    total = int(monotonic() - total0)
+    print()
+    log("结束", f"{total // 60} 分 {total % 60} 秒，"
+                f"成功 {sum(1 for _, _, o in done if o)}/{len(order)}")
+
+    if args.report:
+        print()
+        print("    从慢到快：")
+        for name, dt, ok in sorted(done, key=lambda x: -x[1])[:15]:
+            print(f"      {name:<16} {dt // 60:3d} 分 {dt % 60:02d} 秒  "
+                  f"{'ok' if ok else 'FAIL'}")
+
+
+def cmd_order(args) -> None:
+    """按依赖算出构建顺序，并说明环断在哪里。"""
+    from .order import describe
+
+    describe(resolve_arch(args.arch), args.targets or None)
+
+
 def cmd_deps(args) -> None:
     """只解析依赖，不构建 —— 用来调试配方。"""
     arch = resolve_arch(args.arch)
@@ -212,6 +274,18 @@ def main() -> None:
     p.add_argument("package")
     p.add_argument("--arch", help="目标架构（默认当前架构）")
     p.set_defaults(func=cmd_build)
+
+    p = sub.add_parser("bootstrap", help="按推导出的顺序建完所有包（顺序是算的）")
+    p.add_argument("targets", nargs="*", help="只建这些包及其依赖闭包")
+    p.add_argument("--arch", default="aarch64")
+    p.add_argument("--report", action="store_true", help="结束时打印耗时表")
+    p.set_defaults(func=cmd_bootstrap)
+
+    p = sub.add_parser("order", help="按依赖算出构建顺序（说明环断在哪里）")
+    p.add_argument("targets", nargs="*",
+                   help="只排这些包及其依赖闭包（默认全部）")
+    p.add_argument("--arch", default="aarch64")
+    p.set_defaults(func=cmd_order)
 
     p = sub.add_parser("deps", help="查看依赖解析结果（不构建）")
     p.add_argument("package")

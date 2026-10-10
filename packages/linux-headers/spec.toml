@@ -26,11 +26,11 @@ sha256 = "b4c5dfbe51a364a6c7f03869200f88c8e1f77403539005f14b7fc6bc91b8d8ba"
 runtime = []
 # make 目前在 host/provides.txt 里，会被跳过而不报错。
 # 等我们自建出 make 之后，把那一行删掉，这里就会真的去解析它。
-build   = ["make"]
+build   = ["make", "gcc", "rsync"]
 
 [dependencies.x86_64]
 runtime = []
-build   = ["make"]
+build   = ["make", "gcc", "rsync"]
 
 [build]
 # custom：headers_install 是内核自己的目标，不套 autotools 那套映射

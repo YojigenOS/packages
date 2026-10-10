@@ -16,11 +16,11 @@ sha256 = "9aa0cc780dec156b8282844833b342ab7cb08c25d2cd9a1869cdd0df31deff48"
 
 [dependencies]
 runtime = ["glibc"]
-build   = ["make", "gettext"]
+build   = ["make", "gettext", "gcc"]
 
 [dependencies.x86_64]
 runtime = ["glibc"]
-build   = ["make", "gettext"]
+build   = ["make", "gettext", "gcc"]
 
 [build]
 type      = "autotools"

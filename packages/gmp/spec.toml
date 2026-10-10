@@ -20,12 +20,21 @@ sha256 = "a3c2b80201b89e68616f4ad30bc66aee4927c3ce50e33929ca819d5c43538898"
 
 [dependencies]
 runtime = ["glibc"]
-build   = ["make"]
+build   = ["make", "gcc"]
 
 [dependencies.x86_64]
 runtime = ["glibc"]
-build   = ["make"]
+build   = ["make", "gcc"]
 
 [build]
+# C23 改了 `()` 的含义：从「参数未知」变成「零参数」。gmp 6.3.0 的 configure
+# 里有一段 2003 年的 K&R 测试代码，于是它判定「没有可用的编译器」：
+#
+#     void g(){}                      ← C23 里这是「零参数」
+#     g(i,d[i].src,d[i].n,got,...);   ← 传参数成了编译错误
+#
+# GCC 15 起默认就是 C23。这是语言标准的破坏性变更，不是 gmp 的 bug。
+# 项目保持 gnu23（新代码该用新标准），不兼容的包【按包声明】回退。
+cflags = ["-std=gnu17"]
 type      = "autotools"
 configure = ["--prefix=/usr", "--enable-shared"]

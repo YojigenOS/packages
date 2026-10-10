@@ -27,11 +27,11 @@ license     = "MIT"
 
 [dependencies]
 runtime = []
-build   = []
+build   = ["gcc", "make"]
 
 [dependencies.x86_64]
 runtime = []
-build   = []
+build   = ["gcc", "make"]
 
 [build]
 type = "custom"

@@ -22,7 +22,7 @@ sha256 = "0d5f60154382fee10b114a1c34e785d8b1f492073ae2d3a6f7b147687b366aa0"
 
 [dependencies]
 runtime = ["glibc"]
-build   = ["gettext"]
+build   = ["gettext", "gcc", "make"]
 
 # 架构特定依赖：现在留形状，暂不使用。
 # 展开时会整体覆盖 [dependencies] 里同名的键。

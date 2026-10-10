@@ -28,11 +28,11 @@ sha256 = "37f600f2bef3c5e8300147059568b2a2e40a7ad6ccc65ce942556d49429cc667"
 # /lib/ld-linux-aarch64.so.1，而加载器实际装在 /usr/lib —— 靠
 # filesystem 提供的 /lib → usr/lib 链接才解析得到。
 runtime = ["filesystem"]
-build   = ["make", "linux-headers", "binutils", "gcc"]
+build   = ["make", "linux-headers", "binutils", "gcc", "bison", "python3"]
 
 [dependencies.x86_64]
 runtime = ["filesystem"]
-build   = ["make", "linux-headers", "binutils", "gcc"]
+build   = ["make", "linux-headers", "binutils", "gcc", "bison", "python3"]
 
 [build]
 type = "autotools"

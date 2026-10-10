@@ -169,6 +169,25 @@ def run_in_container(srcrel: str, arch: str, spec: dict, epoch: int) -> None:
         "fi\n"
     )
 
+    # 配方可以追加 CFLAGS。用于「这个包的代码比当前语言标准老」这类情况。
+    #
+    # 具体起因：GCC 15 起默认 C 标准是 C23，而 C23 把 `()` 的含义从
+    # 「参数未知」改成了「零参数」。gmp 6.3.0 的 configure 里有一段 2003 年
+    # 写的 K&R 测试代码，于是它判定「没有可用的编译器」：
+    #
+    #     conftest.c:12:48: error: too many arguments to function 'g'
+    #         void g(){}          ← C23 里这是「零参数」
+    #         g(i,d[i].src,...);  ← 于是传参数成了错误
+    #
+    # 这是语言标准的破坏性变更，不是 bug。项目选择了保持 gnu23，遇到不兼容
+    # 的包就【按包声明】回退标准，而不是全局降级——new 代码该用新标准。
+    #
+    # 放在配方里而不是 steps.sh 里，是为了让这件事在配方上看得见：翻到
+    # spec.toml 就知道这个包为什么要用旧标准。
+    extra_cflags = " ".join(b.get("cflags", []))
+    cflags_line = (f'export CFLAGS="$CFLAGS {extra_cflags}"\n'
+                   f'export CXXFLAGS="$CFLAGS"\n') if extra_cflags else ""
+
     wrapper = (
         "set -euo pipefail\n"
         "\n"
@@ -202,6 +221,7 @@ def run_in_container(srcrel: str, arch: str, spec: dict, epoch: int) -> None:
         'export CFLAGS="-g0 -O2 -fstack-protector-strong -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3 $ARCH_HARDEN"\n'
         'export CXXFLAGS="$CFLAGS"\n'
         'export LDFLAGS="-Wl,-z,relro -Wl,-z,now"\n'
+        + cflags_line +
         "\n"
         "# ccache 的代理符号链接目录，放进 PATH 最前面。\n"
         "#\n"
