@@ -12,6 +12,14 @@ license     = "GPL-3.0-or-later"
 
 [[source]]
 url    = "https://ftp.gnu.org/gnu/findutils/findutils-$VERSION.tar.xz"
+# 备用源：同一份字节的镜像（sha256 会校验，所以换源不降低信任）。
+# 顺序按实测速度。选源标准和完整说明见 docs/配方约定.md「备用源」一节。
+urls = [
+  "https://mirrors.ustc.edu.cn/gnu/findutils/findutils-$VERSION.tar.xz",
+  "https://mirror.nju.edu.cn/gnu/findutils/findutils-$VERSION.tar.xz",
+  "https://mirrors.tuna.tsinghua.edu.cn/gnu/findutils/findutils-$VERSION.tar.xz",
+  "https://mirrors.aliyun.com/gnu/findutils/findutils-$VERSION.tar.xz",
+]
 sha256 = "bfd19cb06cc71f3352d567e90284d8cdac02ac89774bbeadf0b533b0c11432fd"
 
 [dependencies]

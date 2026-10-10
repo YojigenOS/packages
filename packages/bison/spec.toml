@@ -20,7 +20,14 @@ license     = "GPL-3.0-or-later"
 
 [[source]]
 url    = "https://ftp.gnu.org/gnu/bison/bison-$VERSION.tar.xz"
-urls = ["https://mirrors.tuna.tsinghua.edu.cn/gnu/bison/bison-$VERSION.tar.xz"]
+# 备用源：同一份字节的镜像（sha256 会校验，所以换源不降低信任）。
+# 顺序按实测速度。选源标准和完整说明见 docs/配方约定.md「备用源」一节。
+urls = [
+  "https://mirrors.ustc.edu.cn/gnu/bison/bison-$VERSION.tar.xz",
+  "https://mirror.nju.edu.cn/gnu/bison/bison-$VERSION.tar.xz",
+  "https://mirrors.tuna.tsinghua.edu.cn/gnu/bison/bison-$VERSION.tar.xz",
+  "https://mirrors.aliyun.com/gnu/bison/bison-$VERSION.tar.xz",
+]
 sha256 = "9bba0214ccf7f1079c5d59210045227bcf619519840ebfa80cd3849cff5a5bf2"
 
 [dependencies]

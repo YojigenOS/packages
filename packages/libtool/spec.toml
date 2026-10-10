@@ -15,7 +15,14 @@ license     = "GPL-2.0-or-later"
 
 [[source]]
 url    = "https://ftp.gnu.org/gnu/libtool/libtool-$VERSION.tar.xz"
-urls = ["https://mirrors.tuna.tsinghua.edu.cn/gnu/libtool/libtool-$VERSION.tar.xz"]
+# 备用源：同一份字节的镜像（sha256 会校验，所以换源不降低信任）。
+# 顺序按实测速度。选源标准和完整说明见 docs/配方约定.md「备用源」一节。
+urls = [
+  "https://mirrors.ustc.edu.cn/gnu/libtool/libtool-$VERSION.tar.xz",
+  "https://mirror.nju.edu.cn/gnu/libtool/libtool-$VERSION.tar.xz",
+  "https://mirrors.tuna.tsinghua.edu.cn/gnu/libtool/libtool-$VERSION.tar.xz",
+  "https://mirrors.aliyun.com/gnu/libtool/libtool-$VERSION.tar.xz",
+]
 sha256 = "2ef1067c16c97db930fd740cc9bc3d3ba9a583804ae5ac42cc3e8719e49e191e"
 
 [dependencies]

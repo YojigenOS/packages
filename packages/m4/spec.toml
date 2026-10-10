@@ -20,7 +20,14 @@ license     = "GPL-3.0-or-later"
 [[source]]
 # 主源在海外（CI 快），备选在国内不通时兜底。见 docs/配方约定.md。
 url    = "https://ftp.gnu.org/gnu/m4/m4-$VERSION.tar.xz"
-urls = ["https://mirrors.tuna.tsinghua.edu.cn/gnu/m4/m4-$VERSION.tar.xz"]
+# 备用源：同一份字节的镜像（sha256 会校验，所以换源不降低信任）。
+# 顺序按实测速度。选源标准和完整说明见 docs/配方约定.md「备用源」一节。
+urls = [
+  "https://mirrors.ustc.edu.cn/gnu/m4/m4-$VERSION.tar.xz",
+  "https://mirror.nju.edu.cn/gnu/m4/m4-$VERSION.tar.xz",
+  "https://mirrors.tuna.tsinghua.edu.cn/gnu/m4/m4-$VERSION.tar.xz",
+  "https://mirrors.aliyun.com/gnu/m4/m4-$VERSION.tar.xz",
+]
 sha256 = "f25c6ab51548a73a75558742fb031e0625d6485fe5f9155949d6486a2408ab66"
 
 [dependencies]

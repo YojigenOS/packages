@@ -11,7 +11,15 @@ release     = 1
 date        = 2026-10-10T14:00:00Z
 description = "把 diff 应用到源码树上的工具"
 section     = "devel"
-url         = "https://ftp.gnu.org/gnu/patch/"
+url    = "https://ftp.gnu.org/gnu/patch/"
+# 备用源：同一份字节的镜像（sha256 会校验，所以换源不降低信任）。
+# 顺序按实测速度。选源标准和完整说明见 docs/配方约定.md「备用源」一节。
+urls = [
+  "https://mirrors.ustc.edu.cn/gnu/patch/",
+  "https://mirror.nju.edu.cn/gnu/patch/",
+  "https://mirrors.tuna.tsinghua.edu.cn/gnu/patch/",
+  "https://mirrors.aliyun.com/gnu/patch/",
+]
 license     = "GPL-3.0-or-later"
 
 [[source]]

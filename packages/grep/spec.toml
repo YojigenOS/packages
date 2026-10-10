@@ -12,6 +12,14 @@ license     = "GPL-3.0-or-later"
 
 [[source]]
 url    = "https://ftp.gnu.org/gnu/grep/grep-$VERSION.tar.xz"
+# 备用源：同一份字节的镜像（sha256 会校验，所以换源不降低信任）。
+# 顺序按实测速度。选源标准和完整说明见 docs/配方约定.md「备用源」一节。
+urls = [
+  "https://mirrors.ustc.edu.cn/gnu/grep/grep-$VERSION.tar.xz",
+  "https://mirror.nju.edu.cn/gnu/grep/grep-$VERSION.tar.xz",
+  "https://mirrors.tuna.tsinghua.edu.cn/gnu/grep/grep-$VERSION.tar.xz",
+  "https://mirrors.aliyun.com/gnu/grep/grep-$VERSION.tar.xz",
+]
 sha256 = "2649b27c0e90e632eadcd757be06c6e9a4f48d941de51e7c0f83ff76408a07b9"
 
 [dependencies]

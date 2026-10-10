@@ -33,6 +33,40 @@ BUILDENV_IMAGE = os.environ.get("SKIRT_BUILDENV", "yojigenos/buildenv")
 # 用环境变量 SKIRT_CCACHE 覆盖。
 CCACHE_DIR = Path(os.environ.get("SKIRT_CCACHE", ROOT.parent / "ccache"))
 
+# GNU 包的备用镜像写在【配方】里，不由驱动补。
+#
+# 我原来在驱动里加过一段「自动给 ftp.gnu.org 的包补镜像」，理由是 21 个包
+# 改 21 处太啰嗦。那个理由不足以抵消它的坏处：**配方应该是自包含的**——
+# 读一个配方就该知道它的源码全部从哪来。驱动偷偷加源会让行为不可见，
+# 排查时你会问"它为什么从 USTC 下载？我没写这个"。
+#
+# Arch 也是这么分的：PKGBUILD 里写上游，镜像配在 /etc/pacman.d/mirrorlist。
+# 配方那份是【身份】，系统那份是【政策】。
+#
+# 而"中美环境不同"这个担心不成立：`url`（上游）排在第一位，镜像只是兜底——
+# ftp.gnu.org 在两地都不算慢（实测本机 2.9 秒），所以镜像在 CI 上永远轮不到。
+# 真到了要换镜像的时候，改配方是对的：那是关于"这个包从哪来"的事实。
+
+VARIANTS_DIR = ROOT / "variants"
+OUTPUT_DIR = ROOT / "output"
+CACHE_DIR = ROOT / "cache"
+BUILD_DIR = ROOT / "build"
+HOST_PROVIDES_FILE = ROOT / "host" / "provides.txt"
+#: 构建环境镜像。默认是 Debian 底的那个（tools/buildenv 构建出来的）。
+#:
+#: 用 SKIRT_BUILDENV 可以换掉它——这正是自举的验证方式：把 base-devel 拼出来
+#: 导入成镜像，然后 `SKIRT_BUILDENV=yojigenos/base-devel ./tools/skirt build ...`。
+#: 跑得通，就说明我们的系统能构建我们自己的东西；跑不通，第一个报错就是答案。
+BUILDENV_IMAGE = os.environ.get("SKIRT_BUILDENV", "yojigenos/buildenv")
+
+# ccache 缓存放在仓库外面（工作区根目录下）。
+#
+# 两个理由：它体积大且完全可再生，不该进版本控制；同时也不能放 Docker
+# 命名卷——docker volume prune 和磁盘清理会连它一起扫掉，而缓存的全部
+# 价值就在「能留住」。挂在宿主目录里，它跟着工作区走，能看见、能备份。
+# 用环境变量 SKIRT_CCACHE 覆盖。
+CCACHE_DIR = Path(os.environ.get("SKIRT_CCACHE", ROOT.parent / "ccache"))
+
 #: GNU 包的备用镜像【列表】。
 #:
 #: 为什么是列表而不是一个：**哪个镜像快取决于机器在哪**。实测（同一台中国

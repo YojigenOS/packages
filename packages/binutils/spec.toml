@@ -18,6 +18,14 @@ license     = "GPL-3.0-or-later"
 
 [[source]]
 url    = "https://ftp.gnu.org/gnu/binutils/binutils-$VERSION.tar.xz"
+# 备用源：同一份字节的镜像（sha256 会校验，所以换源不降低信任）。
+# 顺序按实测速度。选源标准和完整说明见 docs/配方约定.md「备用源」一节。
+urls = [
+  "https://mirrors.ustc.edu.cn/gnu/binutils/binutils-$VERSION.tar.xz",
+  "https://mirror.nju.edu.cn/gnu/binutils/binutils-$VERSION.tar.xz",
+  "https://mirrors.tuna.tsinghua.edu.cn/gnu/binutils/binutils-$VERSION.tar.xz",
+  "https://mirrors.aliyun.com/gnu/binutils/binutils-$VERSION.tar.xz",
+]
 sha256 = "154ab23b60070e8f27013c22977f1129425d67d1e8acd6e13010e617811e4cff"
 
 [dependencies]

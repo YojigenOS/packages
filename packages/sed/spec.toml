@@ -12,6 +12,14 @@ license     = "GPL-3.0-or-later"
 
 [[source]]
 url    = "https://ftp.gnu.org/gnu/sed/sed-$VERSION.tar.xz"
+# 备用源：同一份字节的镜像（sha256 会校验，所以换源不降低信任）。
+# 顺序按实测速度。选源标准和完整说明见 docs/配方约定.md「备用源」一节。
+urls = [
+  "https://mirrors.ustc.edu.cn/gnu/sed/sed-$VERSION.tar.xz",
+  "https://mirror.nju.edu.cn/gnu/sed/sed-$VERSION.tar.xz",
+  "https://mirrors.tuna.tsinghua.edu.cn/gnu/sed/sed-$VERSION.tar.xz",
+  "https://mirrors.aliyun.com/gnu/sed/sed-$VERSION.tar.xz",
+]
 sha256 = "b8e72182b2ec96a3574e2998c47b7aaa64cc20ce000d8e9ac313cc07cecf28c7"
 
 [dependencies]

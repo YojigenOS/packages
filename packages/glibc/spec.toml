@@ -21,6 +21,14 @@ license     = "LGPL-2.1-or-later"
 
 [[source]]
 url    = "https://ftp.gnu.org/gnu/glibc/glibc-$VERSION.tar.xz"
+# 备用源：同一份字节的镜像（sha256 会校验，所以换源不降低信任）。
+# 顺序按实测速度。选源标准和完整说明见 docs/配方约定.md「备用源」一节。
+urls = [
+  "https://mirrors.ustc.edu.cn/gnu/glibc/glibc-$VERSION.tar.xz",
+  "https://mirror.nju.edu.cn/gnu/glibc/glibc-$VERSION.tar.xz",
+  "https://mirrors.tuna.tsinghua.edu.cn/gnu/glibc/glibc-$VERSION.tar.xz",
+  "https://mirrors.aliyun.com/gnu/glibc/glibc-$VERSION.tar.xz",
+]
 sha256 = "37f600f2bef3c5e8300147059568b2a2e40a7ad6ccc65ce942556d49429cc667"
 
 [dependencies]

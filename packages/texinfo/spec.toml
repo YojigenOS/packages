@@ -1,0 +1,42 @@
+[package]
+name        = "texinfo"
+version     = "7.3"
+release     = 1
+date        = 2026-10-10T22:20:00Z
+description = "GNU 文档系统：makeinfo / texi2any / info"
+section     = "devel"
+url         = "https://www.gnu.org/software/texinfo/"
+license     = "GPL-3.0-or-later"
+
+[[source]]
+# 上游站点。镜像备选由驱动自动补（见 tools/skirtlib/common.py 的 GNU_MIRRORS）
+# ——不用在这里写一串镜像，那样换镜像时得改每个配方。
+url    = "https://ftp.gnu.org/gnu/texinfo/texinfo-$VERSION.tar.xz"
+# 备用源：同一份字节的镜像（sha256 会校验，所以换源不降低信任）。
+# 顺序按实测速度。选源标准和完整说明见 docs/配方约定.md「备用源」一节。
+urls = [
+  "https://mirrors.ustc.edu.cn/gnu/texinfo/texinfo-$VERSION.tar.xz",
+  "https://mirror.nju.edu.cn/gnu/texinfo/texinfo-$VERSION.tar.xz",
+  "https://mirrors.tuna.tsinghua.edu.cn/gnu/texinfo/texinfo-$VERSION.tar.xz",
+  "https://mirrors.aliyun.com/gnu/texinfo/texinfo-$VERSION.tar.xz",
+]
+sha256 = "51f74eb0f51cfa9873b85264dfdd5d46e8957ec95b88f0fb762f63d9e164c72e"
+
+[dependencies]
+# ★ 为什么 perl 是【运行时】依赖而不是构建依赖：
+#
+# makeinfo / texi2any 是 Perl 程序。装了 texinfo 而不装 perl，命令就在，
+# 一跑就报 "Can't locate ... in @INC"。
+#
+# 这正是坑过我们八次的那类漏声明——构建时能跑（因为构建环境里有 perl），
+# 装到别处就断。所以必须显式写出来。
+runtime = ["glibc", "perl"]
+build   = ["make", "gcc"]
+
+[dependencies.x86_64]
+runtime = ["glibc", "perl"]
+build   = ["make", "gcc"]
+
+[build]
+type      = "autotools"
+configure = ["--prefix=/usr"]
