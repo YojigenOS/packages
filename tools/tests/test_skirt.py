@@ -34,9 +34,12 @@ from skirtlib import deps as deps_mod
 from skirtlib.build import run_in_container
 from skirtlib.common import PACKAGES_DIR, build_jobs
 
-#: 依赖闭包测试要用的基线。必须包含工具链——否则 gcc ↔ gmp 立刻成环，
-#: 因为 gcc 的构建要 gmp，而 gmp 的构建要一个 C 编译器。
-TOOLCHAIN_BASELINE = {"glibc", "gcc", "make", "binutils"}
+#: 依赖闭包测试要用的基线。直接用真实的 host/provides.txt——不要在这里
+#: 另写一份：【另写一份就会漂移】，而它漂移的表现是测试莫名其妙地报环，
+#: 或者更糟：报一个已经不存在的环。工具链和 autotools 都在里面，原因见
+#: 那个文件自己的注释（它们都是「构建构建系统」的工具，靠排序解不开）。
+from skirtlib.deps import load_host_provides as _load_host_provides
+TOOLCHAIN_BASELINE = _load_host_provides()
 from skirtlib.deps import load_host_provides, merge_tree, source_date_epoch
 from skirtlib.spec import (deps_for, direct_deps, expand, is_subpackage,
                            latest_date, load_spec, package_date, recipe_of,
@@ -582,6 +585,36 @@ class TestBuildScriptDefaults(unittest.TestCase):
         # 覆盖时用配方给的整套，不再附加默认值
         self.assertNotIn("--libdir=/usr/lib", s)
 
+
+    def test_autoreconf_必须声明_autotools(self):
+        """用 autoreconf 的配方必须把 autoconf/automake/libtool 写进 build。
+
+        【为什么这条值得单独测】libxcrypt 就是靠它才暴露问题的：项目的源
+        策略改成用 commit 之后，autotools 项目要现场跑 autoreconf，而它
+        依赖的 autoconf/automake/libtool 如果不声明，就会悄悄用构建环境
+        镜像里的那一份——和当初 binutils 那个漏声明是同一种病。
+
+        规则很简单：用了什么工具，就声明什么。
+        """
+        import tomllib
+        need = {"autoconf", "automake", "libtool"}
+        checked = 0
+        for d in sorted(PACKAGES_DIR.iterdir()):
+            f = d / "spec.toml"
+            if not f.is_file():
+                continue
+            spec = tomllib.loads(f.read_text())
+            if not spec.get("build", {}).get("autoreconf"):
+                continue
+            checked += 1
+            for arch in ("aarch64", "x86_64"):
+                declared = set(direct_deps(spec, arch, kinds=("build",)))
+                self.assertFalse(
+                    need - declared,
+                    f"{d.name} [{arch}]: 用了 autoreconf 但 build 里没有 "
+                    f"{sorted(need - declared)}")
+        # 不能因为一个都没有就静默通过——那正是「空验证」的形状
+        self.assertGreater(checked, 0, "没有任何配方在用 autoreconf，这条测试是空的")
 
 class TestEveryRealSpec(unittest.TestCase):
     """对仓库里每个真实配方做一遍结构性检查。

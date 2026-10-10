@@ -1,0 +1,52 @@
+# libxcrypt —— 密码哈希库（libcrypt 的现代实现）
+#
+# 进树的原因：**perl 链接了 libcrypt.so.1，而我们的 glibc 不提供它。**
+#
+# glibc 在 2.28 移除了 libcrypt，各发行版改用 libxcrypt 补上这个 ABI。
+# Debian 的构建环境镜像里有它，所以 perl 的 Configure 探测到 crypt() 就
+# 链了上去——**而我们的配方里没有声明**。这是自举抓到的第八个没声明的依赖。
+#
+# 类型上它也是第一个真正用上 autoreconf 的包：项目决定 GitHub 类的源改用
+# commit（release 附件可以被替换和移动，commit 不会），而 libxcrypt 是
+# autotools 项目，git 树里没有 configure，必须现场生成。
+
+[package]
+name        = "libxcrypt"
+version     = "4.5.2"
+release     = 1
+date        = 2026-10-10T16:47:00Z
+description = "密码哈希库（crypt(3) 的现代实现）"
+section     = "libs"
+url         = "https://github.com/besser82/libxcrypt"
+license     = "LGPL-2.1-or-later"
+
+[[source]]
+# ★ 用 commit，不用 release 附件。
+#
+# release 附件可以被维护者替换，也可以被删除；commit 不能——那棵树是哈希
+# 钉死的。sha256 仍然要，因为 GitHub 是按需生成 tarball 的，字节不保证
+# 稳定：commit 保证「内容对」，sha256 保证「字节对」。
+#
+# 见 docs/配方约定.md 的「源」一节。
+url    = "https://codeload.github.com/besser82/libxcrypt/tar.gz/db70b42bd7b2a5b00a8580c8dec0aa66791c950a"
+urls = ["https://github.com/besser82/libxcrypt/archive/db70b42bd7b2a5b00a8580c8dec0aa66791c950a.tar.gz"]
+sha256 = "0a54d0e1c9e3c573f009d77bb7b5b9f2884000a4b72b19473058c5d8c80b8fa5"
+
+[dependencies]
+runtime = ["glibc"]
+# autoreconf 要 autoconf / automake / libtool，它们必须【声明】——
+# 否则会悄悄用构建环境镜像里的那份，那就又是隐式依赖了。
+build   = ["gcc", "make", "perl", "autoconf", "automake", "libtool"]
+
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["gcc", "make", "perl", "autoconf", "automake", "libtool"]
+
+[build]
+type      = "autotools"
+# git 树里没有 configure，现场生成。
+autoreconf = true
+configure = [
+  "--prefix=/usr",
+  "--disable-static",
+]

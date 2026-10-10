@@ -7,15 +7,16 @@
 name        = "expat"
 version     = "2.9.0"
 release     = 1
-date        = 2026-10-10T15:14:00Z
+date        = 2026-10-10T16:44:00Z
 description = "流式 XML 解析库（C 语言）"
 section     = "libs"
 url         = "https://libexpat.github.io/"
 license     = "MIT"
 
 [[source]]
-# GitHub 的 release 附件（维护者上传的字节），见 docs/配方约定.md。
-url    = "https://github.com/libexpat/libexpat/releases/download/R_2_9_0/expat-$VERSION.tar.gz"
+# 上游在 SourceForge 上有正式发布点，不依赖 GitHub。
+# 实测字节与 GitHub 附件完全一致（同一个 sha256）。
+url    = "https://downloads.sourceforge.net/project/expat/expat/$VERSION/expat-$VERSION.tar.gz"
 sha256 = "16afbb9cefead2aa278105cf27d9f597bde7fbf3dbb85015857ca7ca6a4e89ba"
 
 [dependencies]

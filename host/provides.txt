@@ -50,6 +50,28 @@ gcc
 make
 binutils
 
+# --- autotools：同一类，只是晚一步才露出来 ---------------------------------
+#
+# 它也是「构建构建系统」的工具。自举到 libxcrypt 时才暴露出这个环：
+#
+#     libxcrypt 的 build 要 autoconf（它是 autotools 项目，git 树里没有
+#                configure，必须现场生成）
+#     autoconf 的 runtime 要 perl（它是个 Perl 程序）
+#     perl 的 runtime 要 libxcrypt（它链接了 libcrypt）
+#     → libxcrypt → autoconf → perl → libxcrypt
+#
+# 靠排序解不开，和 gcc → gmp → gcc 是同一族。所以和工具链一样放进基线。
+#
+# 这不是"因为它们难"——是因为【从一个 git 树构建任何 autotools 项目】都
+# 需要它们，而它们自己也是用 autotools 构建的。这是引导的又一层起点。
+#
+# 这四个都已经自建成功（见 packages/ 里的配方），重拼 base-devel 之后
+# 构建环境里就是它们。
+perl
+autoconf
+automake
+libtool
+
 # --- 当前基线 -------------------------------------------------------------
 # glibc 留在基线里，不是"还没做"——它已经自建成功（2.44，用自建
 # gcc/binutils 编译，1583 项，含 usr-merge 布局）。留在这里是因为上面说的

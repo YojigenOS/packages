@@ -10,7 +10,7 @@
 name        = "perl"
 version     = "5.44.0"
 release     = 1
-date        = 2026-10-10T16:10:00Z
+date        = 2026-10-10T16:46:00Z
 description = "Perl 解释器"
 section     = "devel"
 url         = "https://www.perl.org/"
@@ -22,12 +22,12 @@ urls = ["https://mirrors.tuna.tsinghua.edu.cn/CPAN/src/5.0/perl-$VERSION.tar.gz"
 sha256 = "3b855066b92491cb40e86affb1ca57d1a388aa43e51b91c7806a32c2f65f96c3"
 
 [dependencies]
-runtime = ["glibc"]
-build   = ["gcc", "make"]
+runtime = ["glibc", "libxcrypt"]
+build   = ["gcc", "make", "libxcrypt"]
 
 [dependencies.x86_64]
-runtime = ["glibc"]
-build   = ["gcc", "make"]
+runtime = ["glibc", "libxcrypt"]
+build   = ["gcc", "make", "libxcrypt"]
 
 [build]
 # perl 不用 autoconf，用它自己的 Configure 脚本（大写 C）。

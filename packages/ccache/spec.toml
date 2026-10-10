@@ -20,16 +20,20 @@
 name        = "ccache"
 version     = "4.14.1"
 release     = 1
-date        = 2026-10-10T14:55:00Z
+date        = 2026-10-10T16:42:00Z
 description = "编译器缓存：把重复编译的结果存下来复用"
 section     = "devel"
 url         = "https://ccache.dev/"
 license     = "GPL-3.0-or-later"
 
 [[source]]
-# GitHub 的 release 附件（维护者上传的字节），见 docs/配方约定.md。
-url    = "https://github.com/ccache/ccache/releases/download/v$VERSION/ccache-$VERSION.tar.xz"
-sha256 = "29f10de481ac2c41c91bfabead63d803bd2fe823e09752aade5b0b8704cc4f30"
+# ★ 用 commit，不用 release 附件：附件可以被替换和删除，commit 不能。
+# sha256 仍要，因为 GitHub 按需生成 tarball，字节不保证稳定。
+url    = "https://codeload.github.com/ccache/ccache/tar.gz/c67954b7729c2a7a350c80e7634d704b669307dc"
+urls = [
+  "https://github.com/ccache/ccache/archive/c67954b7729c2a7a350c80e7634d704b669307dc.tar.gz",
+]
+sha256 = "df4248b5b2c3ea5072f66d684a45dbbf54b9357cfa5b6ae4eb20252cae001ddb"
 
 [dependencies]
 # xxhash 和 zstd 都是运行时的：ccache 链接它们。

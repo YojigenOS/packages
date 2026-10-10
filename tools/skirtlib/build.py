@@ -28,6 +28,17 @@ def make_build_script(spec: dict) -> str:
     if oot:
         header += 'BUILDDIR="$SRCDIR/_build"\n'
 
+    # autoreconf：从 git 树构建 autotools 项目时必须的一步。
+    #
+    # 【为什么需要它】发行版 tarball 里带着上游跑好的 configure，git 树里
+    # 没有——那些生成物不在版本控制里。项目决定 GitHub 类的源改用 commit
+    # （release 附件可以被替换和移动，commit 不会），于是这一步成了必需。
+    #
+    # 放在补丁之后、configure 之前：有些补丁就是改 configure.ac 的。
+    if b.get("autoreconf"):
+        header += ('echo "[autoreconf] 生成 configure 和 Makefile.in"\n'
+                   'autoreconf -fi\n')
+
     # 补丁：源码树就位之后、configure 之前应用。
     # 路径相对配方目录，配方目录通过 $PKGDIR 已送进容器。
     for entry in b.get("patches", []):

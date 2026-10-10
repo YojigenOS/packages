@@ -7,17 +7,20 @@
 name        = "zstd"
 version     = "1.5.7"
 release     = 1
-date        = 2026-10-10T14:30:00Z
+date        = 2026-10-10T16:43:00Z
 description = "Zstandard 压缩算法与命令行工具"
 section     = "base"
 url         = "https://github.com/facebook/zstd"
 license     = "BSD-3-Clause OR GPL-2.0-only"
 
 [[source]]
-# GitHub 的 release 附件：维护者上传的字节，GitHub 只是托管。见 docs/配方约定.md。
-# 不用 /archive/ 那种按需生成的——tag 可以移动，字节也不保证稳定。
-url    = "https://github.com/facebook/zstd/releases/download/v$VERSION/zstd-$VERSION.tar.gz"
-sha256 = "eb33e51f49a15e023950cd7825ca74a4a2b43db8354825ac24fc1b7ee09e6fa3"
+# ★ 用 commit，不用 release 附件：附件可以被替换和删除，commit 不能。
+# sha256 仍要，因为 GitHub 按需生成 tarball，字节不保证稳定。
+url    = "https://codeload.github.com/facebook/zstd/tar.gz/f8745da6ff1ad1e7bab384bd1f9d742439278e99"
+urls = [
+  "https://github.com/facebook/zstd/archive/f8745da6ff1ad1e7bab384bd1f9d742439278e99.tar.gz",
+]
+sha256 = "4b0bd1f0cfb25e61b9103c35f27395530ff5b4c0d2513a00fd745849e85ea52c"
 
 [dependencies]
 runtime = ["glibc"]

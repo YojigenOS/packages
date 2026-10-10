@@ -14,15 +14,15 @@
 name        = "rsync"
 version     = "3.5.1"
 release     = 1
-date        = 2026-10-10T16:00:00Z
+date        = 2026-10-10T16:45:00Z
 description = "增量文件传输与同步工具"
 section     = "devel"
 url         = "https://rsync.samba.org/"
 license     = "GPL-3.0-or-later"
 
 [[source]]
-# GitHub 的 release 附件（维护者上传的字节），见 docs/配方约定.md。
-url    = "https://github.com/RsyncProject/rsync/releases/download/v$VERSION/rsync-$VERSION.tar.gz"
+# 上游自己的站点，不依赖 GitHub。实测字节与 GitHub 附件一致。
+url    = "https://rsync.samba.org/ftp/rsync/src/rsync-$VERSION.tar.gz"
 sha256 = "c55f9c9dc10fb8bec397b399a0fdded53cc9a2d8e30891bb0d63724d25c37bef"
 
 [dependencies]

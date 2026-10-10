@@ -4,24 +4,31 @@
 name        = "xz"
 version     = "5.8.4"
 release     = 1
-date        = 2026-10-10T07:05:11Z
+date        = 2026-10-10T16:40:00Z
 description = "XZ Utils：xz 压缩工具与 liblzma"
 section     = "base"
 url         = "https://github.com/tukaani-project/xz/releases/download/v$VERSION/xz-$VERSION.tar.xz"
 license     = "GPL-3.0-or-later"
 
 [[source]]
-url    = "https://github.com/tukaani-project/xz/releases/download/v$VERSION/xz-$VERSION.tar.xz"
-sha256 = "4ce24038fd4221e0d13bc1a2de7a4db56e90b92b3bf75321f6c14be73f65de4b"
+# ★ 用 commit，不用 release 附件：附件可以被替换和删除，commit 不能。
+# sha256 仍要，因为 GitHub 按需生成 tarball，字节不保证稳定。
+url    = "https://codeload.github.com/tukaani-project/xz/tar.gz/d3e650e63c110e830fd5391e7f8b45df0b91d3da"
+urls = [
+  "https://github.com/tukaani-project/xz/archive/d3e650e63c110e830fd5391e7f8b45df0b91d3da.tar.gz",
+]
+sha256 = "b5aad5c776b324a39a46bbd588d4b5c001266b87ed3887aea1dc2854702d041c"
 
 [dependencies]
 runtime = ["glibc"]
-build   = ["make", "gettext", "gcc"]
+build   = ["make", "gettext", "gcc", "autoconf", "automake", "libtool"]
 
 [dependencies.x86_64]
 runtime = ["glibc"]
-build   = ["make", "gettext", "gcc"]
+build   = ["make", "gettext", "gcc", "autoconf", "automake", "libtool"]
 
 [build]
 type      = "autotools"
+# git 树里没有 configure，现场生成（见 docs/配方约定.md）
+autoreconf = true
 configure = ["--prefix=/usr"]
