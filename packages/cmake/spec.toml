@@ -1,0 +1,40 @@
+# cmake —— 跨平台的构建系统生成器
+#
+# 两个理由进树：
+#
+#   1. 它本身是迟早要的——将来所有用 cmake 的上游包都要它。
+#   2. **ccache 4.x 用 cmake 构建**，而我们要 ccache。
+#
+# 有意思的是它自己不需要预装 cmake：源码里带了 `./bootstrap`，那是一个用
+# make 驱动的引导脚本，先用系统编译器编出一个最小 cmake，再用它编完整版。
+# 所以这条链是 zstd → cmake → ccache，三个包，不是一串。
+
+[package]
+name        = "cmake"
+version     = "4.4.4"
+release     = 1
+date        = 2026-10-10T14:35:00Z
+description = "跨平台的构建系统生成器"
+section     = "devel"
+url         = "https://cmake.org/"
+license     = "BSD-3-Clause"
+
+[[source]]
+# cmake.org 和 GitHub 两个正式发布包，内容一样。主源在海外（CI 更快），
+# 备选在国内不通时兜底。见 docs/配方约定.md。
+url    = "https://cmake.org/files/v4.4/cmake-$VERSION.tar.gz"
+urls = [
+  "https://github.com/Kitware/CMake/releases/download/v$VERSION/cmake-$VERSION.tar.gz",
+]
+sha256 = "bd24c30d80a7744ae84b845ff080cc8453b06c622ef01066564108e9cefc44cf"
+
+[dependencies]
+runtime = ["glibc"]
+build   = ["make", "gcc"]
+
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["make", "gcc"]
+
+[build]
+type = "custom"

@@ -1,0 +1,32 @@
+# zstd —— Zstandard 压缩算法与工具
+#
+# 它本身值得进树（压缩率与速度都比 gzip 好，很多上游开始默认用它），而
+# ccache 4.x 起强制要求它——那是它进这一批的直接原因。
+
+[package]
+name        = "zstd"
+version     = "1.5.7"
+release     = 1
+date        = 2026-10-10T14:30:00Z
+description = "Zstandard 压缩算法与命令行工具"
+section     = "base"
+url         = "https://github.com/facebook/zstd"
+license     = "BSD-3-Clause OR GPL-2.0-only"
+
+[[source]]
+# GitHub 的 release 附件：维护者上传的字节，GitHub 只是托管。见 docs/配方约定.md。
+# 不用 /archive/ 那种按需生成的——tag 可以移动，字节也不保证稳定。
+url    = "https://github.com/facebook/zstd/releases/download/v$VERSION/zstd-$VERSION.tar.gz"
+sha256 = "eb33e51f49a15e023950cd7825ca74a4a2b43db8354825ac24fc1b7ee09e6fa3"
+
+[dependencies]
+runtime = ["glibc"]
+build   = ["make", "gcc"]
+
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["make", "gcc"]
+
+[build]
+# 它没有 configure，也没有顶层 CMakeLists——就是一个 Makefile。
+type = "custom"

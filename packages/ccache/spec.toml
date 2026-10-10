@@ -1,0 +1,53 @@
+# ccache —— 编译器缓存
+#
+# 目的是让构建环境（base-devel）里带它。没有它的时候，全量重建里 glibc 单独
+# 一步就要 347 秒；有它、且缓存是热的，是 82 秒——4.2 倍。
+#
+# 它要 zstd（4.x 起强制），自己用 cmake 构建。所以这一批是三个包：
+#
+#     zstd  →  cmake  →  ccache
+#
+# ## 一个值得记下来的发现
+#
+# 我原本担心：ccache 的缓存键是按「编译器 + 参数 + 源文件 + 头文件」算的，
+# **不含汇编器**。那么刚补好的 binutils 依赖就不会让它重新编译——它会回放
+# 用 Debian 的 as 2.44 编出来的旧目标文件，把那个 bug 重新藏起来。
+#
+# 实测**不是这样**。依赖修好前后（都开着 ccache）产出的 hello 二进制不同，
+# 说明 ccache 确实重新编译了。它认得出来环境变了。
+
+[package]
+name        = "ccache"
+version     = "4.14.1"
+release     = 1
+date        = 2026-10-10T14:40:00Z
+description = "编译器缓存：把重复编译的结果存下来复用"
+section     = "devel"
+url         = "https://ccache.dev/"
+license     = "GPL-3.0-or-later"
+
+[[source]]
+# GitHub 的 release 附件（维护者上传的字节），见 docs/配方约定.md。
+url    = "https://github.com/ccache/ccache/releases/download/v$VERSION/ccache-$VERSION.tar.xz"
+sha256 = "29f10de481ac2c41c91bfabead63d803bd2fe823e09752aade5b0b8704cc4f30"
+
+[dependencies]
+# zstd 是运行时的：ccache 链接它，用来压缩缓存条目。
+runtime = ["glibc", "zstd"]
+build   = ["make", "gcc", "cmake", "zstd"]
+
+[dependencies.x86_64]
+runtime = ["glibc", "zstd"]
+build   = ["make", "gcc", "cmake", "zstd"]
+
+[build]
+type = "cmake"
+configure = [
+  "-DCMAKE_INSTALL_PREFIX=/usr",
+  "-DCMAKE_BUILD_TYPE=Release",
+  "-DENABLE_TESTING=OFF",           # 测试要 doctest，没有
+  "-DENABLE_DOCUMENTATION=OFF",     # 文档要 asciidoctor，没有
+  "-DREDIS_STORAGE_BACKEND=OFF",    # 远程存储要 hiredis，没有也不需要
+  # 用树里的 zstd，不让它去网上拉一份——构建不该依赖网络拿第三方库。
+  "-DZSTD_FROM_INTERNET=OFF",
+]
