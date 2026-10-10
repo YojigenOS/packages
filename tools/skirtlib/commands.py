@@ -201,10 +201,8 @@ def cmd_list(args) -> None:
     if not PACKAGES_DIR.is_dir():
         print("(还没有 packages/ 目录)")
         return
-    names = sorted(
-        p.name for p in PACKAGES_DIR.iterdir()
-        if p.is_dir() and (p / "spec.toml").is_file()
-    )
+    from .spec import all_recipe_names, kind_of
+    names = all_recipe_names()
     if not names:
         print("(还没有任何包)")
         return

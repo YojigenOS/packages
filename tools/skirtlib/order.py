@@ -33,10 +33,8 @@ from .spec import direct_deps, load_spec, recipe_of
 
 
 def _recipe_names() -> list[str]:
-    return sorted(
-        p.name for p in PACKAGES_DIR.iterdir()
-        if p.is_dir() and (p / "spec.toml").is_file()
-    )
+    from .spec import all_recipe_names
+    return all_recipe_names()
 
 
 def build_graph(arch: str, host_provides: set[str],

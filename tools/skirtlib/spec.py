@@ -10,8 +10,56 @@ from .common import PACKAGES_DIR, die, log
 
 # ------------------------------------------------------------------ 配方
 
+def spec_path(name: str) -> Path | None:
+    """按名字找配方的路径，找不到返回 None。
+
+    **配方目录按 kind 分层**（packages/lib/glibc/spec.toml），所以不能直接
+    `PACKAGES_DIR / name`。这里也认平铺的老结构——迁移期间两种都得能读。
+
+    kind 的判据和分类见 docs/配方约定.md「包分类」一节。
+    """
+    flat = PACKAGES_DIR / name / "spec.toml"
+    if flat.is_file():
+        return flat
+    for kind_dir in sorted(PACKAGES_DIR.iterdir()):
+        if not kind_dir.is_dir() or kind_dir.name.startswith("."):
+            continue
+        cand = kind_dir / name / "spec.toml"
+        if cand.is_file():
+            return cand
+    return None
+
+
+def kind_of(name: str) -> str:
+    """这个包属于哪一类。分类就是它所在的目录名。
+
+    **分类只有一处**：目录。不再有一个 kind 字段和它并存——两处就会不一致。
+    """
+    path = spec_path(name)
+    if path is None:
+        return "?"
+    rel = path.relative_to(PACKAGES_DIR)
+    return rel.parts[0] if len(rel.parts) > 2 else "?"
+
+
+def all_recipe_names() -> list[str]:
+    """所有配方名。目录按 kind 分层，所以要多下钻一层。"""
+    out: list[str] = []
+    for d in PACKAGES_DIR.iterdir():
+        if not d.is_dir() or d.name.startswith("."):
+            continue
+        if (d / "spec.toml").is_file():
+            out.append(d.name)                      # 平铺（迁移期间）
+            continue
+        out += [c.name for c in d.iterdir()
+                if c.is_dir() and (c / "spec.toml").is_file()]
+    return sorted(out)
+
+
 def load_spec(name: str) -> dict:
-    path = PACKAGES_DIR / name / "spec.toml"
+    path = spec_path(name)
+    if path is None:
+        die(f"找不到配方: {name}（找过 packages/<kind>/{name}/spec.toml）")
     if not path.is_file():
         die(f"找不到配方: {path}")
     with path.open("rb") as f:
@@ -162,8 +210,7 @@ def subpackages(spec: dict) -> list[dict]:
 
 @lru_cache(maxsize=1)
 def _recipe_names() -> tuple[str, ...]:
-    return tuple(sorted(p.name for p in PACKAGES_DIR.iterdir()
-                        if (p / "spec.toml").is_file()))
+    return tuple(all_recipe_names())
 
 
 @lru_cache(maxsize=1)
@@ -182,14 +229,13 @@ def recipe_of(name: str) -> str | None:
     子包没有自己的目录——它只存在于 output/ 里，所以任何「按名字找配方」
     的地方都得先过这一层。
     """
-    if (PACKAGES_DIR / name / "spec.toml").is_file():
+    if spec_path(name) is not None:
         return name
     return _subpackage_owners().get(name)
 
 
 def is_subpackage(name: str) -> bool:
-    return ((PACKAGES_DIR / name / "spec.toml").is_file() is False
-            and name in _subpackage_owners())
+    return (spec_path(name) is None and name in _subpackage_owners())
 
 
 def package_rel(name: str, version: str, release: int) -> str:
