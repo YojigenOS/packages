@@ -33,6 +33,10 @@ from skirtlib import collect as collect_mod
 from skirtlib import deps as deps_mod
 from skirtlib.build import run_in_container
 from skirtlib.common import PACKAGES_DIR, build_jobs
+
+#: 依赖闭包测试要用的基线。必须包含工具链——否则 gcc ↔ gmp 立刻成环，
+#: 因为 gcc 的构建要 gmp，而 gmp 的构建要一个 C 编译器。
+TOOLCHAIN_BASELINE = {"glibc", "gcc", "make", "binutils"}
 from skirtlib.deps import load_host_provides, merge_tree, source_date_epoch
 from skirtlib.spec import (deps_for, direct_deps, expand, is_subpackage,
                            latest_date, load_spec, package_date, recipe_of,
@@ -141,7 +145,7 @@ class TestDepClosure(unittest.TestCase):
 
     def test_host_provides_are_skipped(self):
         s = load_spec("hello")
-        self.assertNotIn("glibc", deps_mod.dep_closure(s, "aarch64", {"glibc"}))
+        self.assertNotIn("glibc", deps_mod.dep_closure(s, "aarch64", TOOLCHAIN_BASELINE))
 
     def test_self_dependency_uses_previous_build(self):
         """make 依赖 make。已构建过时，应把上一轮的自己排进依赖链——
@@ -149,7 +153,7 @@ class TestDepClosure(unittest.TestCase):
         s = load_spec("make")
         if deps_mod.built_payload("make", "aarch64") is None:
             self.skipTest("make 还没构建过，无法验证自依赖")
-        self.assertEqual(deps_mod.dep_closure(s, "aarch64", {"glibc"}), ["make"])
+        self.assertEqual(deps_mod.dep_closure(s, "aarch64", TOOLCHAIN_BASELINE), ["make"])
 
     def test_self_dependency_skipped_when_never_built(self):
         """从没构建过时，自依赖应当被跳过（交给构建环境），而不是报错。"""
@@ -172,7 +176,7 @@ class TestDepClosure(unittest.TestCase):
 
     def test_closure_is_topologically_ordered(self):
         """闭包里任何一个包，它的依赖要么在基线里，要么排在它前面。"""
-        order = deps_mod.dep_closure(load_spec("glibc"), "aarch64", {"glibc"})
+        order = deps_mod.dep_closure(load_spec("glibc"), "aarch64", TOOLCHAIN_BASELINE)
         self.assertTrue(order, "glibc 的闭包不该是空的")
         for name in order:
             for dep in direct_deps(load_spec(name), "aarch64"):
@@ -628,7 +632,13 @@ class TestEveryRealSpec(unittest.TestCase):
         glibc = load_spec("glibc")
         deps = [load_spec(n)
                 for n in deps_mod.dep_closure(glibc, "aarch64", host_provides)]
-        self.assertIn("binutils", [s["package"]["name"] for s in deps])
+        # 原来这里断言 binutils 在闭包里。现在它在 host/provides.txt 里——
+        # 工具链属于构建环境的起点（编译器没法依赖自己：gcc 要 gmp，gmp 要
+        # 编译器）。基线里的包不参与闭包，所以换成断言 bison：它是 glibc 的
+        # 构建依赖，而且【不在】基线里，同样能验证「依赖把包推到后面」。
+        names = [s["package"]["name"] for s in deps]
+        self.assertIn("bison", names)
+        self.assertNotIn("binutils", names)   # 在基线里 → 不进闭包
         self.assertGreaterEqual(latest_date(glibc, deps), package_date(glibc))
 
     def test_sources_expand_cleanly(self):
