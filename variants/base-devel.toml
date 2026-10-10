@@ -46,13 +46,23 @@ packages = [
   "glibc-dev",
 
   # ---- 构建工具 ----
-  # 这三个是「树里没有它，配方就跑不动」的：
+  # 这几个是「树里没有它，配方就跑不动」的：
   #   patch       有补丁的配方要用（gzip 就是）
   #   util-linux  setpriv——构建脚本降权用它，否则容器里的构建以 root 跑
   #   gettext     有翻译的包要用 msgfmt；也是 glibc 生成 libc.mo 用的
   "patch",
   "util-linux",
   "gettext",
+
+  # ---- 加速 ----
+  # ccache 让重复编译从 347 秒降到 82 秒（glibc 实测，4.2 倍）。
+  # 它要 zstd（4.x 起强制），自己用 cmake 构建——三个包，一条短链。
+  #
+  # 驱动显式把 /usr/lib/ccache 放进 PATH（见 build.py），不靠镜像的 ENV：
+  # base-devel 是通过 docker import 变成镜像的，那不会带 ENV。
+  "ccache",
+  "cmake",
+  "zstd",
 
   # ---- 库 ----
   "zlib",

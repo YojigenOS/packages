@@ -177,6 +177,17 @@ def run_in_container(srcrel: str, arch: str, spec: dict, epoch: int) -> None:
         'export CXXFLAGS="$CFLAGS"\n'
         'export LDFLAGS="-Wl,-z,relro -Wl,-z,now"\n'
         "\n"
+        "# ccache 的代理符号链接目录，放进 PATH 最前面。\n"
+        "#\n"
+        "# 显式设置，不靠镜像的 ENV：构建环境是可换的（SKIRT_BUILDENV），而\n"
+        "# docker import 出来的镜像【不带 ENV】——靠镜像设 PATH 会让「这次构建\n"
+        "# 到底用没用缓存」变成一件看不见的事。这正是 0011 说的那类隐式依赖。\n"
+        "#\n"
+        "# 目录不存在就跳过（ccache 没装，或者装在别处）。\n"
+        "if [ -d /usr/lib/ccache ]; then\n"
+        '  export PATH="/usr/lib/ccache:$PATH"\n'
+        "fi\n"
+        "\n"
         'cleanup() { chown -R "$HOSTUID:$HOSTGID" /in 2>/dev/null || true; }\n'
         "trap cleanup EXIT\n"
         "\n"
