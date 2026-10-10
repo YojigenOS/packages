@@ -1,0 +1,34 @@
+# perl —— 解释器
+#
+# 进树的原因很具体：**autoconf 和 automake 都是 Perl 程序**。
+# 从 git commit 构建 autotools 项目需要 autoreconf，那就需要它们。
+#
+# 版本用 5.44.0 而不是 cpan 上最新的 5.45.3：Perl 的版本号里奇数小版本是
+# 开发版，偶数才是稳定版。
+
+[package]
+name        = "perl"
+version     = "5.44.0"
+release     = 1
+date        = 2026-10-10T16:10:00Z
+description = "Perl 解释器"
+section     = "devel"
+url         = "https://www.perl.org/"
+license     = "Artistic-1.0-Perl OR GPL-1.0-or-later"
+
+[[source]]
+url    = "https://www.cpan.org/src/5.0/perl-$VERSION.tar.gz"
+urls = ["https://mirrors.tuna.tsinghua.edu.cn/CPAN/src/5.0/perl-$VERSION.tar.gz"]
+sha256 = "3b855066b92491cb40e86affb1ca57d1a388aa43e51b91c7806a32c2f65f96c3"
+
+[dependencies]
+runtime = ["glibc"]
+build   = ["gcc", "make"]
+
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["gcc", "make"]
+
+[build]
+# perl 不用 autoconf，用它自己的 Configure 脚本（大写 C）。
+type = "custom"

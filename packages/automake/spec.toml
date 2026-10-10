@@ -1,0 +1,31 @@
+# automake —— 从 Makefile.am 生成 Makefile.in
+#
+# 和 autoconf 同一条链：commit 归档里没有 Makefile.in，要靠它生成。
+# 它也是 Perl 程序，而且调用 autoconf。
+
+[package]
+name        = "automake"
+version     = "1.19"
+release     = 1
+date        = 2026-10-10T16:14:00Z
+description = "从 Makefile.am 生成符合 GNU 规范的 Makefile.in"
+section     = "devel"
+url         = "https://www.gnu.org/software/automake/"
+license     = "GPL-3.0-or-later"
+
+[[source]]
+url    = "https://ftp.gnu.org/gnu/automake/automake-$VERSION.tar.xz"
+urls = ["https://mirrors.tuna.tsinghua.edu.cn/gnu/automake/automake-$VERSION.tar.xz"]
+sha256 = "e3e2c2e3abf37898138db5b6c1d1dc35c9160c5978be7947d2c741705251d445"
+
+[dependencies]
+runtime = ["glibc", "perl", "autoconf"]
+build   = ["gcc", "make", "perl", "autoconf"]
+
+[dependencies.x86_64]
+runtime = ["glibc", "perl", "autoconf"]
+build   = ["gcc", "make", "perl", "autoconf"]
+
+[build]
+type = "autotools"
+configure = ["--prefix=/usr"]

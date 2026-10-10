@@ -269,7 +269,28 @@ def run_in_container(srcrel: str, arch: str, spec: dict, epoch: int) -> None:
         + strip_block
         + "# 产物拷回宿主\n"
         "mkdir -p /in/dest\n"
-        'cp -a "$WORK/dest/." /in/dest/\n'
+        # 拷出来之前先数一遍。
+        #
+        # 宿主机如果是大小写不敏感的文件系统（macOS 的 APFS 默认就是），
+        # 只差大小写的路径【根本不可能共存】——比如 perl 同时装 Pod/（模块）
+        # 和 pod/（文档）。cp 会在那里报一句 "File exists"，或者更糟：静默
+        # 地少拷。两种都让人查不到真正的原因。
+        #
+        # 这正是 0002 说的那件事，只是它发生在【拷出来】这一步而不是构建
+        # 里：容器内的构建是好的，丢在边界上。数一遍就能把话说清楚。
+        'before=$(find "$WORK/dest" \\( -type f -o -type l \\) | wc -l | tr -d " ")\n'
+        'cp -a "$WORK/dest/." /in/dest/ || true\n'
+        'after=$(find /in/dest \\( -type f -o -type l \\) | wc -l | tr -d " ")\n'
+        'if [ "$before" != "$after" ]; then\n'
+        '  echo "[产物] ❌ 容器内 $before 项，拷到宿主只剩 $after 项"\n'
+        '  echo "[产物] 只差大小写的路径，在大小写不敏感的宿主上无法共存。"\n'
+        '  echo "[产物] 下面就是撞车的那几组（容器内的路径）："\n'
+        '  find "$WORK/dest" -mindepth 1 | sed "s|^$WORK/dest||" \\\n'
+        '    | awk \'{print tolower($0) "\\t" $0}\' | sort \\\n'
+        '    | awk -F"\\t" \'{ if ($1 == p && $2 != pp) { print "         " pp "   ↔   " $2 } p=$1; pp=$2 }\' | head -10\n'
+        '  echo "[产物] 处理办法：配方不要装这类路径。参考 packages/perl 的 package()。"\n'
+        "  exit 1\n"
+        "fi\n"
     )
 
     # MAKEFLAGS 通过环境变量传给所有 make（含子 make），省得每个配方各写一遍 -j。
