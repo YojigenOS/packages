@@ -20,6 +20,20 @@ from .collect import collect
 
 from .rootfs import assemble
 
+# ------------------------------------------------------------------ 工具
+
+def _shown(path: Path) -> Path:
+    """给日志用的路径：能相对就相对，不能就原样。
+
+    `--output` 可以指到仓库外面（CI 就用 /tmp），这时 relative_to 会抛
+    ValueError 而不是返回一个可以打印的东西。
+    """
+    try:
+        return path.relative_to(ROOT)
+    except ValueError:
+        return path
+
+
 # ------------------------------------------------------------------ 命令
 
 def cmd_build(args) -> None:
@@ -76,7 +90,7 @@ def cmd_build(args) -> None:
 
     out, count = collect(spec, arch)
     print()
-    log("完成", f"{out.relative_to(ROOT)}/  （{count} 项）")
+    log("完成", f"{_shown(out)}/  （{count} 项）")
 
 
 def cmd_deps(args) -> None:
@@ -144,7 +158,7 @@ def cmd_rootfs(args) -> None:
 
     print()
     size = out.stat().st_size
-    log("完成", f"{out.relative_to(ROOT)}  （{len(order)} 个包, {size // 1024} KiB）")
+    log("完成", f"{_shown(out)}  （{len(order)} 个包, {size // 1024} KiB）")
 
 
 def main() -> None:

@@ -13,7 +13,7 @@ import subprocess
 from pathlib import Path
 
 from .common import BUILDENV_IMAGE, BUILD_DIR, OUTPUT_DIR, die, log
-from .deps import dep_closure, dep_payload, source_date_epoch
+from .deps import load_host_provides, dep_closure, dep_payload, source_date_epoch
 from .spec import load_spec
 
 
@@ -59,7 +59,18 @@ def assemble(packages: list[str], arch: str, output: Path | None = None) -> tupl
     #
     # 它是一堆包的合成物，所以没有一个「自己的」时间戳可谈；取最大值既
     # 稳定（同样的输入算出同样的值），又满足时间戳不该晚于任何输入的直觉。
-    epoch = max(source_date_epoch(load_spec(n), arch, set()) for n in order)
+    # 必须传真正的 host_provides，不能传空集。
+    #
+    # source_date_epoch 跟的是【构建】依赖链（构建环境会改变产物字节），而
+    # 那条链里有真实的自举环：glibc 的构建依赖 make，make 的运行时依赖 glibc。
+    # 这个环平时由 host/provides.txt 切开——它声明「这一环由宿主提供，不用
+    # 自己解析」。传空集就等于把切口堵上，dep_closure 会直接报「依赖成环」。
+    #
+    # 而且这不只是崩不崩的问题：传空集就算侥幸不环，算出来的值也会和各包
+    # 自己构建时用的不一样——同一个包的 SOURCE_DATE_EPOCH 在两处必须一致，
+    # 否则重复构建产不出相同字节。
+    host_provides = load_host_provides()
+    epoch = max(source_date_epoch(load_spec(n), arch, host_provides) for n in order)
 
     script = (
         "set -euo pipefail\n"
