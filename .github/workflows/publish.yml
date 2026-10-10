@@ -95,14 +95,23 @@ jobs:
       #
       # 所以：把每个包的完整日志和失败包的尾部一起传出来。传不出去也没关系
       # ——如果这一步自己失败，才轮到后面那步报错。
+      # ★ 必须先把日志抄进工作区：upload-artifact 只认工作区里的路径，
+      # 给 /tmp 会被拒绝——实测 aarch64 那轮【引导成功了】却因为这一步失败
+      # 让整个 job 挂掉，连带 selfhost 被跳过。
+      - name: 收集构建日志
+        if: always()
+        run: |
+          mkdir -p build-logs
+          cp -a /tmp/*.log build-logs/ 2>/dev/null || true
+          ls -la build-logs/ | head -20
+
       - name: 上传构建日志
         if: always()
+        continue-on-error: true      # 日志是诊断手段，不该让整个 job 失败
         uses: actions/upload-artifact@v4
         with:
           name: build-logs-${{ matrix.arch }}
-          path: |
-            /tmp/*.log
-            /tmp/**/*.log
+          path: build-logs
           if-no-files-found: ignore
           retention-days: 7
 
@@ -254,14 +263,19 @@ jobs:
         run: |
           ./tools/skirt bootstrap --report || echo "bootstrap_failed=1" >> "$GITHUB_OUTPUT"
 
+      - name: 收集构建日志
+        if: always()
+        run: |
+          mkdir -p build-logs
+          cp -a /tmp/*.log build-logs/ 2>/dev/null || true
+
       - name: 上传构建日志
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: selfhost-logs-${{ matrix.arch }}
-          path: |
-            /tmp/*.log
-            /tmp/**/*.log
+          path: build-logs
           if-no-files-found: ignore
           retention-days: 7
 
