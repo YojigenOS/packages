@@ -1,0 +1,38 @@
+# gcc —— GNU 编译器集合
+#
+# 工具链的第三环，也是整条链上最重的一块。它依赖 gmp / mpfr / mpc
+# 三个数学库（都已由 YojigenOS 自建）。
+#
+# 关于 --disable-bootstrap：
+#   默认情况下 gcc 会编译三遍，并要求第二遍和第三遍逐位一致——
+#   那是编译器的自我验证。但我们这一步是「用宿主的 gcc 编译出 gcc」，
+#   真正的自验证要等「用我们自己的 gcc 重建 gcc」那一步才有意义。
+#   现在开 bootstrap 只是多等一小时，所以先关掉。
+
+[package]
+name        = "gcc"
+version     = "16.2.0"
+release     = 1
+description = "GNU 编译器集合（C / C++）"
+section     = "core"
+url         = "https://gcc.gnu.org/"
+license     = "GPL-3.0-or-later WITH GCC-exception-3.1"
+
+[[source]]
+# 注意 gcc 的目录结构和别的 GNU 包不同：多一层版本号目录
+url    = "https://ftp.gnu.org/gnu/gcc/gcc-$VERSION/gcc-$VERSION.tar.xz"
+sha256 = "e6738e29597f733270731aa90600f37ffdc045079dfc27ec7e8192cc81085c3e"
+
+[dependencies]
+runtime = ["glibc", "gmp", "mpfr", "mpc"]
+build   = ["make", "gmp", "mpfr", "mpc"]
+
+[dependencies.x86_64]
+runtime = ["glibc", "gmp", "mpfr", "mpc"]
+build   = ["make", "gmp", "mpfr", "mpc"]
+
+[build]
+# custom：GCC 16 的 -latomic_asneeded 在构建期有一个上游路径不一致，
+# 需要在构建中途插一步。声明式表达不了，全部放进 steps.sh。
+# 构建方式仍是 autotools（且必须是离开源码树的），见 steps.sh。
+type = "custom"

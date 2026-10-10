@@ -5,7 +5,7 @@
 
 [package]
 name        = "libpng"
-version     = "1.6.44"
+version     = "1.6.59"
 release     = 1
 description = "PNG 图像格式参考库"
 section     = "libs"
@@ -13,8 +13,10 @@ url         = "http://www.libpng.org/pub/png/libpng.html"
 license     = "libpng-2.0"
 
 [[source]]
+# 注意：libpng 的 1.7.x 目前仍是 beta（beta89），稳定线是 1.6.x。
+# 这里刻意跟稳定线，不跟 1.7 的 beta。
 url    = "https://download.sourceforge.net/libpng/libpng-$VERSION.tar.gz"
-sha256 = "8c25a7792099a0089fa1cc76c94260d0bb3f1ec52b93671b572f8bb61577b732"
+sha256 = "86a3e4b501f7f50e392c4e456ea158893e9a595b1c63eb88c7bb9f6cf8772dad"
 
 [dependencies]
 runtime = ["glibc", "zlib"]

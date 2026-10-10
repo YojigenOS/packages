@@ -4,7 +4,7 @@
 
 [package]
 name        = "hello"
-version     = "2.12.1"
+version     = "2.12.3"
 release     = 1
 description = "GNU Hello，打招呼的示例程序"
 section     = "utils"
@@ -13,7 +13,7 @@ license     = "GPL-3.0-or-later"
 
 [[source]]
 url    = "https://ftp.gnu.org/gnu/hello/hello-$VERSION.tar.gz"
-sha256 = "8d99142afd92576f30b0cd7cb42a8dc6809998bc5d607d88761f512e26c7db20"
+sha256 = "0d5f60154382fee10b114a1c34e785d8b1f492073ae2d3a6f7b147687b366aa0"
 
 [dependencies]
 runtime = ["glibc"]

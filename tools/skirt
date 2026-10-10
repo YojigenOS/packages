@@ -285,11 +285,28 @@ def make_build_script(spec: dict) -> str:
     """把 [build] 表翻译成 shell。steps.sh 可通过重定义函数覆盖。"""
     b = spec.get("build", {})
     kind = b.get("type", "custom")
+    oot = bool(b.get("out_of_tree", False))
+
+    if oot and kind != "autotools":
+        die(f"{spec['package']['name']}: out_of_tree 目前只支持 autotools"
+            f"（meson 和 cmake 本来就是离开源码树构建的）")
+
+    header = "export PKGDEST=/work/dest\n"
+    if oot:
+        header += 'BUILDDIR="$SRCDIR/_build"\n'
 
     if kind == "autotools":
         opts = " ".join(b.get("configure", ["--prefix=/usr"]))
-        body = f"  ./configure {opts}\n  make"
-        pkgstep = '  make DESTDIR="$PKGDEST" install'
+        if oot:
+            body = ('  mkdir -p "$BUILDDIR"\n'
+                    '  cd "$BUILDDIR"\n'
+                    f'  "$SRCDIR/configure" {opts}\n'
+                    '  make')
+            pkgstep = ('  cd "$BUILDDIR"\n'
+                       '  make DESTDIR="$PKGDEST" install')
+        else:
+            body = f"  ./configure {opts}\n  make"
+            pkgstep = '  make DESTDIR="$PKGDEST" install'
     elif kind == "meson":
         opts = " ".join(b.get("configure", ["--prefix=/usr", "--buildtype=release"]))
         body = f"  meson setup _build {opts}\n  meson compile -C _build"
@@ -305,8 +322,8 @@ def make_build_script(spec: dict) -> str:
         die(f"{spec['package']['name']}: 不认识的构建类型 {kind!r}")
 
     return (
-        "export PKGDEST=/work/dest\n"
-        "\n"
+        header
+        + "\n"
         "build() {\n" + body + "\n}\n"
         "\n"
         "package() {\n" + pkgstep + "\n}\n"
@@ -353,6 +370,7 @@ def run_in_container(script: str, srcrel: str, arch: str, spec: dict) -> None:
         "-e", f"PKGARCH={arch}",
         "-e", f"PKGNAME={pkg['name']}",
         "-e", f"PKGVER={pkg['version']}",
+        "-e", f"SRCDIR={workdir}",
         "-e", f"MAKEFLAGS=-j{jobs}",
         "-v", f"{BUILD_DIR}:/work",
         "-v", f"{sysroot}:/mnt/sysroot:ro",

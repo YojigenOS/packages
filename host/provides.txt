@@ -20,7 +20,8 @@
 #   linux-headers  7.2.9   ✅ 已由 YojigenOS 自建
 #   binutils       2.47    ✅ 已由 YojigenOS 自建
 #                          验证：用自建 as/ld 汇编链接出可运行程序
+#   gcc            16.2.0  ✅ 已由 YojigenOS 自建
+#                          验证：自建 gcc/g++ 编译并运行 C 与 C++ 程序
 
 glibc
-gcc
 make
