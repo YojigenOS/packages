@@ -6,40 +6,27 @@
 name        = "libffi"
 version     = "3.8.0"
 release     = 1
-date        = 2026-10-10T17:40:00Z
+date        = 2026-10-10T23:10:00Z
 description = "可移植的外部函数接口库"
 section     = "libs"
 url         = "https://sourceware.org/libffi/"
 license     = "MIT"
 
 [[source]]
-# ★ 这里【是】例外：用发行包，不用 commit。
-#
-# 项目的规则是 GitHub 类源码优先用 commit。libffi 走不通，但理由不是
-# "它的树有问题"——我一开始是那么以为的，错了。
-#
-# 试过：git 树 + autoreconf 能跑通（autoconf/automake/libtool 都在，我们
-# 自己建的 libtool 2.6.2 提供了需要的宏）。它倒在后面一步：
-#
-#     make[2]: *** [Makefile:405: ../../doc/libffi.info] Error 127
-#
-# Error 127 是命令找不到——那是 makeinfo。**git 树要现场生成 info 手册，
-# 而发行包里带着上游生成好的那份。** 这是发行包存在的意义之一。
-#
-# 所以要么建 texinfo（已记进待办），要么用发行包。现在用发行包。
-url    = "https://github.com/libffi/libffi/releases/download/v$VERSION/libffi-$VERSION.tar.gz"
-sha256 = "7da3e2d9a171eb0a038f592ecad3ff2bb2550f3496d87b3b29ad0cf4430c0db4"
+git     = "https://github.com/libffi/libffi"
+commit  = "12ffd1f9dc56fcea79d2f742f424301ae668d663"
 
 [dependencies]
 runtime = ["glibc"]
-build   = ["make", "gcc"]
+build   = ["make", "gcc", "autoconf", "automake", "libtool", "texinfo"]
 
 [dependencies.x86_64]
 runtime = ["glibc"]
-build   = ["make", "gcc"]
+build   = ["make", "gcc", "autoconf", "automake", "libtool", "texinfo"]
 
 [build]
-type = "autotools"
+type       = "autotools"
+autoreconf = true
 # git 树里没有 configure，现场生成
 # git 树里没有 configure，现场生成（见 docs/配方约定.md）
 configure = [
