@@ -13,7 +13,7 @@ import subprocess
 from pathlib import Path
 
 from .common import BUILDENV_IMAGE, BUILD_DIR, OUTPUT_DIR, die, log
-from .deps import dep_closure, dep_payload
+from .deps import dep_closure, dep_payload, source_date_epoch
 from .spec import load_spec
 
 
@@ -55,12 +55,37 @@ def assemble(packages: list[str], arch: str, output: Path | None = None) -> tupl
     out = output or (OUTPUT_DIR / arch / f"yojigenos-rootfs-{arch}.tar.gz")
     out.parent.mkdir(parents=True, exist_ok=True)
 
+    # rootfs 的时间戳：参与拼装的包里最晚的那个。
+    #
+    # 它是一堆包的合成物，所以没有一个「自己的」时间戳可谈；取最大值既
+    # 稳定（同样的输入算出同样的值），又满足时间戳不该晚于任何输入的直觉。
+    epoch = max(source_date_epoch(load_spec(n), arch, set()) for n in order)
+
     script = (
         "set -euo pipefail\n"
         "mkdir -p /rootfs\n"
-        # --numeric-owner 保留 root:root；--sort=name 让同样的输入产出同样的 tar
         + "".join(f'cp -a "/pkgs/{rel}/payload/." /rootfs/\n' for rel in rels)
-        + "tar -C /rootfs --numeric-owner --sort=name -czf /out/rootfs.tar.gz .\n"
+        # payload 是在 macOS 的绑定挂载上生成的，属主被虚拟化成了宿主用户
+        # （实测 501:20）。成品系统的文件必须是 root:root。
+        + "chown -R 0:0 /rootfs\n"
+        # tar 参数按可复现构建的标准来（见决策记录 0005）：
+        #   --sort=name    文件顺序固定——否则取决于文件系统的返回顺序
+        #   --mtime        所有成员的时间戳统一，不再各自带着构建时刻
+        #   --owner/--group 属主记成 0:0
+        #   --pax-option   去掉 PAX 头里的 atime/ctime；它们每次构建都不同
+        #
+        # 压缩写成 --use-compress-program="gzip -9n" 而不是 GZIP 环境变量：
+        # gzip 已把那个变量标记为弃用（会打警告）。
+        #
+        # -n 本身是防御性的。gzip 头里记的是「输入文件的 mtime 和文件名」，
+        # 而从管道读时两者都不存在（tar -z 就是管道），所以实测加不加它结果
+        # 都一样。写出来是为了不依赖那个隐含行为。
+        + "tar -C /rootfs -cf /out/rootfs.tar.gz \\\n"
+        '    --use-compress-program="gzip -9n" \\\n'
+        "    --sort=name --numeric-owner --owner=0 --group=0 \\\n"
+        f"    --mtime=@{epoch} \\\n"
+        "    --pax-option=exthdr.name=%d/PaxHeaders/%f,delete=atime,delete=ctime \\\n"
+        "    .\n"
     )
 
     proc = subprocess.run([
