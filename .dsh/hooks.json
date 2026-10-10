@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"/Users/mouyase/Projects/my/YojigenOS/.dsh/skills/comet/scripts/comet-hook-router.mjs\" --platform \"dsh\" --project-root \"/Users/mouyase/Projects/my/YojigenOS\""
+          }
+        ]
+      }
+    ]
+  }
+}

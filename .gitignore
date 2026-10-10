@@ -1,0 +1,27 @@
+# >>> Comet managed project state >>>
+!/.comet/
+/.comet/*
+!/.comet/config.yaml
+# <<< Comet managed project state <<<
+
+# 本机工具环境（可由工具重新安装，等价于 node_modules）
+/.dsh/
+
+# 构建产物与源码缓存
+/output/
+/build/
+/cache/
+/sources/
+*.apk
+*.deb
+*.rpm
+
+# Python
+__pycache__/
+*.py[cod]
+
+# 编辑器与系统
+.DS_Store
+*.swp
+.idea/
+.vscode/
