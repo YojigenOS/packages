@@ -33,6 +33,19 @@ BUILDENV_IMAGE = os.environ.get("SKIRT_BUILDENV", "yojigenos/buildenv")
 # 用环境变量 SKIRT_CCACHE 覆盖。
 CCACHE_DIR = Path(os.environ.get("SKIRT_CCACHE", ROOT.parent / "ccache"))
 
+#: GNU 包的备用镜像。
+#:
+#: ftp.gnu.org 实测时通时不通——同一台机器上、同一个 URL，构建 glibc 时是通
+#: 的，加 patch 配方时就不通了；CI 上也断过（gettext 那一步）。
+#:
+#: 一个一个往配方里写 urls 是错的做法：21 个包都用它，而且换镜像时得改 21 处。
+#: GNU 的所有发布包在镜像站上的路径是可以算出来的（把 ftp.gnu.org/gnu/ 换成
+#: <镜像>/gnu/），所以让驱动自己补一个备选。sha256 不变——镜像就是同一份字节。
+#:
+#: 可以用 SKIRT_GNU_MIRROR 换掉，或者设成空串关掉这个行为。
+GNU_MIRROR = os.environ.get("SKIRT_GNU_MIRROR",
+                            "https://mirrors.tuna.tsinghua.edu.cn")
+
 #: ccache 在容器里看到的缓存目录。宿主的 CCACHE_DIR 挂到这里。
 #:
 #: 驱动会把它显式传进容器（`-e CCACHE_DIR=...`），不靠镜像的 ENV——
