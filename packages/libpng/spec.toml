@@ -1,0 +1,29 @@
+# libpng —— PNG 图像格式参考库
+#
+# 这个包的用处是验证依赖机制：它构建时需要 zlib，而 zlib 是 YojigenOS
+# 自己构建的（不在 host/provides.txt 里），所以只能靠 sysroot 传递。
+
+[package]
+name        = "libpng"
+version     = "1.6.44"
+release     = 1
+description = "PNG 图像格式参考库"
+section     = "libs"
+url         = "http://www.libpng.org/pub/png/libpng.html"
+license     = "libpng-2.0"
+
+[[source]]
+url    = "https://download.sourceforge.net/libpng/libpng-$VERSION.tar.gz"
+sha256 = "8c25a7792099a0089fa1cc76c94260d0bb3f1ec52b93671b572f8bb61577b732"
+
+[dependencies]
+runtime = ["glibc", "zlib"]
+build   = ["zlib"]
+
+[dependencies.x86_64]
+runtime = ["glibc", "zlib"]
+build   = ["zlib"]
+
+[build]
+type      = "autotools"
+configure = ["--prefix=/usr", "--disable-static"]

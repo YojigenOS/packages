@@ -1,0 +1,28 @@
+# zlib —— 通用压缩库
+#
+# 这个包刻意不用声明式构建，用来验证 steps.sh 逃生舱这条路。
+
+[package]
+name        = "zlib"
+version     = "1.3.1"
+release     = 1
+description = "通用无损压缩库"
+section     = "libs"
+url         = "https://zlib.net/"
+license     = "Zlib"
+
+[[source]]
+# 注意：zlib.net 的根路径只有最新版，历史版本在 /fossils/ 下
+url    = "https://zlib.net/fossils/zlib-$VERSION.tar.gz"
+sha256 = "9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23"
+
+[dependencies]
+runtime = ["glibc"]
+build   = []
+
+[dependencies.x86_64]
+runtime = ["glibc"]
+
+[build]
+# custom = 构建步骤全部由 steps.sh 提供
+type = "custom"
