@@ -8,7 +8,7 @@ from pathlib import Path
 
 from .common import BUILD_DIR, OUTPUT_DIR, PACKAGES_DIR, ROOT, die, log, resolve_arch, rmtree_force
 
-from .spec import direct_deps, load_spec
+from .spec import direct_deps, load_spec, recipe_of, subpackages
 
 from .deps import build_sysroot, dep_closure, dep_payload, load_host_provides, source_date_epoch
 
@@ -21,6 +21,21 @@ from .collect import collect
 from .rootfs import assemble
 
 # ------------------------------------------------------------------ 工具
+
+def _recipe_spec(name: str) -> dict:
+    """给 build / deps 用：只接受配方名。
+
+    子包没有自己的配方，它的文件是母配方一次构建出来的——收到子包名时
+    说清楚该怎么办，而不是丢一句「找不到配方」让人去猜。
+    """
+    recipe = recipe_of(name)
+    if recipe is not None and recipe != name:
+        die(
+            f"{name} 是 {recipe} 的子包，不能单独构建。\n"
+            f"       它由 {recipe} 一次产出的：tools/skirt build {recipe}"
+        )
+    return load_spec(name)      # 不认识的会在这里报「找不到配方」
+
 
 def _shown(path: Path) -> Path:
     """给日志用的路径：能相对就相对，不能就原样。
@@ -38,7 +53,7 @@ def _shown(path: Path) -> Path:
 
 def cmd_build(args) -> None:
     arch = resolve_arch(args.arch)
-    spec = load_spec(args.package)
+    spec = _recipe_spec(args.package)
     pkg = spec["package"]
     name, ver, rel = pkg["name"], pkg["version"], pkg["release"]
 
@@ -88,15 +103,16 @@ def cmd_build(args) -> None:
     print()
     run_in_container(srcrel, arch, spec, source_date_epoch(spec, arch, host_provides))
 
-    out, count = collect(spec, arch)
+    results = collect(spec, arch)
     print()
-    log("完成", f"{_shown(out)}/  （{count} 项）")
+    for out, count in results:
+        log("完成", f"{_shown(out)}/  （{count} 项）")
 
 
 def cmd_deps(args) -> None:
     """只解析依赖，不构建 —— 用来调试配方。"""
     arch = resolve_arch(args.arch)
-    spec = load_spec(args.package)
+    spec = _recipe_spec(args.package)
     name = spec["package"]["name"]
     host_provides = load_host_provides()
 
@@ -128,6 +144,8 @@ def cmd_list(args) -> None:
         pkg = load_spec(n)["package"]
         print(f"  {pkg['name']:<16} {pkg['version']}-{pkg['release']:<5} "
               f"{pkg.get('description', '')}")
+        for sub in subpackages(load_spec(n)):
+            print(f"    └ {sub['name']:<14} {'':<7} {sub.get('description', '')}")
 
 
 def cmd_clean(args) -> None:

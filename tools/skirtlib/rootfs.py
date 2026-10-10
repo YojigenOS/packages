@@ -14,7 +14,19 @@ from pathlib import Path
 
 from .common import BUILDENV_IMAGE, BUILD_DIR, OUTPUT_DIR, die, log
 from .deps import load_host_provides, dep_closure, dep_payload, source_date_epoch
-from .spec import load_spec
+from .spec import load_spec, recipe_of
+
+# 拼装时保留哪些语言的 .mo 消息文件。
+#
+# 一个完整的 base 带着 62 种语言、29.6 MB 的翻译，而我们要的是中文。
+# 只留 zh_CN / zh_TW 之后这部分降到 2 MB——省 94%。
+#
+# 为什么在【拼装】时筛，而不是像 Debian 那样给每个包拆 -lang 子包：包里
+# 什么都还在，只是拼出来的系统不带。所以这是可逆的，以后想放进去改一行
+# 就行，也不用给 23 个配方挨个加规则。
+#
+# 英文不需要 .mo——gettext 取不到翻译时会回落到程序里写死的原文。
+KEEP_LOCALES = ("zh_CN", "zh_TW")
 
 
 def resolve_set(packages: list[str], arch: str) -> list[str]:
@@ -35,8 +47,13 @@ def resolve_set(packages: list[str], arch: str) -> list[str]:
     seen: set[str] = set()
 
     for name in packages:
-        spec = load_spec(name)
-        for dep in dep_closure(spec, arch, set(), kinds=("runtime",)) + [name]:
+        recipe = recipe_of(name)
+        if recipe is None:
+            die(f"不认识的包: {name}")
+        spec = load_spec(recipe)
+        # 点名的可能是子包（glibc-dev）。dep_closure 返回的是【依赖】，不含
+        # 自身，所以要把主包和子包都补上；子包依赖主包，顺序也就对了。
+        for dep in dep_closure(spec, arch, set(), kinds=("runtime",)) + [recipe, name]:
             if dep not in seen:
                 seen.add(dep)
                 order.append(dep)
@@ -70,7 +87,25 @@ def assemble(packages: list[str], arch: str, output: Path | None = None) -> tupl
     # 自己构建时用的不一样——同一个包的 SOURCE_DATE_EPOCH 在两处必须一致，
     # 否则重复构建产不出相同字节。
     host_provides = load_host_provides()
-    epoch = max(source_date_epoch(load_spec(n), arch, host_provides) for n in order)
+    # order 里可能有子包名，它们继承母配方的 date——所以先落回配方。
+    epoch = max(source_date_epoch(load_spec(recipe_of(n) or n), arch, host_provides)
+                for n in order)
+
+    # 语言筛选：只留下 KEEP_LOCALES 里列的那些。
+    #
+    # 这是拼装期的事，不是构建期——包里 62 种语言一个不少，只是拼出来的
+    # 系统不带。所以改这个列表不需要重编任何东西。
+    keep_names = " ".join(f"! -name {loc}" for loc in KEEP_LOCALES)
+    prune = (
+        "if [ -d /rootfs/usr/share/locale ]; then\n"
+        "  loc_before=$(du -sk /rootfs/usr/share/locale | cut -f1)\n"
+        "  find /rootfs/usr/share/locale -mindepth 1 -maxdepth 1 -type d \\\n"
+        f"    {keep_names} -exec rm -rf {{}} +\n"
+        "  loc_after=$(du -sk /rootfs/usr/share/locale | cut -f1)\n"
+        f'  echo "[语言] 保留 {" ".join(KEEP_LOCALES)}'
+        '，$(( loc_before - loc_after )) KB 的翻译没有装进去"\n'
+        "fi\n"
+    )
 
     script = (
         "set -euo pipefail\n"
@@ -79,6 +114,7 @@ def assemble(packages: list[str], arch: str, output: Path | None = None) -> tupl
         # payload 是在 macOS 的绑定挂载上生成的，属主被虚拟化成了宿主用户
         # （实测 501:20）。成品系统的文件必须是 root:root。
         + "chown -R 0:0 /rootfs\n"
+        + prune
         # tar 参数按可复现构建的标准来（见决策记录 0005）：
         #   --sort=name    文件顺序固定——否则取决于文件系统的返回顺序
         #   --mtime        所有成员的时间戳统一，不再各自带着构建时刻

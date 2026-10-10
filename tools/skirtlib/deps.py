@@ -8,7 +8,7 @@ from pathlib import Path
 
 from .common import BUILD_DIR, HOST_PROVIDES_FILE, OUTPUT_DIR, PACKAGES_DIR, ROOT, die, log, rmtree_force
 
-from .spec import direct_deps, latest_date, load_spec
+from .spec import direct_deps, latest_date, load_spec, package_rel, recipe_of
 
 # ---------------------------------------------------------------- 依赖解析
 
@@ -45,6 +45,17 @@ def dep_closure(spec: dict, arch: str, host_provides: set[str],
             return
         if name in stack:
             die(f"依赖成环: {' → '.join(stack + [name])}")
+        # 子包（glibc-dev 之类）没有自己的配方：它的文件是主包的一部分，
+        # 单独装没有意义。所以先跟主包，再把子包自己排上——主包的依赖由
+        # visit(主包) 一并带进来，这里不用重复解析。
+        parent = recipe_of(name)
+        if parent is not None and parent != name:
+            stack.append(name)
+            visit(parent)
+            stack.pop()
+            done.add(name)
+            order.append(name)
+            return
         child_spec = load_spec(name)
         stack.append(name)
         for child in direct_deps(child_spec, arch, kinds):
@@ -71,29 +82,45 @@ def source_date_epoch(spec: dict, arch: str, host_provides: set[str]) -> int:
 
     「为什么吃整个依赖链而不是只看自己」写在 spec.latest_date 的注释里，
     这里只负责把依赖闭包翻译成一份配方列表——环由 dep_closure 处理。
+
+    闭包里可能有子包名（某个配方声明了 build = ["glibc-dev"]），所以要先
+    经 recipe_of 落回配方：子包继承母配方的 date，没有自己的时间戳。
     """
-    deps = [load_spec(name) for name in dep_closure(spec, arch, host_provides)]
+    deps = [load_spec(recipe_of(name) or name)
+            for name in dep_closure(spec, arch, host_provides)]
     return latest_date(spec, deps)
+
+
+def _output_dir(name: str, arch: str) -> tuple[Path, str]:
+    """把包名解析成它在 output/ 里的目录。
+
+    名字可以是普通包，也可以是子包——两者的目录长得一样，都是
+    `<名字>-<版本>-<release>`，版本和 release 跟着产出它的配方走。
+    """
+    recipe = recipe_of(name)
+    if recipe is None:
+        die(f"不认识的包: {name}")
+    pkg = load_spec(recipe)["package"]
+    rel = package_rel(name, pkg["version"], pkg["release"])
+    return OUTPUT_DIR / arch / rel, rel
 
 
 def built_payload(name: str, arch: str) -> Path | None:
     """若该包已构建过则返回其 payload，否则返回 None（不报错）。"""
-    if not (PACKAGES_DIR / name / "spec.toml").is_file():
+    if recipe_of(name) is None:
         return None
-    pkg = load_spec(name)["package"]
-    payload = OUTPUT_DIR / arch / f"{pkg['name']}-{pkg['version']}-{pkg['release']}" / "payload"
+    payload = _output_dir(name, arch)[0] / "payload"
     return payload if payload.is_dir() else None
 
 
 def dep_payload(name: str, arch: str) -> tuple[Path, str]:
     """找到依赖包已构建的 payload。"""
-    pkg = load_spec(name)["package"]
-    rel = f"{pkg['name']}-{pkg['version']}-{pkg['release']}"
-    payload = OUTPUT_DIR / arch / rel / "payload"
+    out, rel = _output_dir(name, arch)
+    payload = out / "payload"
     if not payload.is_dir():
         die(
             f"依赖 {name} 还没有构建（找不到 {payload.relative_to(ROOT)}/）\n"
-            f"       先执行:  tools/skirt build {name}"
+            f"       先执行:  tools/skirt build {recipe_of(name)}"
         )
     return payload, rel
 

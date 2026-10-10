@@ -28,12 +28,14 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from skirtlib import collect as collect_mod
 from skirtlib import deps as deps_mod
 from skirtlib.build import run_in_container
 from skirtlib.common import PACKAGES_DIR, build_jobs
 from skirtlib.deps import load_host_provides, merge_tree, source_date_epoch
-from skirtlib.spec import (deps_for, direct_deps, expand, latest_date, load_spec,
-                           package_date)
+from skirtlib.spec import (deps_for, direct_deps, expand, is_subpackage,
+                           latest_date, load_spec, package_date, recipe_of,
+                           subpackages)
 
 
 class TestExpand(unittest.TestCase):
@@ -433,6 +435,111 @@ class TestBuildJobs(unittest.TestCase):
                         build_jobs()
 
 
+class TestSubpackagePatterns(unittest.TestCase):
+    """子包的文件分流规则。
+
+    分流错了的后果很隐蔽：文件不会消失，只会跑到另一个包里，然后产出一个
+    「装得上、跑不起来」的系统。所以匹配规则本身值得逐个钉住。
+    """
+
+    def test_directory_prefix(self):
+        """`usr/include/` 命中它自己和底下的一切，但不命中同前缀的兄弟。"""
+        self.assertTrue(collect_mod._pattern_match("usr/include", "usr/include/"))
+        self.assertTrue(collect_mod._pattern_match("usr/include/stdio.h", "usr/include/"))
+        self.assertTrue(collect_mod._pattern_match("usr/include/sys/types.h", "usr/include/"))
+        self.assertFalse(collect_mod._pattern_match("usr/includes", "usr/include/"))
+        self.assertFalse(collect_mod._pattern_match("usr/lib/libc.a", "usr/include/"))
+
+    def test_glob_does_not_cross_slash(self):
+        self.assertTrue(collect_mod._pattern_match("usr/lib/libc.a", "usr/lib/*.a"))
+        self.assertFalse(collect_mod._pattern_match("usr/lib/sub/libc.a", "usr/lib/*.a"))
+        self.assertFalse(collect_mod._pattern_match("usr/lib/libc.so.6", "usr/lib/*.a"))
+
+    def test_exact_path(self):
+        self.assertTrue(collect_mod._pattern_match("usr/lib/libc.so", "usr/lib/libc.so"))
+        self.assertFalse(collect_mod._pattern_match("usr/lib/libm.so", "usr/lib/libc.so"))
+
+    def test_first_match_wins(self):
+        """先声明的子包获胜——顺序是配方作者控制分流的手段。"""
+        subs = [
+            {"name": "a", "files": ["usr/lib/*.a"]},
+            {"name": "b", "files": ["usr/lib/"]},
+        ]
+        self.assertEqual(collect_mod._owner("usr/lib/libc.a", subs), "a")
+        self.assertEqual(collect_mod._owner("usr/lib/libc.so.6", subs), "b")
+
+    def test_no_match_means_main_package(self):
+        subs = [{"name": "a", "files": ["usr/include/"]}]
+        self.assertIsNone(collect_mod._owner("usr/bin/ls", subs))
+
+    def test_glibc_rules_put_runtime_files_in_the_main_package(self):
+        """对着 glibc 的真实规则跑一遍。
+
+        这几条是反例：模式匹配没法区分「符号链接」和「真的 ELF」，
+        而 /usr/lib/libmemusage.so 是真库、libnss_db.so 是链接期符号链接。
+        所以规则只搬真正占体积的四类，其余一律留在主包。
+        """
+        subs = subpackages(load_spec("glibc"))
+        for rel in ("usr/lib/libc.so.6", "usr/lib/ld-linux-aarch64.so.1",
+                    "usr/lib/libmemusage.so", "usr/lib/libnss_db.so",
+                    "usr/bin/ldd"):
+            with self.subTest(path=rel):
+                self.assertIsNone(collect_mod._owner(rel, subs))
+        for rel, owner in (("usr/include/stdio.h", "glibc-dev"),
+                           ("usr/lib/libc.a", "glibc-dev"),
+                           ("usr/share/i18n/charmaps/UTF-8.gz", "glibc-dev"),
+                           ("usr/lib/locale/zh_CN.utf8/LC_CTYPE", "glibc-locales")):
+            with self.subTest(path=rel):
+                self.assertEqual(collect_mod._owner(rel, subs), owner)
+
+
+class TestSubpackageParsing(unittest.TestCase):
+    """[[subpackage]] 的字段校验。"""
+
+    def _spec(self, **sub):
+        d = {"name": "x-dev", "files": ["usr/include/"]}
+        d.update(sub)
+        return {"package": {"name": "x"}, "_dir": Path("/tmp/x"), "subpackage": [d]}
+
+    def test_ok(self):
+        subs = subpackages(self._spec())
+        self.assertEqual(subs[0]["name"], "x-dev")
+
+    def test_missing_name_dies(self):
+        spec = {"package": {"name": "x"}, "_dir": Path("/tmp/x"),
+                "subpackage": [{"files": ["a/"]}]}
+        with self.assertRaises(SystemExit):
+            subpackages(spec)
+
+    def test_missing_files_dies(self):
+        with self.assertRaises(SystemExit):
+            subpackages(self._spec(files=[]))
+
+    def test_same_name_as_main_dies(self):
+        """子包和主包同名会让两者互相覆盖，而且是静默的。"""
+        with self.assertRaises(SystemExit):
+            subpackages(self._spec(name="x"))
+
+
+class TestRecipeOf(unittest.TestCase):
+    """子包名 → 配方名的解析。"""
+
+    def test_recipe_resolves_to_itself(self):
+        self.assertEqual(recipe_of("glibc"), "glibc")
+
+    def test_subpackage_resolves_to_parent(self):
+        self.assertEqual(recipe_of("glibc-dev"), "glibc")
+        self.assertEqual(recipe_of("glibc-locales"), "glibc")
+
+    def test_unknown_is_none(self):
+        self.assertIsNone(recipe_of("没有这个包"))
+
+    def test_is_subpackage(self):
+        self.assertTrue(is_subpackage("glibc-dev"))
+        self.assertFalse(is_subpackage("glibc"))
+        self.assertFalse(is_subpackage("没有这个包"))
+
+
 class TestEveryRealSpec(unittest.TestCase):
     """对仓库里每个真实配方做一遍结构性检查。
 
@@ -494,6 +601,35 @@ class TestEveryRealSpec(unittest.TestCase):
                     self.assertNotIn("$", url, "URL 里有没展开的占位符")
                     self.assertTrue(url.startswith(("http://", "https://")))
                     self.assertRegex(src["sha256"], r"^[0-9a-f]{64}$")
+
+    def test_subpackage_names_are_globally_unique(self):
+        """子包名在整个仓库里必须唯一。
+
+        它们没有自己的目录——只靠名字在 output/ 和依赖里被找到。重名会让
+        recipe_of 返回先扫到的那个配方，于是产出一个装错东西的包。
+        """
+        seen: dict[str, str] = {}
+        for name in self.specs():
+            for sub in subpackages(load_spec(name)):
+                with self.subTest(subpackage=sub["name"]):
+                    self.assertNotIn(
+                        sub["name"], seen,
+                        f"{sub['name']} 同时被 {seen.get(sub['name'])} 和 {name} 声明")
+                    seen[sub["name"]] = name
+
+    def test_subpackage_names_do_not_collide_with_recipes(self):
+        """子包不能和任何配方同名，否则「按名字找配方」会有两个答案。"""
+        recipes = set(self.specs())
+        for name in self.specs():
+            for sub in subpackages(load_spec(name)):
+                with self.subTest(subpackage=sub["name"]):
+                    self.assertNotIn(sub["name"], recipes)
+
+    def test_every_subpackage_resolves_back(self):
+        for name in self.specs():
+            for sub in subpackages(load_spec(name)):
+                with self.subTest(subpackage=sub["name"]):
+                    self.assertEqual(recipe_of(sub["name"]), name)
 
 
 if __name__ == "__main__":

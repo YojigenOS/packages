@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime
 import tomllib
+from functools import lru_cache
 
 from .common import PACKAGES_DIR, die, log
 
@@ -127,3 +128,70 @@ def latest_date(spec: dict, dep_specs: list[dict]) -> int:
     if origin != mine:
         log("时间戳", f"SOURCE_DATE_EPOCH 取自依赖 {origin}（它比本包的 date 更晚）")
     return best
+
+
+# ------------------------------------------------------------------ 子包
+
+def subpackages(spec: dict) -> list[dict]:
+    """配方声明的子包：同一份源码产出的额外包。
+
+    ```toml
+    [[subpackage]]
+    name        = "glibc-dev"
+    description = "glibc 开发文件：头文件、静态库"
+    files = ["usr/include/", "usr/lib/*.a"]
+    ```
+
+    拆分发生在**收集阶段**——构建脚本照旧把一切装进 $PKGDEST，这里只决定
+    收集时每个文件归谁。好处是改拆分规则不用重编：跑一次 collect 就够。
+    """
+    subs = spec.get("subpackage", [])
+    if not isinstance(subs, list):
+        die(f"{spec['_dir']}/spec.toml: [[subpackage]] 必须是数组")
+    for sub in subs:
+        where = f"{spec['_dir']}/spec.toml"
+        for key in ("name", "files"):
+            if key not in sub:
+                die(f"{where}: [[subpackage]] 缺少 {key}")
+        if not isinstance(sub["files"], list) or not sub["files"]:
+            die(f"{where}: 子包 {sub['name']} 的 files 不能为空")
+        if sub["name"] == spec["package"]["name"]:
+            die(f"{where}: 子包名不能和主包同名（{sub['name']}）")
+    return subs
+
+
+@lru_cache(maxsize=1)
+def _recipe_names() -> tuple[str, ...]:
+    return tuple(sorted(p.name for p in PACKAGES_DIR.iterdir()
+                        if (p / "spec.toml").is_file()))
+
+
+@lru_cache(maxsize=1)
+def _subpackage_owners() -> dict[str, str]:
+    owners: dict[str, str] = {}
+    for recipe in _recipe_names():
+        for sub in subpackages(load_spec(recipe)):
+            owners[sub["name"]] = recipe
+    return owners
+
+
+def recipe_of(name: str) -> str | None:
+    """把包名解析成**配方名**，不认识则返回 None。
+
+    普通包返回自己；子包返回产出它的那个配方（`glibc-dev` → `glibc`）。
+    子包没有自己的目录——它只存在于 output/ 里，所以任何「按名字找配方」
+    的地方都得先过这一层。
+    """
+    if (PACKAGES_DIR / name / "spec.toml").is_file():
+        return name
+    return _subpackage_owners().get(name)
+
+
+def is_subpackage(name: str) -> bool:
+    return ((PACKAGES_DIR / name / "spec.toml").is_file() is False
+            and name in _subpackage_owners())
+
+
+def package_rel(name: str, version: str, release: int) -> str:
+    """output 目录名，也是日志里显示的标识。"""
+    return f"{name}-{version}-{release}"

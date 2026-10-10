@@ -110,13 +110,21 @@ def run_in_container(srcrel: str, arch: str, spec: dict, epoch: int) -> None:
     else:
         strip_block = (
             "\n# strip：去掉调试信息\n"
-            'before=$(du -sk "$WORK/dest" | cut -f1)\n'
+            "#\n"
+            "# 计量用【文件真实字节数】而不是 du：du 数的是磁盘分配块，会随文件\n"
+            "# 系统和分配策略变化。glibc 那次报了「57256 KB → 68208 KB（省 -19%）」，\n"
+            "# 看着像 strip 把包撑大了 11 MB——实际上那棵树一直是 68 MB，是 du 在\n"
+            "# 容器文件系统上给出的两个数字对不上。对一个讲究可复现的构建来说，\n"
+            "# 用一个依赖文件系统的指标本来就不合适。\n"
+            "size_kb() { find \"$1\" -type f -printf '%s\\n' 2>/dev/null "
+            "| awk '{ s += $1 } END { printf \"%d\", s / 1024 }'; }\n"
+            'before=$(size_kb "$WORK/dest")\n'
             'find "$WORK/dest" -type f \\( -name "*.so" -o -name "*.so.*" -o -perm -u+x \\) \\\n'
             '     ! -name "*.a" ! -name "*.o" ! -name "*.la" -print0 2>/dev/null \\\n'
             '  | xargs -0 -r strip --strip-unneeded 2>/dev/null || true\n'
             'find "$WORK/dest" -type f -name "*.a" -print0 2>/dev/null \\\n'
             '  | xargs -0 -r strip --strip-debug 2>/dev/null || true\n'
-            'after=$(du -sk "$WORK/dest" | cut -f1)\n'
+            'after=$(size_kb "$WORK/dest")\n'
             'if [ "$before" -gt 0 ]; then pct=$(( (before-after)*100/before )); else pct=0; fi\n'
             'echo "[strip] ${before} KB → ${after} KB（省 ${pct}%）"\n'
         )

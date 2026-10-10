@@ -42,9 +42,46 @@ configure = [
   "--prefix=/usr",
   "--libdir=/usr/lib",
   "--with-headers=/usr/include",
-  "--disable-nls",
   "--disable-werror",
   # 最低支持的运行时内核版本。取 5.4（LTS）：比它旧的内核不保证可用，
   # 比它新的都能用。
   "--enable-kernel=5.4",
 ]
+
+# ---------------------------------------------------------------- 子包
+#
+# glibc 装出来的东西分成三类，用途完全不同：
+#
+#   运行时        libc.so.6、ld-linux、gconv/nss 模块、ldd 这类工具
+#   开发文件      头文件、静态库、链接脚本、locale 源数据       ≈ 27 MB
+#   生成的 locale  三个 locale 的数据                          ≈ 9 MB
+#
+# 一个容器基础镜像只要第一类。所以拆开——`base` 因此少 36 MB，而
+# `glibc-dev` 只在 `base-devel` 里，`glibc-locales` 只在要中文的系统里。
+#
+# **只搬真正占体积的东西。** /usr/lib 下还有一批不带版本号的 .so，它们是
+# 链接期的符号链接（libnss_db.so → libnss_db.so.2）——但里面混着两个真的
+# ELF（libmemusage.so、libpcprofile.so，LD_PRELOAD 用），而模式匹配没法
+# 区分「符号链接」和「真 ELF」。它们合计不到几 KB，留在主包里零代价，
+# 而写一条会误伤运行时的规则代价很大。
+
+[[subpackage]]
+name        = "glibc-dev"
+description = "glibc 开发文件：头文件、静态库、链接脚本、locale 源数据"
+section     = "devel"
+files = [
+  "usr/include/",
+  "usr/lib/*.a",
+  "usr/lib/*.o",
+  # 链接脚本（内容是 GROUP ( /usr/lib/libc.so.6 ... )），只有链接器看得懂
+  "usr/lib/libc.so",
+  "usr/lib/libm.so",
+  # locale 源数据：604 个文件、16 MB，只有 localedef 生成新 locale 时才用
+  "usr/share/i18n/",
+]
+
+[[subpackage]]
+name        = "glibc-locales"
+description = "生成的 locale 数据：zh_CN / zh_TW / en_US"
+section     = "localization"
+files = ["usr/lib/locale/"]
