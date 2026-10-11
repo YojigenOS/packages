@@ -166,6 +166,33 @@ class TestBuildScriptDefaults(unittest.TestCase):
         # 覆盖时用配方给的整套，不再附加默认值
         self.assertNotIn("--libdir=/usr/lib", s)
 
+    def test_构建脚本必须自带_set_e(self):
+        """run.sh 必须自己 set -e，不能指望调用方。
+
+        【为什么单独守着这一条】run.sh 是通过
+        `setpriv ... bash "$WORK/run.sh"` 起的【另一个 bash 进程】，
+        而 set -e 不会被 bash 子进程继承——写在外层 wrapper 上没用。
+
+        没有它，脚本末尾那两行
+
+            build
+            package
+
+        就变成 sequential 而不是 short-circuit：build 失败、package 照跑，
+        run.sh 的退出码取自 package，而 package 往往能"成功"（哪怕只装进去
+        一个文件）。外层看到 0，驱动打印「完成」。
+
+        实测踩过：内核 make 报 Error 2、两条 install 都 cannot stat，驱动
+        却说「[完成] linux-7.2.9-1（2 项）」——产物里只有一个 321 KB 的
+        config 文件，而它还会被当成依赖合并进后面的构建。
+        """
+        for kind in ("autotools", "meson", "cmake", "custom"):
+            with self.subTest(kind=kind):
+                s = self.script({"type": kind})
+                # 必须是脚本自己的第一件事，不能只在某个函数体内
+                self.assertTrue(s.startswith("set -e"),
+                                f"{kind}: 脚本开头没有 set -e")
+
 
     def test_autoreconf_必须声明_autotools(self):
         """用 autoreconf 的配方必须把 autoconf/automake/libtool 写进 build。

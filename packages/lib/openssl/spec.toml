@@ -1,0 +1,62 @@
+# openssl —— 密码学库与工具
+#
+# 【为什么是 3.5 而不是 4.0】
+#
+# 4.0.3 是最新的，但 openssl 自己的生命周期表上：
+#
+#     3.5 [LTS]  openssl-3.5.9   支持到 2030-04-08
+#     3.6        openssl-3.6.5   支持到 2026-11-01
+#
+# 两个都叫「稳定版」，支持期差三年半。对发行版来说这个差别比版本号大小重要得多
+# ——跟着 3.6 走意味着一个月后就得升到 4.x，而跟着 3.5 LTS 可以安稳几年。
+#
+# 【为什么现在才加它】
+#
+# 待办里早就写着「openssl 更根本：它不只是让 python3 能 https，还是整条信任
+# 链的基础」。它一直在路线图 5.8 上，而这次是内核逼出来的：
+#
+#     certs/extract-cert.c:21:10: fatal error: openssl/bio.h: No such file
+#
+# 内核内建的信任钥匙串（CONFIG_SYSTEM_TRUSTED_KEYRING）要编 extract-cert，
+# 那个小程序用 openssl 读 X.509 证书。它被 SYSTEM_DATA_VERIFICATION 一路
+# select 下来，而那条链关不干净——试过直接关 select 源头的四个选项，都不行。
+#
+# 与其为了绕开它去砍内核的完整性校验（那是真实的损失：固件验签、fs-verity、
+# dm-verity 都挂在这条链上），不如把它补上。一次投入，四处受益：
+#
+#     内核的 certs     不再缺头文件
+#     python3 的 ssl   https 能用了
+#     curl / git       后面要加的都会用它
+#     包签名           决策记录 0006 说 apk 要验签名，那是这个
+
+[package]
+name        = "openssl"
+version     = "3.5.9"
+release     = 1
+date        = 2026-10-11T13:30:00Z
+description = "密码学库与工具（libcrypto / libssl / openssl 命令）"
+section     = "libs"
+url         = "https://openssl-library.org/"
+license     = "Apache-2.0"
+
+[[source]]
+url    = "https://github.com/openssl/openssl/releases/download/openssl-$VERSION/openssl-$VERSION.tar.gz"
+urls = [
+  "https://www.openssl.org/source/openssl-$VERSION.tar.gz",
+  "https://mirrors.ustc.edu.cn/openssl/source/openssl-$VERSION.tar.gz",
+]
+sha256 = "603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a"
+
+[dependencies]
+runtime = ["glibc"]
+# perl 是构建时必需：openssl 的 Configure 和它生成的 Makefile 都是 perl 脚本，
+# 这不是可选的辅助工具，是构建系统本身。
+build   = ["make", "gcc", "perl"]
+
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["make", "gcc", "perl"]
+
+[build]
+# custom：openssl 有自己的 Configure（大写 C），不是 autotools
+type = "custom"

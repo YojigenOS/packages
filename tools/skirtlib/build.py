@@ -30,7 +30,29 @@ def make_build_script(spec: dict) -> str:
             f"（meson 和 cmake 本来就是离开源码树构建的）")
 
     # 脚本自带 cd：它会被降权后由 setpriv 单独执行，不能依赖调用方的 cwd
-    header = 'cd "$SRCDIR"\n'
+    #
+    # ★ set -eo pipefail 必须在这里，不能只写在外层 wrapper 上。
+    #
+    # 这是一个真出过事的坑：外层的 wrapper（bash -c）确实有 set -euo pipefail，
+    # 但 run.sh 是通过 `setpriv ... bash "$WORK/run.sh"` 起的【另一个 bash 进程】，
+    # 而 set -e 不会被 bash 子进程继承。
+    #
+    # 于是 run.sh 里没有 set -e，末尾那两行
+    #
+    #     build
+    #     package
+    #
+    # 就变成了 sequential 而不是 short-circuit：build 失败了 package 照跑，
+    # run.sh 的退出码是 package 的，而 package 往往能"成功"（哪怕只装进去
+    # 一个文件）。外层看到 0，驱动打印「完成」。
+    #
+    # 实测就是内核：make 报 Error 2、两条 install 都 cannot stat，然后驱动
+    # 说「[完成] linux-7.2.9-1（2 项）」——产物里只有一个 321 KB 的 config，
+    # 而那 321 KB 还会被当成依赖合并进后面的构建。
+    #
+    # 不带 -u：steps.sh 是别人写的脚本，引用一个没定义的变量应该只是空字符串，
+    # 不该让构建崩掉。外层用 -u 是因为外层是我们自己写的。
+    header = 'set -eo pipefail\ncd "$SRCDIR"\n'
     if oot:
         header += 'BUILDDIR="$SRCDIR/_build"\n'
 

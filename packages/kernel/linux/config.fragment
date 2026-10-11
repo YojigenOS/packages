@@ -44,6 +44,37 @@ CONFIG_SYSFS=y
 # ext4 是给后面的磁盘镜像留的，现在用不上，但装了不亏。
 CONFIG_EXT4_FS=y
 
+# ── 关于证书那一套（CONFIG_SYSTEM_TRUSTED_KEYRING）────────────────────
+#
+# 第三个实测撞出来的坑，但结论和前两个（flex、bc）不一样。
+#
+# 症状是缺 openssl：
+#
+#     certs/extract-cert.c:21:10: fatal error: openssl/bio.h: No such file
+#
+# 病因在 certs/Makefile 第一行：
+#
+#     obj-$(CONFIG_SYSTEM_TRUSTED_KEYRING) += system_keyring.o system_certificates.o
+#
+# 而 system_certificates.o 依赖 x509_certificate_list，后者依赖 extract-cert，
+# 那个小程序用 openssl 读 X.509 证书。
+#
+# 【试过在这里关掉它，关不掉】Kconfig 的 select 会覆盖配置文件里的显式值：
+#
+#     SYSTEM_DATA_VERIFICATION=y  ──select──▶  SYSTEM_TRUSTED_KEYRING=y
+#
+# 而 SYSTEM_DATA_VERIFICATION 自己被四个地方 select（dm-verity、ubifs、
+# fs-verity、module-sig 的签名子项），一个个关下去是打地鼠——实测关掉那四个
+# 之后 SYSTEM_TRUSTED_KEYRING 依然是 y。
+#
+# 【所以改成加 openssl 包】见 packages/lib/openssl/spec.toml。这是对的选择，
+# 理由不是「绕不过去」，而是本来就要它：python3 的 https、curl、git、以及
+# 决策记录 0006 说的包签名，全都挂在 openssl 上。为了绕开它去砍内核的完整性
+# 校验（固件验签、fs-verity、dm-verity 都在那条链上）才是亏的。
+#
+# 这个片段因此不再尝试关它——留着这几行注释，是为了让下一个人不用再查一遍
+# 「为什么这里没有关掉证书的选项」。
+
 # ── 瘦身 ─────────────────────────────────────────────────────────────
 # 不编模块：第一阶段全部内建，省掉「模块放哪、谁来加载」这一整类问题。
 CONFIG_MODULES=n
