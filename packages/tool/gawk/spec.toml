@@ -50,6 +50,31 @@ build   = ["make", "gettext", "gcc"]
 # 触发条件和我们一样：**gawk 建的时候没有 MPFR**（我们的 gawk --version 里确实
 # 没有 MPFR 那一段）。上游说 5.4.0 行为正确，5.4.2 还没发布，所以先停在 5.4.0。
 # 等 5.4.2 出来就升回去。
+#
+# 上游记录（GNU 用邮件列表，不是 GitHub issue）：
+#
+#   最初的报告 2026-07-15「Gawk 5.4.1 fails make check when built without MPFR」
+#     https://lists.gnu.org/archive/html/bug-gawk/2026-07/msg00026.html
+#
+#   完整诊断 2026-09-27「gawk 5.4.1: uninitialized array element reads as "0"
+#   after being tested」，报告人是 Frédéric MARIE-JOSEPH，里面附了两个最小
+#   复现、GCC 16.2 构建失败的情况、以及病因（awk.h 的 force_string_fmt()
+#   里 5.4.1 新加的那个条件）
+#     https://lists.gnu.org/archive/html/bug-gawk/2026-09/msg00086.html
+#
+#   维护者 Arnold Robbins 的回复与讨论 2026-09-28
+#     https://lists.gnu.org/archive/html/bug-gawk/2026-09/msg00096.html
+#
+# **补丁有了，但还没进任何发布版**——MacPorts 那边也撞了同一个，他们的
+# commit message 说得最清楚："A patch with a workaround is available
+# upstream, but it has not been incorporated into any release yet."
+#
+# 所以现在两条路：降回 5.4.0（我们选的），或者背着那个补丁。选前者是因为
+# 它符合「源码是 sha256 可校验的上游发布点」这条约定。
+#
+# 另外注意：「未初始化数组元素」是 gawk 反复出问题的一块——5.3.1 和 5.3.2
+# 的 NEWS 里都写着修这个，5.4.1 又往反方向碰坏了。以后见到同类症状先往
+# 这个方向想。
 [build]
 type      = "autotools"
 # ★ 显式 --without-mpfr：不然 gawk 会【看构建环境里恰好有没有 mpfr】来决定
