@@ -222,7 +222,15 @@ jobs:
   # 指标，不是门禁。
   selfhost:
     needs: build
-    if: ${{ inputs.selfhost }}
+    # ★ 不能用默认的「needs 成功才跑」。
+    #
+    # 矩阵里只要有【一条腿】失败，默认行为就是把整个 job 跳过——实测
+    # aarch64 的构建成功过三次，而自举验证一次都没跑过，因为 x86_64 那条
+    # 腿一直失败。**一半的成功被另一半的失败否掉了。**
+    #
+    # 改成 !cancelled()：谁成功就用谁。没成功的那条腿会在「拉取构建环境」
+    # 那一步失败，但那不影响另一条腿。
+    if: ${{ !cancelled() && inputs.selfhost }}
     strategy:
       fail-fast: false
       matrix:
