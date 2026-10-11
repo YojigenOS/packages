@@ -53,6 +53,14 @@ runtime = ["glibc"]
 build   = ["gcc", "make"]
 
 [build]
+# gcc 16 比 Debian 的 gcc 14 严格：strchr 的 const 传播规则变了，于是
+# libxcrypt 那两处 `char *hptr = strchr(...)` 变成 -Werror=discarded-qualifiers。
+# 上游代码该修，但我们先用一个最小范围的 cflag 放行——**只关这一条警告**，
+# 不是关掉 -Werror。
+#
+# 注意这个只有在【自举】时才暴露：第一遍用 Debian 的 gcc 编，一切正常；
+# 换成我们自己的 gcc 16 就死。和 gmp 那个 -std=gnu17 是同一类问题。
+cflags = ["-Wno-error=discarded-qualifiers"]
 type      = "autotools"
 # git 树里没有 configure，现场生成。
 configure = [
