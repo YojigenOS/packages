@@ -16,7 +16,7 @@ def spec_path(name: str) -> Path | None:
     **配方目录按 kind 分层**（recipes/lib/glibc/spec.toml），所以不能直接
     `RECIPES_DIR / name`。这里也认平铺的老结构——迁移期间两种都得能读。
 
-    kind 的判据和分类见 docs/配方约定.md「包分类」一节。
+    kind 的判据和分类见 docs/约定/配方约定.md「包分类」一节。
     """
     flat = RECIPES_DIR / name / "spec.toml"
     if flat.is_file():

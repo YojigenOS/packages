@@ -43,7 +43,7 @@ license     = "PSF-2.0"
 
 [[source]]
 # 主源 python.org（它自己托管的正式发布包，字节稳定）。
-# 备选是它在新加坡的镜像。见 docs/配方约定.md。
+# 备选是它在新加坡的镜像。见 docs/约定/配方约定.md。
 url    = "https://www.python.org/ftp/python/$VERSION/Python-$VERSION.tar.xz"
 urls = ["https://mirrors.aliyun.com/python-release/source/Python-$VERSION.tar.xz"]
 sha256 = "c2215904f02b175596dc49351585104f4bc20341e1c47378b26a2c274360ce73"

@@ -28,7 +28,7 @@ build   = ["make", "gcc", "autoconf", "automake", "libtool", "texinfo"]
 type       = "autotools"
 autoreconf = true
 # git 树里没有 configure，现场生成
-# git 树里没有 configure，现场生成（见 docs/配方约定.md）
+# git 树里没有 configure，现场生成（见 docs/约定/配方约定.md）
 configure = [
   "--prefix=/usr",
   "--disable-static",

@@ -2,7 +2,7 @@
 #
 # ccache 要它（4.x 起，用哈希做缓存键）。它没有 release 附件，只有 GitHub
 # 按需生成的归档——所以这是**第一个用 commit 归档的配方**，也是
-# docs/配方约定.md 里那条规则的实际例子：
+# docs/约定/配方约定.md 里那条规则的实际例子：
 #
 #     项目是纯 Makefile → 原始 git 树就是完整的 → commit 归档可用 ✓
 #     项目是 autotools → 缺 configure      → 必须用发行包     ✗

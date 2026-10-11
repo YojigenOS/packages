@@ -23,7 +23,7 @@ license     = "GPL-3.0-or-later"
 [[source]]
 url    = "https://ftp.gnu.org/gnu/make/make-$VERSION.tar.gz"
 # 备用源：同一份字节的镜像（sha256 会校验，所以换源不降低信任）。
-# 顺序按实测速度。选源标准和完整说明见 docs/配方约定.md「备用源」一节。
+# 顺序按实测速度。选源标准和完整说明见 docs/约定/配方约定.md「备用源」一节。
 urls = [
   "https://mirrors.ustc.edu.cn/gnu/make/make-$VERSION.tar.gz",
   "https://mirror.nju.edu.cn/gnu/make/make-$VERSION.tar.gz",

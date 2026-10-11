@@ -158,7 +158,7 @@ def cmd_bootstrap(args) -> None:
     **顺序是算出来的，不是写着的。** 起因是一个担心：重建顺序只存在于某条
     执行过的命令里。现在它在 order.py 里，从配方的依赖关系推导。
 
-    这就是 docs/自举.md 说的那条路：换掉 SKIRT_BUILDENV 指向自己的产物，
+    这就是 docs/指南/自举.md 说的那条路：换掉 SKIRT_BUILDENV 指向自己的产物，
     跑同一条命令，就是一次自举。
     """
     import subprocess

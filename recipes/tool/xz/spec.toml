@@ -31,6 +31,6 @@ build   = ["make", "gettext", "gcc", "autoconf", "automake", "libtool"]
 
 [build]
 type      = "autotools"
-# git 树里没有 configure，现场生成（见 docs/配方约定.md）
+# git 树里没有 configure，现场生成（见 docs/约定/配方约定.md）
 autoreconf = true
 configure = ["--prefix=/usr"]

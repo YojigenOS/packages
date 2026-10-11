@@ -70,7 +70,7 @@ packages = [
   "libffi",     # python3 的 ctypes
   "libxcrypt",  # perl 链接 libcrypt（glibc 2.28 起不再提供）
 
-  # ---- 从 git 树构建 autotools 项目要的（见 docs/配方约定.md）----
+  # ---- 从 git 树构建 autotools 项目要的（见 docs/约定/配方约定.md）----
   # git 树里没有 configure，得现场 autoreconf。而 autoconf 是 Perl 程序，
   # automake 调用 autoconf，libtool 靠 m4 宏——所以是这四个一起。
   #

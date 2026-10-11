@@ -21,7 +21,7 @@ license     = "BSD-3-Clause"
 
 [[source]]
 # cmake.org 和 GitHub 两个正式发布包，内容一样。主源在海外（CI 更快），
-# 备选在国内不通时兜底。见 docs/配方约定.md。
+# 备选在国内不通时兜底。见 docs/约定/配方约定.md。
 url    = "https://cmake.org/files/v4.4/cmake-$VERSION.tar.gz"
 urls = [
   "https://github.com/Kitware/CMake/releases/download/v$VERSION/cmake-$VERSION.tar.gz",
