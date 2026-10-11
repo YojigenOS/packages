@@ -1,0 +1,47 @@
+# bc —— 任意精度计算器语言
+#
+# 加它是因为内核：构建过程中要算 include/generated/timeconst.h，
+# 那条规则用的是 kernel/time/timeconst.bc。实测原话：
+#
+#     /bin/sh: line 1: bc: command not found
+#     make[2]: *** [Kbuild:24: include/generated/timeconst.h] Error 127
+#
+# 所以内核构建的必需品是【两个】：flex（生成 kconfig 的词法分析器）
+# 和 bc（算 timeconst）。少一个都停在 prepare 阶段。
+#
+# 【顺带一提】bc 自己构建时要 flex 和 bison——正好是内核也要的那一对。
+# 所以依赖链是：flex → bc → linux。
+
+[package]
+name        = "bc"
+version     = "1.08.2"
+release     = 1
+date        = 2026-10-11T12:45:00Z
+description = "任意精度计算器语言"
+section     = "utils"
+url         = "https://www.gnu.org/software/bc/"
+license     = "GPL-3.0-or-later"
+
+[[source]]
+url    = "https://ftp.gnu.org/gnu/bc/bc-$VERSION.tar.gz"
+urls = [
+  "https://mirrors.ustc.edu.cn/gnu/bc/bc-$VERSION.tar.gz",
+  "https://mirror.nju.edu.cn/gnu/bc/bc-$VERSION.tar.gz",
+  "https://mirrors.tuna.tsinghua.edu.cn/gnu/bc/bc-$VERSION.tar.gz",
+]
+sha256 = "ae470fec429775653e042015edc928d07c8c3b2fc59765172a330d3d87785f86"
+
+[dependencies]
+runtime = ["glibc"]
+# flex 和 bison 是它自己解析器的需要。texinfo 是 man/info 文档。
+build   = ["make", "gcc", "flex", "bison", "texinfo"]
+
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["make", "gcc", "flex", "bison", "texinfo"]
+
+[build]
+type      = "autotools"
+# --without-readline：我们没有 readline 包，关掉它就少一层依赖。
+# 代价是 bc 自己不提供行编辑和历史——对构建用途无所谓。
+configure = ["--prefix=/usr", "--without-readline"]

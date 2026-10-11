@@ -76,7 +76,19 @@ class TestKindMatchesArtifacts(unittest.TestCase):
         from skirtlib.common import OUTPUT_DIR
         cls.payloads = {}
         for name in spec_mod.all_recipe_names():
-            hits = list(OUTPUT_DIR.glob(f"*/{name}-*/payload"))
+            # 【为什么要多滤一道】产物目录叫 <包名>-<版本>-<发行号>，而
+            # glob 的 `*` 会跨越 `-`：包名 `linux` 的 f"*/linux-*/payload"
+            # 会把 `linux-headers-7.2.9-1/payload` 也匹配上。
+            #
+            # 于是 linux 会被拿 linux-headers 的产物去检查，报一条「kernel 但
+            # boot/ 下没有 vmlinuz」——错的是检查对象，不是包。
+            #
+            # 判据：包名后面紧跟的那个字符必须是数字（版本号总是数字开头）。
+            # 只要有一个包名是另一个的前缀就会踩这个坑，而 linux/linux-headers
+            # 正好是这一对。
+            hits = [p for p in OUTPUT_DIR.glob(f"*/{name}-*/payload")
+                    if p.parent.name[len(name)] == "-"
+                    and p.parent.name[len(name) + 1:len(name) + 2].isdigit()]
             if hits:
                 cls.payloads[name] = hits[0]
 
@@ -116,6 +128,14 @@ class TestKindMatchesArtifacts(unittest.TestCase):
                 # linux-headers 就是纯头文件包：一个可执行文件都没有，但没它
                 # 你构建不了任何东西。
                 bad.append(f"{name}: devel 但既没有可执行文件，也没有头文件")
+            elif kind == "kernel" and not (payload / "boot" / "vmlinuz").exists():
+                # 内核单独一类，因为它的产物形态是独有的：既不是库，也不是
+                # usr/bin 下的命令，也没有头文件（那是 linux-headers 的事）。
+                # 它是 /boot 底下一个能被引导器直接载入的镜像。
+                #
+                # 这条比 data 那条有意义：data 只要求「没有 .so」，一个空目录
+                # 也能过；这条要求产物里真的有能启动的东西。
+                bad.append(f"{name}: kernel 但 boot/ 下没有 vmlinuz")
             elif kind == "?":
                 bad.append(f"{name}: 不在任何分类目录里")
         self.assertGreater(checked, 20, f"只查了 {checked} 个，太少了")

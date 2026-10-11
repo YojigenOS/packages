@@ -1,0 +1,42 @@
+# flex —— 词法分析器生成器
+#
+# 加它是因为内核：Linux 的 tarball 【不】带生成好的解析器，`make defconfig`
+# 就要先把 scripts/kconfig/lexer.lex.c 用 flex 生成出来。实测原话：
+#
+#     LEX     scripts/kconfig/lexer.lex.c
+#     /bin/sh: line 1: flex: command not found
+#     make[2]: *** [scripts/Makefile.host:9: scripts/kconfig/lexer.lex.c] Error 127
+#
+# bison 我们本来就有（3.8.2），缺的是 flex。这一对是搭配的：bison 生成语法
+# 分析器，flex 生成词法分析器，内核两样都要。
+#
+# 【为什么用 GitHub 的发布附件而不是 git 源】发布附件里有 configure，
+# 而 git 树里没有——后者要先跑 autoreconf，多一层不确定性。附件还带 .sig。
+
+[package]
+name        = "flex"
+version     = "2.6.4"
+release     = 1
+date        = 2026-10-11T12:00:00Z
+description = "词法分析器生成器"
+section     = "devel"
+url         = "https://github.com/westes/flex"
+license     = "BSD-2-Clause"
+
+[[source]]
+url    = "https://github.com/westes/flex/releases/download/v$VERSION/flex-$VERSION.tar.gz"
+sha256 = "e87aae032bf07c26f85ac0ed3250998c37621d95f8bd748b31f15b33c45ee995"
+
+[dependencies]
+# ★ m4 是【运行时】依赖，不只是构建时：flex 靠 m4 处理它的 skeleton 文件，
+#   所以用 flex 生成的每一步都离不开 m4。
+runtime = ["glibc", "m4"]
+build   = ["make", "gcc", "m4", "bison"]
+
+[dependencies.x86_64]
+runtime = ["glibc", "m4"]
+build   = ["make", "gcc", "m4", "bison"]
+
+[build]
+type      = "autotools"
+configure = ["--prefix=/usr", "--disable-static"]

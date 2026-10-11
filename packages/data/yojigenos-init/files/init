@@ -1,0 +1,46 @@
+#!/bin/sh
+# YojigenOS 的 init
+#
+# 这是内核把控制权交给用户空间之后跑的【第一个】程序。保持它小：
+# 挂上伪文件系统、说一句话、起一个 shell。没有服务管理、没有依赖排序、
+# 没有日志系统——那些等真的需要了再加（决策记录 0007 说「没有真实需求
+# 之前不写代码」）。
+#
+# 【为什么先往串口打印】开机失败时看不到屏幕，只能看串口。所以第一件事
+# 就是打个招呼——如果连这行都看不到，问题在内核而不是在这里。
+
+# 没有 PATH 的话连 mount 都找不到。
+export PATH=/usr/bin:/usr/sbin:/bin:/sbin
+export HOME=/root
+
+# --- 伪文件系统 ---------------------------------------------------------
+# devtmpfs 由内核自动挂载（CONFIG_DEVTMPFS_MOUNT），这里补挂其余的。
+mount -t proc     proc     /proc    2>/dev/null
+mount -t sysfs    sysfs    /sys     2>/dev/null
+mount -t devpts   devpts   /dev/pts 2>/dev/null
+mount -t tmpfs    tmpfs    /tmp     2>/dev/null
+mount -t tmpfs    tmpfs    /run     2>/dev/null
+
+# --- 问候 ---------------------------------------------------------------
+echo
+echo "  欢迎来到 YojigenOS"
+echo
+
+# 把「这台机器到底是什么」摊开说——出问题时这几行就是线索。
+if [ -r /etc/os-release ]; then
+    . /etc/os-release
+    echo "    ${PRETTY_NAME:-YojigenOS}"
+fi
+echo "    内核      $(uname -r)"
+echo "    架构      $(uname -m)"
+echo "    日期      $(date -u '+%Y-%m-%d %H:%M UTC')"
+echo
+echo "    这是从源码一步步建出来的系统，不是任何发行版的魔改。"
+echo
+
+# --- 起 shell -----------------------------------------------------------
+# 开机就进 root shell。现在还没有用户体系（没有 shadow/pam），
+# 那些属于「能装软件」那一层，不在「能开机」里。
+echo "  进入 shell。输入 exit 关机。"
+echo
+exec /bin/sh

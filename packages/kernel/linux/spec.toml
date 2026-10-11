@@ -1,0 +1,61 @@
+# linux —— 可启动的内核镜像
+#
+# 【内核在这条路上出现两次】
+#
+#   最早：linux-headers —— glibc 编译时需要知道系统调用长什么样
+#   最晚：本包 —— 一个能启动的内核镜像
+#
+# 两份配方用的是【同一份源码 tarball、同一个 sha256】。这不是巧合：头文件和
+# 内核必须来自同一棵树，否则系统调用号会对不上。
+#
+# 【它不进自举链】
+#
+# 决策记录 0011 说了为什么：内核是叶子——没有任何包依赖它，它也不参与
+# 「用什么建什么」那个闭环。所以它可以单独建、单独升级，不必重跑 42 个包。
+# 迭代内核配置一轮的成本是编一次内核，不是重建整个系统。
+#
+# 【加它是为了什么】
+#
+# 决策记录 0007 把「风味」和「交付形式」分开了：容器版不需要内核（宿主提供），
+# 可启动版必须有。本包就是「可启动」那一格的入场券。
+
+[package]
+name        = "linux"
+version     = "7.2.9"
+release     = 1
+date        = 2026-10-11T13:00:00Z
+description = "Linux 内核（可启动镜像）"
+section     = "core"
+url         = "https://www.kernel.org/"
+license     = "GPL-2.0-only"
+
+[[source]]
+# 和 linux-headers 同一份 tarball，所以 sha256 也相同。
+url    = "https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-$VERSION.tar.xz"
+sha256 = "b4c5dfbe51a364a6c7f03869200f88c8e1f77403539005f14b7fc6bc91b8d8ba"
+
+[dependencies]
+runtime = []
+# 下面这几个都是【实测撞出来的】，不是猜的：
+#
+#   flex    make defconfig 就要用它生成 scripts/kconfig/lexer.lex.c。
+#           内核 tarball 不带生成好的解析器。原话：
+#               LEX scripts/kconfig/lexer.lex.c
+#               /bin/sh: line 1: flex: command not found
+#
+#   bc      算 include/generated/timeconst.h（kernel/time/timeconst.bc）。
+#           原话：
+#               /bin/sh: line 1: bc: command not found
+#
+#   bison   和 flex 搭配，生成语法分析器
+#   rsync   内核的 headers_install 用它（linux-headers 已经证明过）
+#   perl    内核的若干脚本用它
+build = ["make", "gcc", "rsync", "flex", "bison", "bc", "perl", "bash", "coreutils"]
+
+[dependencies.x86_64]
+runtime = []
+build = ["make", "gcc", "rsync", "flex", "bison", "bc", "perl", "bash", "coreutils"]
+
+[build]
+# custom：内核有自己的构建体系（Kbuild），套不进 autotools 那套映射
+type = "custom"

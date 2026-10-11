@@ -1,0 +1,33 @@
+# yojigenos-init —— 开机后跑的第一个用户空间程序
+#
+# 它是决策记录 0007 里说的「可启动产物」的必要条件之一：光有内核不够，
+# 内核得有个东西去 exec。这个包提供那个东西（/init）。
+#
+# 放进 data/ 而不是 tool/：它不是给人用的命令，是系统启动时的一个约定——
+# 内核找 /init，找到就执行。产物里没有 usr/bin 下的可执行文件，所以
+# tool 那种分类的检查会判它不合格，而 data 正合适（数据包不该有 .so）。
+
+[package]
+name        = "yojigenos-init"
+version     = "1.0"
+release     = 1
+date        = 2026-10-11T12:30:00Z
+description = "开机后运行的第一个程序（/init）"
+section     = "core"
+url         = "https://github.com/YojigenOS/packages"
+license     = "GPL-3.0-or-later"
+
+# 没有 source：这个脚本是我们自己写的，不是从上游取的。
+# files/ 目录里的东西由 steps.sh 装进去。
+
+[dependencies]
+# 它自己要用 mount、date、uname——分别来自 util-linux 和 coreutils。
+runtime = ["glibc", "bash", "coreutils", "util-linux"]
+build   = []
+
+[dependencies.x86_64]
+runtime = ["glibc", "bash", "coreutils", "util-linux"]
+build   = []
+
+[build]
+type = "custom"
