@@ -12,7 +12,7 @@ from .spec import direct_deps, load_spec, recipe_of, subpackages
 
 from .deps import build_sysroot, dep_closure, dep_payload, load_host_provides, source_date_epoch
 
-from .source import extract, fetch
+from .source import fetch, srcrel_of
 
 from .build import make_build_script, run_in_container
 
@@ -82,11 +82,21 @@ def cmd_build(args) -> None:
     # 源码。没有 [[source]] 的包（例如 filesystem）不下载任何东西——
     # 它构建的是「系统的形状」而不是软件，所以给它一个空的源码树。
     print()
+    (BUILD_DIR / "src").mkdir(parents=True, exist_ok=True)
     if spec.get("source"):
         archive = fetch(spec)
-        srcrel = extract(archive, BUILD_DIR / "src")
+        # ★ 不在宿主上解压。宿主是 macOS，APFS 默认大小写不敏感，而内核源码
+        #   里有 13 组只差大小写的文件（xt_MARK.h / xt_mark.h 之类）——在宿主
+        #   上解开就会互相覆盖，实测 13 组全变成 0 组，然后构建在 47 分钟后
+        #   才失败，而且报的是「找不到 xt_mark.h」这种指不到根因的错误。
+        #
+        #   所以这里只做两件不涉及文件系统语义的事：
+        #     1. 读 tar 里的名字，算出源码根目录叫什么——名字只是字符串
+        #     2. 把 tar 原样递进容器——单个文件，没有大小写问题
+        #   解压由容器做，那里是 Linux 原生文件系统。
+        srcrel = srcrel_of(archive)
+        shutil.copy2(archive, BUILD_DIR / "src.tar")
     else:
-        (BUILD_DIR / "src").mkdir(parents=True, exist_ok=True)
         srcrel = "."
         log("源码", "无（纯元数据包）")
 

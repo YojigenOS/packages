@@ -204,8 +204,46 @@ def fetch(spec: dict) -> Path:
         + "\n       ".join(errors))
 
 
+def srcrel_of(archive: Path) -> str:
+    """源码根目录的相对名（'.' 表示解压出来就是根）。
+
+    ★ **只读 tar 里的名字，不落盘。**
+
+    这是踩出来的：原先直接在宿主上解压，而 macOS 的 APFS 默认大小写不敏感。
+    实测内核源码里有 13 组只差大小写的文件——
+
+        include/uapi/linux/netfilter/xt_MARK.h  /  xt_mark.h
+        include/uapi/linux/netfilter/xt_DSCP.h  /  xt_dscp.h
+        net/netfilter/xt_TCPMSS.c               /  xt_tcpmss.c
+        …（共 13 组）
+
+    在宿主上解压之后，每一组都只剩一个，13 组变 0 组。而它们不是重复文件：
+    `MARK` 是给包打标记、`mark` 是匹配那个标记——是大写那个把小写那个覆盖了，
+    于是 xt_mark.c 找不到它 include 的 xt_mark.h，构建在 47 分钟后失败。
+
+    读成员名不会有这个问题：名字只是字符串，物化成文件树才有文件系统语义。
+
+    解压本身挪进容器（见 build.py 里 wrapper 的注释），那里是 Linux 原生
+    文件系统，大小写敏感。
+    """
+    with tarfile.open(archive) as tf:
+        names = tf.getnames()
+    tops = {n.split("/")[0] for n in names if n and not n.startswith("/")}
+    if len(tops) == 1:
+        top = tops.pop()
+        # 成员名里有 "top/..." 才说明它是个目录（而不是单个文件）
+        if any(n.startswith(top + "/") for n in names):
+            return top
+    return "."
+
+
 def extract(archive: Path, into: Path) -> str:
-    """解压到 into，返回源码根目录相对名（'.' 表示就是 into 本身）。"""
+    """解压到 into，返回源码根目录相对名（'.' 表示就是 into 本身）。
+
+    ⚠️ **不要在宿主上调用它**——理由见 srcrel_of 的注释。
+    留着是为了给测试和不介意大小写的场合用；真正的构建路径走
+    srcrel_of + 容器内解压。
+    """
     rmtree_force(into)
     into.mkdir(parents=True)
     log("解压", archive.name)

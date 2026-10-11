@@ -322,8 +322,22 @@ def run_in_container(srcrel: str, arch: str, spec: dict, epoch: int) -> None:
         "# 产物里出现的路径看起来正常。\n"
         "WORK=/build\n"
         'rm -rf "$WORK"\n'
-        'mkdir -p "$WORK/dest"\n'
-        'cp -a /in/src "$WORK/src"\n'
+        'mkdir -p "$WORK/dest" "$WORK/src"\n'
+        # ★ 源码在这里解压，不在宿主上。
+        #
+        # 宿主是 macOS，APFS 默认大小写不敏感。内核源码里有 13 组只差大小写的
+        # 文件（xt_MARK.h / xt_mark.h、xt_TCPMSS.c / xt_tcpmss.c …），在宿主上
+        # 解开就会互相覆盖——实测 13 组全变成 0 组，然后构建在 47 分钟后才失败，
+        # 报的是「找不到 xt_mark.h」这种指不到根因的错误。
+        #
+        # 容器里是 Linux 原生文件系统，大小写敏感，两个文件能共存。
+        # 宿主只读 tar 里的名字算源码根目录叫什么（见 source.py 的 srcrel_of），
+        # 那是字符串操作，不涉及文件系统语义。
+        #
+        # 这也正是决策记录 0002 的意图：「整个构建过程发生在容器内的 Linux 原生
+        # 文件系统里，只把源码送进去、把产物取出来」。源码以前是在宿主上就解开
+        # 了，等于「送进去」之前已经被破坏过一次。
+        '[ -f /in/src.tar ] && tar -xf /in/src.tar -C "$WORK/src"\n'
         '[ -f /in/steps.sh ] && cp /in/steps.sh "$WORK/steps.sh"\n'
         '[ -d /in/pkg ] && cp -a /in/pkg "$WORK/pkg"\n'
         'cp /in/run.sh "$WORK/run.sh"\n'
