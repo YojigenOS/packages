@@ -30,3 +30,16 @@ build   = ["zlib", "gcc", "make"]
 [build]
 type      = "autotools"
 configure = ["--prefix=/usr", "--disable-static"]
+
+# ---------------------------------------------------------------- 备注
+#
+# 这个包一度被当成"并行竞态"，其实不是。真实原因是 gawk 5.4.1 的一个回归：
+# 一个读过但从未赋值的数组元素，参与过比较或判断之后，再当字符串用会变成
+# "0" 而不是空串。scripts/options.awk 正是那么用 requires[] 的，于是生成的
+# pnglibconf.h 里每一项都成了 undef，最后报出来的是：
+#
+#     contrib/libtests/pnggetset.c:53: error: implicit declaration of
+#         function 'setjmp'
+#
+# **完全指不到真正的原因。** 修在 gawk 那边（见 packages/tool/gawk/spec.toml），
+# 这个包不需要任何特殊处理。
