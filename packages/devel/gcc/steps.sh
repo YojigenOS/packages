@@ -95,4 +95,18 @@ package() {
   fi
 
   make DESTDIR="$PKGDEST" install
+
+  # ★ 补一个 cc。
+  #
+  # POSIX 规定 C 编译器叫 cc，很多项目的 Makefile 直接用它的默认值
+  # （xxhash 就是）。**上游 gcc 自己不建这个链接**——Debian 用
+  # update-alternatives 补，别的发行版也各自补。
+  #
+  # 这个只有在【自举】时才暴露：用 Debian 构建环境时 cc 是 Debian 的 gcc
+  # 提供的，一切正常；换成我们自己的 base-devel 之后立刻死：
+  #
+  #     ccache: error: Could not find compiler "cc" in PATH
+  #
+  # 注意 gcc 自己【会】建 c++，所以只缺 cc——这也是它一直没被发现的原因。
+  ln -s gcc "$PKGDEST/usr/bin/cc"
 }
