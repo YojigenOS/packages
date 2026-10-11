@@ -64,25 +64,35 @@ jobs:
           # 在哪台 runner 上建就是哪个架构的。
           docker build -t yojigenos/buildenv:x86_64 bootstrap
 
-      # ★ 构建环境【建完就推】，不等引导。
+      # 构建环境【不发布】。
       #
-      # 两个理由：
+      # 它只是 `FROM debian:stable-slim` + 一批 apt 包——**它不是一个
+      # YojigenOS 的产物，是借来的起点。** 发布它等于发布一份 Debian 的
+      # 衍生品，而且会让「我们发布了什么」这条线变模糊。
       #
-      # 1. 它是「从零开始」的起点，本身就有价值——任何人拉下它跑一次
-      #    bootstrap 就能重建整个系统。它不该被后面某一步的失败拖着。
-      # 2. 实测：x86_64 的引导一直失败，于是构建环境的推送也一直被跳过，
-      #    本地想复现都拿不到 amd64 的构建环境。**一个已经成功的东西，
-      #    不该因为下游失败而拿不到。**
-      - name: 推送构建环境
-        env:
-          DOCKER_HUB_TOKEN: ${{ secrets.DOCKER_HUB_TOKEN }}
+      # 原来这里是 `docker push yojigenos/buildenv:x86_64`，理由是"任何人
+      # 拉下它跑一次就能重建整个系统"。但 Docker Hub 上两个镜像的拉取数
+      # 几乎完全一样（899 / 890），说明那些拉取是自动化而不是人——而真要
+      # 重建的话，`docker build` 一下就是五分钟，Dockerfile 就在 git 里。
+      #
+      # 【也不钉 Debian 的 digest】。理论上"钉住才能复现"，但对这个项目
+      # 不成立：**Debian 的版本只影响第一轮**，而第一轮本来就不是固定点
+      # （那一轮里 gcc/binutils 是 Debian 的工具编出来的，固定点要看第二、
+      # 第三轮）。真正的判据是"换个 Debian 版本，产物应该一样"——钉住它
+      # 反而会掩盖问题。
+      #
+      # 所以这一步改成【记录身份】：把这一轮用的 Debian 版本和 Dockerfile
+      # 的哈希打进日志。排查"为什么 CI 上能过、本地不能"时，要的正是这个。
+      - name: 构建环境（不发布，只记录身份）
         run: |
-          if [ -z "$DOCKER_HUB_TOKEN" ]; then
-            echo "::error::secret DOCKER_HUB_TOKEN 是空的"
-            exit 1
-          fi
-          echo "$DOCKER_HUB_TOKEN" | docker login -u yojigenos --password-stdin
-          docker push "yojigenos/buildenv:x86_64"
+          echo "=== 这一轮的构建环境身份 ==="
+          docker run --rm yojigenos/buildenv:x86_64 sh -c \
+            'cat /etc/os-release | grep -E "^(VERSION|VERSION_CODENAME)="; echo "  debian_version: $(cat /etc/debian_version)"' \
+            | sed 's/^/  /'
+          echo "  Dockerfile sha256: $(sha256sum bootstrap/Dockerfile | cut -c1-16)…"
+          echo "  镜像 ID: $(docker image inspect yojigenos/buildenv:x86_64 --format '{{.Id}}' | cut -c1-24)…"
+          echo
+          echo "  （不推送，也不钉 Debian 的 digest——原因见这个文件里的注释）"
 
       # 【这一步是整条流水线的核心】
       #
