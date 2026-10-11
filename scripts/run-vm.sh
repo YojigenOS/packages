@@ -122,7 +122,7 @@ echo "    内核: $KERNEL"
 
 # ---------------------------------------------------------------- 启动
 echo
-echo "  启动 YojigenOS（$ARCH）—— 退出 QEMU 按 Ctrl-A 然后 X"
+echo "  启动 YojigenOS（${ARCH}）—— 退出 QEMU 按 Ctrl-A 然后 X"
 echo
 exec "$QEMU" \
     -machine "$MACHINE" \

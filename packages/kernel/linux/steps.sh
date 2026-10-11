@@ -45,7 +45,7 @@ package() {
 
     # 这两样是诊断用的，出问题时它们能回答"跑的是哪个内核、符号在哪"。
     #
-    # ★ 用 $PKGVER 而不是 $VERSION。驱动传进来的是 PKGVER（见 build.py 里的
+    # ★ 用 $PKGVER 而不是 ${VERSION}。驱动传进来的是 PKGVER（见 build.py 里的
     #   `-e PKGVER=...`），$VERSION 从来不存在——第一次构建时它展开成空串，
     #   产物里就是 `config-` 和 `System.map-` 这种没版本号的名字。
     #   这件事当时没被发现，因为驱动那时还没让构建失败真的失败（见 build.py
