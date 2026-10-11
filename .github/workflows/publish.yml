@@ -72,6 +72,26 @@ jobs:
           # 在哪台 runner 上建就是哪个架构的。
           docker build -t yojigenos/buildenv:${{ matrix.arch }} tools/buildenv
 
+      # ★ 构建环境【建完就推】，不等引导。
+      #
+      # 两个理由：
+      #
+      # 1. 它是「从零开始」的起点，本身就有价值——任何人拉下它跑一次
+      #    bootstrap 就能重建整个系统。它不该被后面某一步的失败拖着。
+      # 2. 实测：x86_64 的引导一直失败，于是构建环境的推送也一直被跳过，
+      #    本地想复现都拿不到 amd64 的构建环境。**一个已经成功的东西，
+      #    不该因为下游失败而拿不到。**
+      - name: 推送构建环境
+        env:
+          DOCKER_HUB_TOKEN: ${{ secrets.DOCKER_HUB_TOKEN }}
+        run: |
+          if [ -z "$DOCKER_HUB_TOKEN" ]; then
+            echo "::error::secret DOCKER_HUB_TOKEN 是空的"
+            exit 1
+          fi
+          echo "$DOCKER_HUB_TOKEN" | docker login -u yojigenos --password-stdin
+          docker push "yojigenos/buildenv:${{ matrix.arch }}"
+
       # 【这一步是整条流水线的核心】
       #
       # 以前这里写的是 `skirt rootfs` 加一串硬编码的包名 ✗ ——它假设产物

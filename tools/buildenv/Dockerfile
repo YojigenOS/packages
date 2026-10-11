@@ -8,6 +8,27 @@ FROM debian:stable-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+# Debian 的镜像站。
+#
+# 默认是官方的 deb.debian.org，CI 上用它。但在国内它经常连不上——实测
+# amd64 容器里报 "Connection failed [IP: 11.35.251.233 80]"，那是 DNS 污染
+# 给出的假地址。本地要建别的架构的构建环境时（走 Rosetta）就得换一个。
+#
+#     docker build --build-arg DEBIAN_MIRROR=http://mirrors.ustc.edu.cn \
+#                  -t yojigenos/buildenv:x86_64 tools/buildenv
+#
+# **用 http 不用 https**：debian:stable-slim 里还没有 ca-certificates，
+# 所以 https 会因为证书验证失败而连不上（实测 "SSL connection failed"）。
+# apt 靠签名而不是靠 TLS 保证完整性，http 是安全的。
+#
+# 换来换去不影响产物：装的是同一批包，只是从哪儿拿的区别。
+ARG DEBIAN_MIRROR=http://deb.debian.org
+RUN if [ "$DEBIAN_MIRROR" != "http://deb.debian.org" ]; then \
+        sed -i "s|http://deb.debian.org|$DEBIAN_MIRROR|g" \
+            /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
+        sed -i "s|http://deb.debian.org|$DEBIAN_MIRROR|g" /etc/apt/sources.list; \
+    fi
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential \
         pkg-config \
