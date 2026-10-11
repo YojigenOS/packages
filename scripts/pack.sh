@@ -62,6 +62,7 @@ done
 OUT="$PWD/var/pkgs/$ARCH"
 mkdir -p "$OUT"
 WORK=$(mktemp -d)
+mkdir -p "$WORK/pack"   # inner.sh 放这里面——挂目录比挂单文件可靠
 trap 'rm -rf "$WORK"' EXIT
 
 # 找产物目录。名字后面必须跟 -数字，否则 hello 会匹配到 hello-world。
@@ -87,7 +88,7 @@ for d in $DIRS; do
     # meta.json → 内层脚本。生成脚本而不是拼命令行，是为了绕开引号：
     # 描述里有中文、空格、逗号，直接塞进 sh -c 会被吃掉。
     # 第三个参数是【容器里】的输出目录（挂载点是 /out），不是宿主路径。
-    python3 - "$d" "$WORK/inner.sh" /out <<'PY'
+    python3 - "$d" "$WORK/pack/inner.sh" /out <<'PY'
 import json, pathlib, shlex, sys
 d, out_script, out_dir = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2]), sys.argv[3]
 m = json.loads((d / "meta.json").read_text())
@@ -95,6 +96,24 @@ m = json.loads((d / "meta.json").read_text())
 name    = m["name"]
 version = f"{m['version']}-r{m['release']}"
 apk     = f"{name}-{version}.apk"
+
+# ★ 时间戳不通过 --info 传 —— mkpkg 不认 builddate 这个字段
+#   （ERROR: invalid info field: builddate）。
+#
+# 它认的是【环境变量 SOURCE_DATE_EPOCH】——正是 0005 从第一天就在用的那个
+# 通用约定。实测：同一个包换一个时间戳，产出字节就不同；不设的话它用当前
+# 时间，于是同样的输入会产出不同的包（xz 连打三次得到 620941/620941/620943）。
+#
+# 时间戳写进一个文件，外层脚本拿它设环境变量。用 meta.json 的 built_at，
+# 它已经是确定性的：max(配方声明的日期, 依赖的日期)。
+import datetime
+def _epoch(iso: str) -> str:
+    try:
+        return str(int(datetime.datetime.fromisoformat(iso).timestamp()))
+    except Exception:
+        return "0"
+
+(pathlib.Path(out_script).parent / "epoch").write_text(_epoch(m.get("built_at", "")))
 
 fields = [
     ("name",        name),
@@ -124,8 +143,9 @@ print(f\"{m['name']}-{m['version']}-r{m['release']}.apk\")")
 
     printf '  %-30s ' "$APK"
     rm -f "$OUT/$APK"
-    docker run --rm -v "$PWD/$d:/in:ro" -v "$OUT:/out" -v "$WORK/inner.sh:/inner.sh:ro" \
-         alpine:latest sh /inner.sh > "$WORK/log" 2>&1 || true
+    docker run --rm -e "SOURCE_DATE_EPOCH=$(cat "$WORK/pack/epoch" 2>/dev/null || echo 0)" \
+         -v "$PWD/$d:/in:ro" -v "$OUT:/out" -v "$WORK/pack:/pack:ro" \
+         alpine:latest sh /pack/inner.sh > "$WORK/log" 2>&1 || true
     # ★ 两道检查，缺一不可：
     #   退出码是 0 不等于【产出了东西】。上面那次就是这样——docker 成功了，
     #   文件根本没生成，而脚本报了 ✓。让错误传上来还不够，还要检查结果。
@@ -134,7 +154,14 @@ print(f\"{m['name']}-{m['version']}-r{m['release']}.apk\")")
         N_OK=$((N_OK+1))
     else
         printf '✗\n'
-        sed 's/^/      /' "$WORK/log" | head -4
+        # 日志可能是空的。空日志本身是信息——说明 docker 都没跑起来，
+        # 那种情况要看退出码和挂载，而不是看 mkpkg 的报错。
+        if [ -s "$WORK/log" ]; then
+            sed 's/^/      /' "$WORK/log" | head -8
+        else
+            echo "      （docker 没有任何输出——它可能没跑起来）"
+            echo "      退出码: $?   挂载: $d → /in，$WORK/pack → /pack，$OUT → /out"
+        fi
         N_FAIL=$((N_FAIL+1))
     fi
 done
