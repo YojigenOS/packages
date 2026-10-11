@@ -50,14 +50,37 @@ build() {
 #     gcc -std=gnu23 -E   vs  gcc -E
 #     file                vs  :                ← ★ file 命令在我们的环境里【不存在】
 #
+# ★ 已经排除的两个假设（都实测过，都证伪了）：
+#
+#   ✗ C23：加 CFLAGS=-std=gnu17 重跑，SETJMP 照样是关的。
+#   ✗ file 缺失：往容器里塞一个 file，SETJMP 照样是关的。
+#
+# ★★ 而更要紧的是：**不是只有 SETJMP 出问题**。
+#
+#   我们的 pnglibconf.out 里【全部选项都是 undef】：
+#
+#       /*#undef PNG_16BIT_SUPPORTED*/
+#       /*#undef PNG_ALIGNED_MEMORY_SUPPORTED*/
+#       /*#undef PNG_BENIGN_ERRORS_SUPPORTED*/
+#       ... 一直到 PNG_SETJMP_SUPPORTED
+#
+#   整份生成的配置是空的。setjmp 只是第一个被编译器撞上的那个。
+#
+#   对照：在 Debian 环境里 `./configure` 之后 pnglibconf.h 【有】；
+#         在我们的 base-devel 里 —— 【没有】。
+#
+#   所以真正的问题不是"某个探测失败"，而是 **libpng 的配置生成链路在我们
+#   的 x86_64 base-devel 里整个没跑通**。aarch64 上它是通的。
+#
 # 下次接手的入手点：
 #
-#   1. 最可疑的是 `file` 缺失。autoconf/libtool 要用它判断目标文件格式，它的
-#      缺席会改变一些分支。给 base-devel 补一个 file 包（或先手动塞一个进去
-#      试试），看 SETJMP 是否恢复。
-#   2. 其次是 C23：gcc 16 默认就是 C23，而 libpng 1.6.59 的生成脚本可能对
-#      C23 下的某个探测反应不同。可以试 cflags = ["-std=gnu17"]。
-#   3. 对照工具（一分钟一轮，不用等 CI）：
+#   1. 从 scripts/options.awk 的输入看起：生成用了
+#      `version=search ./pngconf.h ./scripts/pnglibconf.dfa`，而"全 undef"
+#      的典型成因是 search 没找到版本标记。对比两个环境里 pngconf.h 的内容
+#      和 gawk 的行为差异。
+#   2. 现成的对照：两个环境里 pnglibconf.out 的 diff（我们的 233 行全是
+#      undef；Debian 那边 configure 已经生成了可用的头）。
+#   3. 对照命令见下面。
 #
 #        SKIRT_BUILDENV=yojigenos/buildenv   ./tools/skirt build libpng --arch x86_64
 #        SKIRT_BUILDENV=yojigenos/base-devel ./tools/skirt build libpng --arch x86_64
