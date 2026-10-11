@@ -1,0 +1,263 @@
+name: buildenv (aarch64)
+
+# 建出并发布 aarch64 的构建环境，然后用它自举验证一遍。
+#
+# 【为什么每个架构一个文件】
+#
+# 这不是「多架构镜像」，是「多平台容器」——aarch64 的产物在别的架构上一个都
+# 用不上，每个架构都要从 Debian 底的 buildenv 出发走完整的引导。所以两者
+# 之间没有任何可共享的东西，也没有任何理由互相等。
+#
+# 以前它们是一个文件里的两条矩阵腿，问题出在下游：自举验证那个 job 写了
+# needs: build，于是 aarch64 的自举要等 x86_64 的构建跑完才开工——实测白等
+# 过 23 分钟。而且一轮里只要有一条腿失败，整轮就是红的，另一条腿的成功被
+# 淹掉。
+#
+# 拆开之后：谁先完谁先出结果，一条挂了不影响另一条，**而且可以只触发一个**
+# （调这个架构的问题时，一轮约 84 分钟，而不是两条腿一起的约 121 分钟）。
+#
+# 这个文件是「构建环境」的发布——不是发布 YojigenOS 这个系统。后者要发的是
+# ISO / 包仓库 / 版本号那些，是另一条线（将来会放在 release-*.yml 里）。
+
+on:
+  workflow_dispatch:
+    inputs:
+      selfhost:
+        description: '跑自举验证（再建一轮，和这一轮比对。会让总时长翻倍）'
+        type: boolean
+        default: true
+
+# 显式收紧 GITHUB_TOKEN 的权限——工作流里的第三方代码（action）能拿到它，
+# 权限越小越好。
+permissions:
+  contents: read
+
+jobs:
+  build:
+    # 显式 pin 版本，不用 ubuntu-latest：它是个移动别名，构建环境会静默变化，
+    # 而且只跟踪 x64 镜像。注意这些 runner 只在公开仓库可用。
+    runs-on: ubuntu-26.04-arm
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # 源码和编译缓存可以跨运行复用——它们不影响「这次构建到底建了什么」。
+      # 【产物 output/ 故意不缓存】：那正是每次要重新证明的东西。
+      - name: 缓存源码与 ccache
+        uses: actions/cache@v4
+        with:
+          path: |
+            cache
+            ccache
+          key: src-aarch64-${{ hashFiles('packages/**/spec.toml') }}
+          restore-keys: src-aarch64-
+
+      - name: 用满整台 runner 的核
+        run: |
+          # skirt 默认留两个核给用户——那是给开发机的体贴，在 CI 上就是浪费。
+          echo "SKIRT_JOBS=$(nproc)" >> "$GITHUB_ENV"
+          echo "并行度: -j$(nproc)"
+
+      - name: 建 Debian 底的构建环境
+        run: |
+          # Dockerfile 是 FROM debian:stable-slim——架构中立，
+          # 在哪台 runner 上建就是哪个架构的。
+          docker build -t yojigenos/buildenv:aarch64 tools/buildenv
+
+      # ★ 构建环境【建完就推】，不等引导。
+      #
+      # 两个理由：
+      #
+      # 1. 它是「从零开始」的起点，本身就有价值——任何人拉下它跑一次
+      #    bootstrap 就能重建整个系统。它不该被后面某一步的失败拖着。
+      # 2. 实测：x86_64 的引导一直失败，于是构建环境的推送也一直被跳过，
+      #    本地想复现都拿不到 amd64 的构建环境。**一个已经成功的东西，
+      #    不该因为下游失败而拿不到。**
+      - name: 推送构建环境
+        env:
+          DOCKER_HUB_TOKEN: ${{ secrets.DOCKER_HUB_TOKEN }}
+        run: |
+          if [ -z "$DOCKER_HUB_TOKEN" ]; then
+            echo "::error::secret DOCKER_HUB_TOKEN 是空的"
+            exit 1
+          fi
+          echo "$DOCKER_HUB_TOKEN" | docker login -u yojigenos --password-stdin
+          docker push "yojigenos/buildenv:aarch64"
+
+      # 【这一步是整条流水线的核心】
+      #
+      # 一条完整的链：从 Debian 底出发，把全部包建出来。顺序不是写着的，
+      # 是从配方的依赖关系算出来的（skirt order）。
+      - name: 引导 —— 建出全部包
+        id: bootstrap
+        run: |
+          ./tools/skirt order | head -50
+          # bootstrap 失败时非零退出（这是它该做的）。但我们要先把日志传出去，
+          # 所以这里不让它中断，改成记下结论、后面再失败。
+          ./tools/skirt bootstrap --report || echo "bootstrap_failed=1" >> "$GITHUB_OUTPUT"
+
+      # ★ 失败那一刻就把日志拿到手。
+      #
+      # 以前只能等整个 job 结束再用 gh api 取日志，而 cmd_bootstrap 只打印
+      # 失败包的【最后 8 行】——那点信息往往不够。所以把每个包的完整日志传出来。
+      #
+      # ★ 必须先把日志抄进工作区：upload-artifact 只认工作区里的路径，给 /tmp
+      # 会被拒绝——实测 aarch64 那轮【引导成功了】却因为这一步失败让整个 job
+      # 挂掉，连带下游一起被跳过。
+      - name: 收集构建日志
+        if: always()
+        run: |
+          mkdir -p build-logs
+          ls -la build-logs/ | head -20
+          echo "共 $(ls build-logs/ 2>/dev/null | wc -l) 个包的日志"
+
+      - name: 上传构建日志
+        if: always()
+        continue-on-error: true      # 日志是诊断手段，不该让整个 job 失败
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs-aarch64
+          path: build-logs
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: 引导失败了就停在这里
+        if: steps.bootstrap.outputs.bootstrap_failed == '1'
+        run: |
+          echo "::error::引导失败。完整日志见这个 job 的 build-logs-aarch64 artifact。"
+          exit 1
+
+      - name: 拼出 base-devel 镜像
+        run: |
+          ./tools/skirt image base-devel
+          ls -lh output/aarch64/yojigenos-base-devel-aarch64.tar.gz
+
+      - name: 导入并打标签
+        id: image
+        env:
+          # GitHub 提供这两个；runner 镜像变了要能在产物里查出来。
+          IMAGE_OS: ${{ runner.os }}
+          IMAGE_VERSION: ${{ runner.arch }}
+        run: |
+          # 用【这轮运行的起始时间】而不是"现在"：一轮要跑约两小时，跨了
+          # UTC 午夜的话，清单那边那份「现在」就会是另一个日期，于是它去找
+          # base-devel:<另一个日期>-aarch64，找不到就失败。一处事实，两处引用。
+          DATE=$(date -u -d "${{ github.run_started_at }}" +%Y.%m.%d)
+          echo "date=$DATE" >> "$GITHUB_OUTPUT"
+
+          ARCH=aarch64
+          TARBALL=output/$ARCH/yojigenos-base-devel-$ARCH.tar.gz
+
+          # 用 docker import 而不是 build：产物是个 rootfs tar，没有 Dockerfile。
+          # --change 让它带上 LABEL——tag 是接口，LABEL 是注释（见 0003）。
+          docker import \
+            --change "LABEL org.yojigenos.arch=$ARCH" \
+            --change "LABEL org.yojigenos.runner-image=$IMAGE_VERSION" \
+            "$TARBALL" "yojigenos/base-devel:edge-$ARCH"
+          docker tag "yojigenos/base-devel:edge-$ARCH" \
+                     "yojigenos/base-devel:$DATE-$ARCH"
+
+          echo "--- 镜像 ---"
+          docker images yojigenos/base-devel --format '{{.Repository}}:{{.Tag}}  {{.Size}}'
+
+      # 推送前先证明它真的能用。宁可发现推不出去，也不要推出去一个坏的。
+      - name: 验证镜像能构建软件
+        run: |
+          docker run --rm --platform linux/arm64 \
+            yojigenos/base-devel:edge-aarch64 /bin/bash -c '
+            set -e
+            printf "#include <stdio.h>\nint main(void){puts(\"ok\");return 0;}\n" > /tmp/t.c
+            gcc /tmp/t.c -o /tmp/t
+            /tmp/t
+            gcc --version | head -1
+          '
+
+      - name: 推送 base-devel
+        env:
+          DOCKER_HUB_TOKEN: ${{ secrets.DOCKER_HUB_TOKEN }}
+        run: |
+          if [ -z "$DOCKER_HUB_TOKEN" ]; then
+            echo "::error::secret DOCKER_HUB_TOKEN 是空的"
+            exit 1
+          fi
+          ARCH=aarch64
+          echo "$DOCKER_HUB_TOKEN" | docker login -u yojigenos --password-stdin
+          docker push "yojigenos/base-devel:edge-$ARCH"
+          docker push "yojigenos/base-devel:${{ steps.image.outputs.date }}-$ARCH"
+
+      # ======================================================================
+      # 自举验证 —— 用刚发布的构建环境，再建一轮
+      # ======================================================================
+      #
+      # 【为什么这一步才是自举的完成】
+      #
+      # 上面那一轮，构建环境是 Debian 底的 buildenv——「我们的系统是在 Debian
+      # 里生出来的」。这一步换成【刚发布的 base-devel】，再跑一遍同一条命令：
+      #
+      #     用 base-devel 能构建出 base-devel 本身
+      #
+      # 跑通了这条路才闭合（docs/决策记录/0011）。而且跑通之后，构建环境不再
+      # 依赖任何本机产物——任何人都能从 registry 拉下来继续。
+      #
+      # 【关于逐字节比对】第一轮和第二轮【不会】完全一致：第一轮里编译器、
+      # 汇编器这些工具自己是 Debian 的工具编出来的，第二轮才是自己的。真正的
+      # 固定点要看第二和第三轮。所以这里只报告差异，不作为失败条件——它是
+      # 成熟度指标，不是门禁。
+      - name: 留一份第一轮产物供比对
+        if: ${{ inputs.selfhost }}
+        run: |
+          mkdir -p before
+          cp "output/aarch64/yojigenos-base-devel-aarch64.tar.gz" before/
+
+      - name: 拉取刚发布的构建环境
+        if: ${{ inputs.selfhost }}
+        run: |
+          # 刚推上去就拉回来——顺带验证了推送确实生效、registry 里那份能用。
+          docker pull "yojigenos/base-devel:edge-aarch64"
+          docker tag "yojigenos/base-devel:edge-aarch64" "yojigenos/base-devel:aarch64"
+
+      # ★ 唯一的区别就是这一行 SKIRT_BUILDENV。
+      #   命令、顺序、配方全都没变——变的只是「谁来当构建环境」。
+      - name: ★ 用我们自己的系统再建一轮
+        if: ${{ inputs.selfhost }}
+        id: selfhost
+        env:
+          SKIRT_BUILDENV: yojigenos/base-devel
+        run: |
+          ./tools/skirt bootstrap --report || echo "bootstrap_failed=1" >> "$GITHUB_OUTPUT"
+
+      - name: 上传自举日志
+        if: always() && inputs.selfhost
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: selfhost-logs-aarch64
+          path: build-logs
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: 自举失败了就停在这里
+        if: ${{ inputs.selfhost && steps.selfhost.outputs.bootstrap_failed == '1' }}
+        run: |
+          echo "::error::自举失败。完整日志见 selfhost-logs-aarch64 artifact。"
+          exit 1
+
+      - name: 和上一轮比对
+        if: ${{ inputs.selfhost }}
+        run: |
+          ARCH=aarch64
+          ./tools/skirt image base-devel
+          NEW=output/$ARCH/yojigenos-base-devel-$ARCH.tar.gz
+
+          echo "### 自举验证 [$ARCH]" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          ls -l "$NEW" >> "$GITHUB_STEP_SUMMARY"
+          printf '%s\n' "第一轮（构建环境是 Debian 底）: $(sha256sum before/yojigenos-base-devel-$ARCH.tar.gz | cut -d' ' -f1)"
+          printf '%s\n' "第二轮（构建环境是我们自己）  : $(sha256sum "$NEW" | cut -d' ' -f1)"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+          if cmp -s "before/yojigenos-base-devel-$ARCH.tar.gz" "$NEW"; then
+            echo "::notice::★ $ARCH 两轮逐字节一致——固定点已经到了。"
+          else
+            echo "::notice::$ARCH 自举跑通了。两轮不一致是【预期】的：第一轮里 gcc/binutils 这些工具自己是 Debian 的工具编出来的，第二轮才是自己的。真正的固定点要看第二和第三轮。"
+          fi

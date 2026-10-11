@@ -1,0 +1,100 @@
+name: buildenv (manifest)
+
+# 把两个架构的镜像合成多架构清单。
+#
+# 用户写 FROM yojigenos/base-devel:edge 时，Docker 按平台自动选那一份——
+# 这正是 0003 说的「tag 是接口」。
+#
+# 【为什么要单独一个文件】
+#
+# 清单必须两个架构都在才能合。而两个 buildenv 工作流是互不相关的，谁先完
+# 谁后完不确定，所以不能把它挂在其中任何一个里面——挂进去的话，先完成的
+# 那个会在另一半还没发布时就去合成，然后失败。
+#
+# 用 workflow_run 触发【两个】工作流：谁后完成谁触发，那时两个 tag 都在。
+# 万一还是不在（比如另一半失败了），这一步安静退出，不做半拉子清单——
+# 等另一半下次成功时自然会再来一次。也可以手动触发。
+#
+# 【关于日期标签的取法】
+#
+# 每个 buildenv 工作流各自用自己那轮的 github.run_started_at 算日期。
+# 两次触发如果跨了 UTC 午夜，算出来的日期就会不同——所以这里【不自己算】，
+# 而是去问 registry：找出两个架构都有的那个最新日期。这样无论它们是什么
+# 时候跑的，合出来的清单都对得上。
+
+on:
+  workflow_run:
+    # 名字必须和那两个文件的 `name:` 完全一致
+    workflows: ["buildenv (aarch64)", "buildenv (x86_64)"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  manifest:
+    # workflow_run 在【每一个】触发工作流完成时都会来一次；失败的就不必合了。
+    # 手动触发时不做这个判断。
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-26.04         # 只做 manifest 操作，什么架构都行
+
+    steps:
+      - name: 从 Docker Hub 取凭据
+        env:
+          DOCKER_HUB_TOKEN: ${{ secrets.DOCKER_HUB_TOKEN }}
+        run: |
+          if [ -z "$DOCKER_HUB_TOKEN" ]; then
+            echo "::error::secret DOCKER_HUB_TOKEN 是空的"
+            exit 1
+          fi
+          echo "$DOCKER_HUB_TOKEN" | docker login -u yojigenos --password-stdin
+
+      - name: 确认两个架构都在
+        id: check
+        run: |
+          OK=1
+          for A in aarch64 x86_64; do
+            if docker manifest inspect "yojigenos/base-devel:edge-$A" >/dev/null 2>&1; then
+              echo "  edge-$A ✓"
+            else
+              echo "  edge-$A 还没有"
+              OK=0
+            fi
+          done
+          echo "ready=$OK" >> "$GITHUB_OUTPUT"
+          if [ "$OK" = "0" ]; then
+            echo "::notice::另一半还没发布。等它完成时这个工作流会再被触发一次，那时再合。"
+          fi
+
+      - name: 找出两个架构都有的最新日期
+        id: date
+        if: steps.check.outputs.ready == '1'
+        run: |
+          TAGS=$(curl -sS "https://hub.docker.com/v2/repositories/yojigenos/base-devel/tags?page_size=100")
+          LIST_A=$(printf '%s' "$TAGS" | jq -r '.results[].name' \
+                   | grep -E '^[0-9]{4}\.[0-9]{2}\.[0-9]{2}-aarch64$' | sed 's/-aarch64$//' | sort -r)
+          LIST_X=$(printf '%s' "$TAGS" | jq -r '.results[].name' \
+                   | grep -E '^[0-9]{4}\.[0-9]{2}\.[0-9]{2}-x86_64$'  | sed 's/-x86_64$//'  | sort -r)
+          # 两边都有的、最新的那个日期
+          DATE=$(comm -12 <(printf '%s\n' "$LIST_A") <(printf '%s\n' "$LIST_X") | head -1)
+          echo "两个架构都有的最新日期: ${DATE:-（没有）}"
+          echo "date=$DATE" >> "$GITHUB_OUTPUT"
+
+      - name: 合成清单
+        if: steps.check.outputs.ready == '1'
+        run: |
+          # edge 是滚动的；日期标签是这个具体版本的。
+          # 日期从 registry 里查出来（见文件顶部说明），不自己算。
+          TAGS="edge"
+          DATE="${{ steps.date.outputs.date }}"
+          [ -n "$DATE" ] && TAGS="$TAGS $DATE"
+
+          for TAG in $TAGS; do
+            docker manifest create "yojigenos/base-devel:$TAG" \
+              --amend "yojigenos/base-devel:$TAG-aarch64" \
+              --amend "yojigenos/base-devel:$TAG-x86_64"
+            docker manifest push "yojigenos/base-devel:$TAG"
+            echo "--- $TAG ---"
+            docker manifest inspect "yojigenos/base-devel:$TAG" | head -30
+          done
