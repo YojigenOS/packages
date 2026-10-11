@@ -67,12 +67,26 @@ ROOTFS="$RUN/rootfs.tar.gz"
 # ---------------------------------------------------------------- 3. initramfs
 echo "[3/4] 打成 initramfs"
 INITRAMFS="$RUN/initramfs.cpio.gz"
+# 挂【目录】而不是单个文件。挂文件在 Docker Desktop / OrbStack 上有个已知的
+# 坑：守护进程会把那个路径当成目录去 mkdir，然后报
+#     mkdir .../rootfs.tar.gz: file exists
+# 挂父目录没这个问题，而且 initramfs 要写回来，一次挂载两个方向都解决。
+# cpio 从我们自己的产物里挂进去，而不是要求镜像里有它。
+#
+# 理由：run-vm.sh 是【开发脚本】，它不该逼着 base-devel 镜像带一个只有打包
+# initramfs 才用到的工具。而 cpio 我们刚建出来了，挂一下就有。
+# （也已经加进 variants/base-devel.toml——将来的镜像会自带，那时这几行可以删。）
+CPIO=$(ls -d output/"$ARCH"/cpio-*/payload 2>/dev/null | head -1 || true)
+if [ -z "$CPIO" ]; then
+    echo "  ✗ 没找到 cpio。先建它：./tools/skirt build cpio --arch $ARCH" >&2
+    exit 1
+fi
 docker run --rm \
-    -v "$PWD/$ROOTFS:/rootfs.tar.gz:ro" \
-    -v "$PWD/$RUN:/out" \
+    -v "$PWD/$RUN:/vm" \
+    -v "$PWD/$CPIO:/cpio:ro" \
     yojigenos/base-devel:"$ARCH" bash -c '
         set -e
-        mkdir -p /root && tar -xzf /rootfs.tar.gz -C /root
+        mkdir -p /root && tar -xzf /vm/rootfs.tar.gz -C /root
         # 内核要的核心前提：/init 存在且可执行。找不到时给一句人话，
         # 而不是等到 QEMU 里报 "Unable to open initial console"。
         if [ ! -x /root/init ]; then
@@ -80,8 +94,20 @@ docker run --rm \
             exit 1
         fi
         cd /root
-        find . -print0 | cpio --null -o -H newc --quiet | gzip -9 > /out/initramfs.cpio.gz
-        echo "    initramfs: $(du -h /out/initramfs.cpio.gz | cut -f1)"
+        # set -o pipefail：没有它，`find | cpio | gzip` 里 cpio 没找到也照样
+        # 产出文件（退出码取自 gzip）。实测踩过：cpio 不存在，于是打出一个
+        # 4 KB 的空 initramfs，QEMU 立刻退出，而且没有任何错误信息。
+        export PATH=/cpio/usr/bin:$PATH
+        set -o pipefail
+        find . -print0 | cpio --null -o -H newc --quiet | gzip -9 > /vm/initramfs.cpio.gz
+
+        # 光靠 pipefail 还不够：就算管道都成功，也可能打出个空包。直接量大小。
+        SZ=$(stat -c %s /vm/initramfs.cpio.gz 2>/dev/null || echo 0)
+        if [ "$SZ" -lt 100000 ]; then
+            echo "  ✗ initramfs 只有 $SZ 字节 —— 这是空的。rootfs 没进去？" >&2
+            exit 1
+        fi
+        echo "    initramfs: $(du -h /vm/initramfs.cpio.gz | cut -f1)"
     '
 
 # ---------------------------------------------------------------- 4. 内核

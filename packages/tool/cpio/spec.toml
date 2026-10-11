@@ -1,0 +1,67 @@
+# cpio —— 归档工具（initramfs 就靠它）
+#
+# 第四个「系统里没有」的发现。前三个是 curl/wget、python3 的 ssl、openssl。
+#
+# 它是做 initramfs 的必要工具：内核要的 initramfs 是 cpio 的 newc 格式，
+# 不是 tar。实测原话：
+#
+#     bash: line 11: cpio: command not found
+#
+# 而那次失败还【没被抓住】——脚本里写的是
+#
+#     find . | cpio -o -H newc | gzip > initramfs.cpio.gz
+#
+# set -e 只看管道最后一个命令（gzip，成功了），中间那句 cpio 没找到它不管。
+# 于是产出一个 4 KB 的空 initramfs，QEMU 立刻退出。这和驱动里那个
+# run.sh 没有 set -e 的 bug 是同一个形状：**错误没有沿着管道/进程传上来。**
+#
+# cpio 本身是最普通的 base 工具，谁来打 initramfs 都要它。
+
+[package]
+name        = "cpio"
+version     = "2.15"
+release     = 1
+date        = 2026-10-11T14:30:00Z
+description = "归档工具（cpio 格式，做 initramfs 必需）"
+section     = "utils"
+url         = "https://www.gnu.org/software/cpio/"
+license     = "GPL-3.0-or-later"
+
+[[source]]
+url    = "https://ftp.gnu.org/gnu/cpio/cpio-$VERSION.tar.gz"
+urls = [
+  "https://mirrors.ustc.edu.cn/gnu/cpio/cpio-$VERSION.tar.gz",
+  "https://mirror.nju.edu.cn/gnu/cpio/cpio-$VERSION.tar.gz",
+]
+sha256 = "efa50ef983137eefc0a02fdb51509d624b5e3295c980aa127ceee4183455499e"
+
+[dependencies]
+runtime = ["glibc"]
+build   = ["make", "gcc", "texinfo"]
+
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["make", "gcc", "texinfo"]
+
+[build]
+type      = "autotools"
+configure = ["--prefix=/usr"]
+
+# ★ 回退到 gnu17。这是 C23 的破坏性变更，不是 cpio 的 bug。
+#
+# C23 里 `int f()` 的含义从「参数未指定」变成了「零参数」。cpio 2.15（2023 年）
+# 里有一句
+#
+#     int (*xstat) ();          ← 声明一个函数指针
+#     xstat = stat;
+#     xstat(name, &st);         ← 于是成了「参数太多，期望 0 个」
+#
+# 实测报错：
+#
+#     error: too many arguments to function 'xstat'; expected 0, have 2
+#     main.c:407: assignment to 'int (*)(void)' from incompatible pointer type
+#
+# 和 gmp 那个 -std=gnu17 是同一类问题——那是这个项目里第三次撞上 C23 了。
+# 项目的选择是不全局降级，而是【按包声明】回退，这样新代码还能用新标准，
+# 而且翻到配方就知道这个包为什么要用旧标准。
+cflags = ["-std=gnu17"]
