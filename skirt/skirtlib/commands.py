@@ -6,7 +6,8 @@ import argparse
 import shutil
 from pathlib import Path
 
-from .common import BUILD_DIR, OUTPUT_DIR, RECIPES_DIR, ROOT, die, log, resolve_arch, rmtree_force
+from .common import (BUILD_DIR, CACHE_DIR, LOG_DIR, OUTPUT_DIR, RECIPES_DIR, ROOT,
+                     die, log, resolve_arch, rmtree_force)
 
 from .spec import direct_deps, load_spec, recipe_of, subpackages
 
@@ -52,6 +53,36 @@ def _shown(path: Path) -> Path:
 
 
 # ------------------------------------------------------------------ 命令
+
+def cmd_paths(_args) -> None:
+    """打印各个工作目录，给 shell 脚本用。
+
+    【为什么需要它】scripts/run-vm.sh 和 scripts/smoke.sh 要找到产物、源码
+    缓存这些东西。原来它们各自写死了 `output/$ARCH/`、`cache/`——于是这些
+    路径就有了【两份真相】：驱动里一份（common.py 的常量），脚本里一份。
+
+    2026-10-11 把产物集中到 var/ 下时，这个毛病当场发作了：驱动改了，脚本
+    没改，冒烟测试报"缺产物"。
+
+    所以路径只该有一处。脚本这样拿：
+
+        eval "$(./skirt/skirt paths --shell)"
+
+    然后就能用 $OUTPUT_DIR / $CACHE_DIR / $BUILD_DIR / $LOG_DIR。
+    """
+    if getattr(_args, "shell", False):
+        for name, path in (
+            ("VAR_DIR", ROOT / "var"), ("OUTPUT_DIR", OUTPUT_DIR),
+            ("CACHE_DIR", CACHE_DIR), ("BUILD_DIR", BUILD_DIR), ("LOG_DIR", LOG_DIR),
+        ):
+            print(f'{name}="{path}"')
+    else:
+        for name, path in (
+            ("var", ROOT / "var"), ("output", OUTPUT_DIR), ("cache", CACHE_DIR),
+            ("work", BUILD_DIR), ("logs", LOG_DIR),
+        ):
+            print(f"  {name:<10} {path}")
+
 
 def cmd_build(args) -> None:
     arch = resolve_arch(args.arch)
@@ -163,10 +194,10 @@ def cmd_bootstrap(args) -> None:
         # 实测一次 x86_64 的 glibc 失败，日志里只剩「合并 9715 项到 /」和
         # 一句失败，完全查不下去，绕了很久才靠别的手段定位。
         #
-        # 写进 build-logs/（仓库根下），**不能写 build/**——cmd_build 每个包
+        # 写进 var/logs/，**不能写 var/work/**——cmd_build 每个包
         # 开头都会 rmtree(BUILD_DIR)，写那儿的日志会被下一个包清掉，只剩最后
         # 一个。也不能写 /tmp：CI 根本不收集它。
-        logdir = ROOT / "build-logs"
+        logdir = LOG_DIR
         logdir.mkdir(parents=True, exist_ok=True)
         logfile = logdir / f"{i:02d}-{name}.log"
         logfile.write_text(
@@ -322,6 +353,12 @@ def main() -> None:
     p.add_argument("--arch", help="目标架构（默认当前架构）")
     p.set_defaults(func=cmd_deps)
 
+    p_paths = sub.add_parser("paths", help="打印各个工作目录（给脚本用）")
+
+    p_paths.add_argument("--shell", action="store_true", help="输出可直接 eval 的 shell 赋值")
+
+    p_paths.set_defaults(func=cmd_paths)
+
     p = sub.add_parser("list", help="列出所有包")
     p.set_defaults(func=cmd_list)
 
@@ -334,7 +371,7 @@ def main() -> None:
     p = sub.add_parser("image", help="按风味定义拼一个镜像（tar）")
     p.add_argument("variant", help="风味名（variants/<名>.toml）")
     p.add_argument("--arch", help="目标架构（默认当前架构）")
-    p.add_argument("--output", help="输出的 tar 路径（默认为 output/<架构>/yojigenos-<风味>-<架构>.tar.gz）")
+    p.add_argument("--output", help="输出的 tar 路径（默认为 var/output/<架构>/yojigenos-<风味>-<架构>.tar.gz）")
     p.set_defaults(func=cmd_image)
 
     p = sub.add_parser("variants", help="列出已定义的风味")

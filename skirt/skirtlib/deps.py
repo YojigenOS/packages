@@ -92,7 +92,7 @@ def source_date_epoch(spec: dict, arch: str, host_provides: set[str]) -> int:
 
 
 def _output_dir(name: str, arch: str) -> tuple[Path, str]:
-    """把包名解析成它在 output/ 里的目录。
+    """把包名解析成它在 var/output/ 里的目录。
 
     名字可以是普通包，也可以是子包——两者的目录长得一样，都是
     `<名字>-<版本>-<release>`，版本和 release 跟着产出它的配方走。

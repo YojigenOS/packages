@@ -226,7 +226,7 @@ def recipe_of(name: str) -> str | None:
     """把包名解析成**配方名**，不认识则返回 None。
 
     普通包返回自己；子包返回产出它的那个配方（`glibc-dev` → `glibc`）。
-    子包没有自己的目录——它只存在于 output/ 里，所以任何「按名字找配方」
+    子包没有自己的目录——它只存在于 var/output/ 里，所以任何「按名字找配方」
     的地方都得先过这一层。
     """
     if spec_path(name) is not None:

@@ -40,9 +40,13 @@ case "$ARCH" in
     *) echo "不认识的架构: $ARCH" >&2; exit 1 ;;
 esac
 
+# 路径只该有一处：问驱动，不在这里抄一遍。
+# （2026-10-11 把产物集中到 var/ 时，这里抄的那份没跟着改，冒烟测试当场报"缺产物"。）
+eval "$(./skirt/skirt paths --shell)"
+
 # --no-prepare：跳过拼 rootfs 和打 initramfs，直接用上次留下的。
 #
-# 它们的产物在 output/$ARCH/.vm/ 里，都在宿主上（不是 Docker 里的），
+# 它们的产物在 $OUTPUT_DIR/$ARCH/.vm/ 里，都在宿主上（不是 Docker 里的），
 # 所以只要没换过包，复用是安全的——重复跑本来也会得到同一份字节。
 # 从零准备大约要两分钟，跳过就只剩 QEMU 启动的那一秒。
 PREPARE=1
@@ -54,8 +58,9 @@ for a in "$@"; do
     esac
 done
 
-RUN=output/$ARCH/.vm
+RUN=$OUTPUT_DIR/$ARCH/.vm
 mkdir -p "$RUN"
+
 
 INITRAMFS="$RUN/initramfs.cpio.gz"
 
@@ -93,14 +98,14 @@ echo "[3/4] 打成 initramfs"
 # 理由：run-vm.sh 是【开发脚本】，它不该逼着 base-devel 镜像带一个只有打包
 # initramfs 才用到的工具。而 cpio 我们刚建出来了，挂一下就有。
 # （也已经加进 variants/base-devel.toml——将来的镜像会自带，那时这几行可以删。）
-CPIO=$(ls -d output/"$ARCH"/cpio-*/payload 2>/dev/null | head -1 || true)
+CPIO=$(ls -d "$OUTPUT_DIR/$ARCH"/cpio-*/payload 2>/dev/null | head -1 || true)
 if [ -z "$CPIO" ]; then
     echo "  ✗ 没找到 cpio。先建它：./skirt/skirt build cpio --arch $ARCH" >&2
     exit 1
 fi
 docker run --rm \
-    -v "$PWD/$RUN:/vm" \
-    -v "$PWD/$CPIO:/cpio:ro" \
+    -v "$RUN:/vm" \
+    -v "$CPIO:/cpio:ro" \
     yojigenos/base-devel:"$ARCH" bash -c '
         set -e
         mkdir -p /root && tar -xzf /vm/rootfs.tar.gz -C /root
@@ -131,7 +136,7 @@ fi   # PREPARE
 
 # ---------------------------------------------------------------- 4. 内核
 echo "[4/4] 找内核"
-KERNEL=$(ls -d output/"$ARCH"/linux-*/payload/boot/vmlinuz 2>/dev/null | head -1 || true)
+KERNEL=$(ls -d "$OUTPUT_DIR/$ARCH"/linux-*/payload/boot/vmlinuz 2>/dev/null | head -1 || true)
 if [ -z "$KERNEL" ]; then
     echo "  ✗ 没找到内核镜像。" >&2
     echo "    先建它：./skirt/skirt build linux --arch $ARCH" >&2

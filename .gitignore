@@ -2,11 +2,8 @@
 # 本机工具环境（可由工具重新安装，等价于 node_modules）
 /.dsh/
 
-# 构建产物与源码缓存
-/output/
-/build/
-/cache/
-/sources/
+# 构建产物与源码缓存。全在 var/ 下——这样 ls 一眼分得清源码和产物。
+/var/
 *.apk
 *.deb
 *.rpm
@@ -25,5 +22,3 @@ __pycache__/
 /.comet/*
 !/.comet/config.yaml
 # <<< Comet managed project state <<<
-# 每个包的完整构建日志（skirt bootstrap 写的，失败时用来诊断）
-build-logs/

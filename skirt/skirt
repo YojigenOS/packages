@@ -14,7 +14,7 @@
     构建一个包之前，驱动会：
       1. 递归解析它的 runtime + build 依赖（按依赖顺序排好）
       2. 把 bootstrap/provides.txt 里列出的包视为「构建环境已提供」，跳过
-      3. 其余依赖必须已经在 output/<架构>/ 里构建过
+      3. 其余依赖必须已经在 var/output/<架构>/ 里构建过
       4. 把它们的 payload 叠加成 sysroot，合并进构建容器的根文件系统
 
     bootstrap/provides.txt 是「构建环境基线」，不是待办清单。它永远不会空——

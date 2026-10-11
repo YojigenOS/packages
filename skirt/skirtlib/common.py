@@ -14,9 +14,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent.parent
 RECIPES_DIR = ROOT / "recipes"
 VARIANTS_DIR = ROOT / "variants"
-OUTPUT_DIR = ROOT / "output"
-CACHE_DIR = ROOT / "cache"
-BUILD_DIR = ROOT / "build"
+OUTPUT_DIR = ROOT / "var" / "output"
+CACHE_DIR = ROOT / "var" / "cache"
+BUILD_DIR = ROOT / "var" / "work"
+#: 每个包的完整构建日志。放这里是因为失败时要能翻——见 commands.py 里的说明。
+LOG_DIR = ROOT / "var" / "logs"
 HOST_PROVIDES_FILE = ROOT / "bootstrap" / "provides.txt"
 #: 构建环境镜像。默认是 Debian 底的那个（bootstrap 构建出来的）。
 #:

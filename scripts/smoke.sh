@@ -62,12 +62,15 @@ echo
 # 在宿主上解压就会互相覆盖——而宿主是 macOS，APFS 默认大小写不敏感。
 #
 # 这条检查不需要编译，所以很快；它只看「解压出来的树里两个文件都在不在」。
+# 路径只该有一处：问驱动，不在这里抄一遍。
+eval "$(./skirt/skirt paths --shell)"
+
 echo "  ① 源码解压的完整性"
-KERNEL_TAR=$(ls cache/linux-*.tar.xz 2>/dev/null | head -1 || true)
+KERNEL_TAR=$(ls "$CACHE_DIR"/linux-*.tar.xz 2>/dev/null | head -1 || true)
 if [ -z "$KERNEL_TAR" ]; then
-    note "跳过：cache/ 里没有内核 tarball（它太大了，不一定留着）"
+    note "跳过：$CACHE_DIR 里没有内核 tarball（它太大了，不一定留着）"
 else
-    N=$(docker run --rm -v "$PWD/$KERNEL_TAR:/src.tar:ro" "$BUILDENV:$ARCH" bash -c '
+    N=$(docker run --rm -v "$KERNEL_TAR:/src.tar:ro" "$BUILDENV:$ARCH" bash -c '
         mkdir -p /x && tar -xf /src.tar -C /x
         python3 - <<PY
 import pathlib, collections
@@ -89,14 +92,14 @@ fi
 #
 # 先删掉上一次的产物，否则「构建成功」可能只是在看旧的。
 echo "  ② 端到端构建 $PROBE"
-rm -rf output/"$ARCH"/"$PROBE"-*/
+rm -rf "$OUTPUT_DIR/$ARCH"/"$PROBE"-*/
 if ./skirt/skirt build "$PROBE" --arch "$ARCH" > /tmp/smoke-build.log 2>&1; then
     pass "构建成功"
 else
     fail "构建失败——日志在 /tmp/smoke-build.log" "build"
     tail -5 /tmp/smoke-build.log | sed 's|^|      |'
 fi
-PAYLOAD=$(ls -d output/"$ARCH"/"$PROBE"-*/payload 2>/dev/null | head -1 || true)
+PAYLOAD=$(ls -d "$OUTPUT_DIR/$ARCH"/"$PROBE"-*/payload 2>/dev/null | head -1 || true)
 
 # ── ③ 产物形态 ───────────────────────────────────────────────────────────
 echo "  ③ 产物形态"
@@ -123,13 +126,13 @@ fi
 # 从别处跑就找不到翻译——那样测出来的「中文不显示」是假阳性。
 echo "  ④ 它能跑"
 echo "  ⑤ 中文能显示"
-LOCALES=$(ls -d output/"$ARCH"/glibc-locales-*/payload 2>/dev/null | head -1 || true)
+LOCALES=$(ls -d "$OUTPUT_DIR/$ARCH"/glibc-locales-*/payload 2>/dev/null | head -1 || true)
 if [ -z "$PAYLOAD" ] || [ -z "$LOCALES" ]; then
     note "跳过：缺 hello 或 glibc-locales 的产物"
 else
     OUT=$(docker run --rm \
-        -v "$PWD/$PAYLOAD:/in/hello:ro" \
-        -v "$PWD/$LOCALES:/in/loc:ro" \
+        -v "$PAYLOAD:/in/hello:ro" \
+        -v "$LOCALES:/in/loc:ro" \
         "$BUILDENV:$ARCH" bash -c '
         cp -a /in/hello/. / ; cp -a /in/loc/. /
         echo "EN=$(hello)"

@@ -67,15 +67,18 @@ class TestCommonConstants(unittest.TestCase):
             path = getattr(common, name)
             self.assertTrue(path.exists(), f"{name} 指向的 {path} 不存在")
 
-        # 产物目录是构建时才创建的，所以只查它们在哪。
+        # 产物目录是构建时才创建的，所以只查它们【在仓库里】，不查具体哪一层。
         #
-        # 我第一版把三个都写成"应该在仓库外面"，测试立刻失败了——实际
-        # OUTPUT_DIR / CACHE_DIR / BUILD_DIR 都在仓库里面，只有 CCACHE_DIR
-        # 在外面（它体积大且完全可再生，见 common.py 里的说明）。
-        # 断言写错的是我，不是代码；这条测试的作用就是把我这种假设逼出来。
-        for name in ("OUTPUT_DIR", "CACHE_DIR", "BUILD_DIR"):
-            self.assertEqual(getattr(common, name).parent, common.ROOT,
-                             f"{name} 应该在仓库根下")
+        # 这条断言我写错过两次，都被它自己抓出来了：
+        #   第一版：把三个都写成"应该在仓库外面"——实际只有 CCACHE_DIR 在外面
+        #   第二版：写成"parent 必须是 ROOT"——后来又都挪进了 var/
+        # **写错的是我的假设，不是代码。** 所以现在只断言真正稳定的那件事：
+        # 它们都在仓库里（这样 ls 一眼能分清源码和产物），而 CCACHE_DIR 在
+        # 仓库外（它体积大、完全可再生，不该跟着仓库走）。
+        for name in ("OUTPUT_DIR", "CACHE_DIR", "BUILD_DIR", "LOG_DIR"):
+            path = getattr(common, name)
+            self.assertTrue(path.is_relative_to(common.ROOT),
+                            f"{name} 应该在仓库里，实际是 {path}")
 
-        self.assertEqual(common.CCACHE_DIR.parent, common.ROOT.parent,
-                         "CCACHE_DIR 应该在工作区根（仓库的上一级）")
+        self.assertFalse(common.CCACHE_DIR.is_relative_to(common.ROOT),
+                         "CCACHE_DIR 不该在仓库里（它体积大且完全可再生）")

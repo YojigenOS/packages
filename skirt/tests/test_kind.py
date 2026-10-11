@@ -109,7 +109,7 @@ class TestKindMatchesArtifacts(unittest.TestCase):
 
     def test_kind_和产物一致(self):
         if not self.payloads:
-            self.skipTest("output/ 里还没有产物——这条要看到产物才有意义")
+            self.skipTest("var/output/ 里还没有产物——这条要看到产物才有意义")
         bad, checked = [], 0
         for name, payload in sorted(self.payloads.items()):
             kind = spec_mod.kind_of(name)
