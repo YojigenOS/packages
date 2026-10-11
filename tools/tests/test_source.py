@@ -1,3 +1,19 @@
+#!/usr/bin/env python3
+"""源码获取的测试。
+
+重点在 srcrel_of：它只读 tar 里的名字，不把文件树物化到宿主上。
+宿主是 macOS，APFS 默认大小写不敏感，而内核源码里有 13 组只差大小写的
+文件——物化就会互相覆盖。见那个函数自己的注释。
+"""
+
+from __future__ import annotations
+
+import os
+import sys
+import unittest
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 
 class TestSrcrelOnlyReadsNames(unittest.TestCase):
