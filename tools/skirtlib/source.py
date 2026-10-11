@@ -147,40 +147,61 @@ def fetch(spec: dict) -> Path:
     # 镜像就是这样，所以这不成问题。
     dest = CACHE_DIR / urls[0].rsplit("/", 1)[-1]
 
-    if dest.is_file():
-        log("下载", f"缓存命中 {dest.name}")
-    else:
-        tmp = dest.with_name(dest.name + ".part")
-        errors: list[str] = []
-        for i, url in enumerate(urls):
-            log("下载" if i == 0 else "换源", url)
-            try:
-                urllib.request.urlretrieve(url, tmp)
-            except Exception as exc:                    # noqa: BLE001
-                errors.append(f"{url}\n           {type(exc).__name__}: {exc}")
-                tmp.unlink(missing_ok=True)
-                continue
-            tmp.rename(dest)
-            break
-        else:
-            die(f"{pkg['name']}: 所有源都取不到\n       "
-                + "\n       ".join(errors))
-
     want = str(src.get("sha256", "")).strip().lower()
     if len(want) != 64:
         die(f"{pkg['name']}: 源码没有声明有效的 sha256"
             f"（不接受未校验的源码，当前值: {want!r}）")
 
-    got = sha256_of(dest)
-    if got != want:
-        # 校验失败【不换源重试】：内容不对不是网络问题，是配方或镜像错了。
-        # 悄悄换一个源继续，只会把「镜像被投毒」变成「构建成功」。
-        die(f"{pkg['name']}: sha256 不匹配\n"
-            f"       期望 {want}\n"
-            f"       实际 {got}\n"
-            f"       文件 {dest}")
-    log("校验", "sha256 匹配")
-    return dest
+    if dest.is_file():
+        log("下载", f"缓存命中 {dest.name}")
+        got = sha256_of(dest)
+        if got != want:
+            # 缓存里的是坏的。删掉重下——这一步以前没有，于是坏文件会一直
+            # 被"缓存命中"，每次都失败。
+            log("缓存损坏", f"{dest.name} 的 sha256 不对，删掉重下")
+            dest.unlink()
+        else:
+            log("校验", "sha256 匹配")
+            return dest
+
+    tmp = dest.with_name(dest.name + ".part")
+    errors: list[str] = []
+    for i, url in enumerate(urls):
+        log("下载" if i == 0 else "换源", url)
+        try:
+            urllib.request.urlretrieve(url, tmp)
+        except Exception as exc:                    # noqa: BLE001
+            errors.append(f"{url}\n           {type(exc).__name__}: {exc}")
+            tmp.unlink(missing_ok=True)
+            continue
+
+        # ★ 校验放在【循环里】，每个源各自验一遍。
+        #
+        # 原来是在循环之后统一验，失败就 die。注释里给的理由是
+        # 「悄悄换源会把镜像被投毒变成构建成功」——**那个担心是错的**：
+        # **sha256 才是安全边界，不是"哪个源"**。被投毒的源产不出正确的
+        # 字节，它在这一步照样过不去。换源不降低任何安全性。
+        #
+        # 而代价是实打实的：实测 CI 的 x86_64 上，zlib 从 zlib.net 下到的
+        # 字节是坏的（本地同一个 URL 下来是好的），于是整个引导停在
+        # [11/42]，白跑一小时。
+        #
+        # **换源重试，但要说出来**——不是"悄悄换"。下面每次失败都会打印。
+        got = sha256_of(tmp)
+        if got != want:
+            log("校验失败", f"{url}\n"
+                            f"           期望 {want[:16]}…  实际 {got[:16]}…")
+            errors.append(f"{url}\n           sha256 不匹配"
+                          f"（期望 {want}，实际 {got}）")
+            tmp.unlink(missing_ok=True)
+            continue
+
+        tmp.rename(dest)
+        log("校验", "sha256 匹配")
+        return dest
+
+    die(f"{pkg['name']}: 所有源都取不到或校验不通过\n       "
+        + "\n       ".join(errors))
 
 
 def extract(archive: Path, into: Path) -> str:

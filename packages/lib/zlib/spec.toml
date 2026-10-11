@@ -16,6 +16,13 @@ license     = "Zlib"
 # zlib.net 根路径只放最新版，历史版本进 /fossils/。用 fossils 更稳——
 # 版本老化后 URL 不会失效。若某次新版还没进 fossils，临时改用根路径。
 url    = "https://zlib.net/fossils/zlib-$VERSION.tar.gz"
+# 备用源。实测 CI 上从 zlib.net 下到的字节是坏的（本地同一个 URL 下来是好的），
+# 而配方当时只有这一个源 → 硬失败 → 整个引导停在 [11/42]，白跑一小时。
+# www.zlib.net 是同一台服务器的另一个名字，实测字节一致——换个名字能绕开
+# DNS/CDN 层面的问题，而驱动在字节不对时也会换源重试（见 source.py）。
+urls = [
+  "https://www.zlib.net/fossils/zlib-$VERSION.tar.gz",
+]
 sha256 = "bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16"
 
 [dependencies]
