@@ -58,7 +58,7 @@ YojigenOS 不是任何发行版的衍生版。它的基础系统从上游源码�
 ## 仓库结构
 
 ```
-packages/      配方树 —— 真正的核心资产。按【它是什么】分目录：
+recipes/      配方树 —— 真正的核心资产。按【它是什么】分目录：
                  lib/      纯依赖库（glibc、zlib、gmp…）
                  tool/     命令行工具（coreutils、tar、xz…）
                  devel/    构建时用的（gcc、binutils、cmake、texinfo…）
@@ -100,5 +100,5 @@ docs/          文档与决策记录
 coreutils、gcc），而 GPL 要求**分发二进制时提供对应源码**。所以公开配方
 不是姿态，是履行义务的方式——补上这个 LICENSE 只是把已经在做的事说清楚。
 
-**补丁是个例外**：`packages/*/*.patch` 改的是上游源码，属于派生作品，
+**补丁是个例外**：`recipes/*/*.patch` 改的是上游源码，属于派生作品，
 **跟着上游的许可走**，不是我们的许可说了算。

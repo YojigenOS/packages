@@ -59,7 +59,7 @@ runtime = []
 #           Kconfig 的 select 会覆盖配置文件里的显式值。那四个 select 源头
 #           精确关掉之后它依然是 y。
 #
-#           所以最终是加 openssl 包（packages/lib/openssl）。那不是绕过，
+#           所以最终是加 openssl 包（recipes/lib/openssl）。那不是绕过，
 #           是本来就要它——python3 的 https、curl、git、包签名都挂在上面。
 #
 #           ★ 但它必须【声明在这里】：驱动只把声明的依赖合并进构建容器，

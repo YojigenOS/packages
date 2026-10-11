@@ -6,22 +6,22 @@ import datetime
 import tomllib
 from functools import lru_cache
 
-from .common import PACKAGES_DIR, die, log
+from .common import RECIPES_DIR, die, log
 
 # ------------------------------------------------------------------ 配方
 
 def spec_path(name: str) -> Path | None:
     """按名字找配方的路径，找不到返回 None。
 
-    **配方目录按 kind 分层**（packages/lib/glibc/spec.toml），所以不能直接
-    `PACKAGES_DIR / name`。这里也认平铺的老结构——迁移期间两种都得能读。
+    **配方目录按 kind 分层**（recipes/lib/glibc/spec.toml），所以不能直接
+    `RECIPES_DIR / name`。这里也认平铺的老结构——迁移期间两种都得能读。
 
     kind 的判据和分类见 docs/配方约定.md「包分类」一节。
     """
-    flat = PACKAGES_DIR / name / "spec.toml"
+    flat = RECIPES_DIR / name / "spec.toml"
     if flat.is_file():
         return flat
-    for kind_dir in sorted(PACKAGES_DIR.iterdir()):
+    for kind_dir in sorted(RECIPES_DIR.iterdir()):
         if not kind_dir.is_dir() or kind_dir.name.startswith("."):
             continue
         cand = kind_dir / name / "spec.toml"
@@ -38,14 +38,14 @@ def kind_of(name: str) -> str:
     path = spec_path(name)
     if path is None:
         return "?"
-    rel = path.relative_to(PACKAGES_DIR)
+    rel = path.relative_to(RECIPES_DIR)
     return rel.parts[0] if len(rel.parts) > 2 else "?"
 
 
 def all_recipe_names() -> list[str]:
     """所有配方名。目录按 kind 分层，所以要多下钻一层。"""
     out: list[str] = []
-    for d in PACKAGES_DIR.iterdir():
+    for d in RECIPES_DIR.iterdir():
         if not d.is_dir() or d.name.startswith("."):
             continue
         if (d / "spec.toml").is_file():
@@ -59,7 +59,7 @@ def all_recipe_names() -> list[str]:
 def load_spec(name: str) -> dict:
     path = spec_path(name)
     if path is None:
-        die(f"找不到配方: {name}（找过 packages/<kind>/{name}/spec.toml）")
+        die(f"找不到配方: {name}（找过 recipes/<kind>/{name}/spec.toml）")
     if not path.is_file():
         die(f"找不到配方: {path}")
     with path.open("rb") as f:

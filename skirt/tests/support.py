@@ -34,7 +34,7 @@ from skirtlib import collect as collect_mod
 from skirtlib import spec as spec_mod
 from skirtlib import deps as deps_mod
 from skirtlib.build import run_in_container
-from skirtlib.common import PACKAGES_DIR, build_jobs
+from skirtlib.common import RECIPES_DIR, build_jobs
 
 #: 依赖闭包测试要用的基线。直接用真实的 bootstrap/provides.txt——不要在这里
 #: 另写一份：【另写一份就会漂移】，而它漂移的表现是测试莫名其妙地报环，
@@ -60,7 +60,7 @@ def _pkg(name: str, date, **extra) -> dict:
 def _all_spec_dirs():
     """所有配方目录。
 
-    目录按 kind 分层（packages/lib/glibc/），所以不能直接 iterdir()。
+    目录按 kind 分层（recipes/lib/glibc/），所以不能直接 iterdir()。
     走 spec.all_recipe_names() + spec_path()，这样"目录结构长什么样"这件事
     只有 spec.py 一处知道。
     """

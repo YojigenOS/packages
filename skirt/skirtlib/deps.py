@@ -6,7 +6,7 @@ import os
 import shutil
 from pathlib import Path
 
-from .common import BUILD_DIR, HOST_PROVIDES_FILE, OUTPUT_DIR, PACKAGES_DIR, ROOT, die, log, rmtree_force
+from .common import BUILD_DIR, HOST_PROVIDES_FILE, OUTPUT_DIR, RECIPES_DIR, ROOT, die, log, rmtree_force
 
 from .spec import direct_deps, latest_date, load_spec, package_rel, recipe_of
 

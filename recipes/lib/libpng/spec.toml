@@ -41,5 +41,5 @@ configure = ["--prefix=/usr", "--disable-static"]
 #     contrib/libtests/pnggetset.c:53: error: implicit declaration of
 #         function 'setjmp'
 #
-# **完全指不到真正的原因。** 修在 gawk 那边（见 packages/tool/gawk/spec.toml），
+# **完全指不到真正的原因。** 修在 gawk 那边（见 recipes/tool/gawk/spec.toml），
 # 这个包不需要任何特殊处理。

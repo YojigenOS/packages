@@ -67,7 +67,7 @@ CONFIG_EXT4_FS=y
 # fs-verity、module-sig 的签名子项），一个个关下去是打地鼠——实测关掉那四个
 # 之后 SYSTEM_TRUSTED_KEYRING 依然是 y。
 #
-# 【所以改成加 openssl 包】见 packages/lib/openssl/spec.toml。这是对的选择，
+# 【所以改成加 openssl 包】见 recipes/lib/openssl/spec.toml。这是对的选择，
 # 理由不是「绕不过去」，而是本来就要它：python3 的 https、curl、git、以及
 # 决策记录 0006 说的包签名，全都挂在 openssl 上。为了绕开它去砍内核的完整性
 # 校验（固件验签、fs-verity、dm-verity 都在那条链上）才是亏的。

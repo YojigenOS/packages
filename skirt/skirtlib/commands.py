@@ -6,7 +6,7 @@ import argparse
 import shutil
 from pathlib import Path
 
-from .common import BUILD_DIR, OUTPUT_DIR, PACKAGES_DIR, ROOT, die, log, resolve_arch, rmtree_force
+from .common import BUILD_DIR, OUTPUT_DIR, RECIPES_DIR, ROOT, die, log, resolve_arch, rmtree_force
 
 from .spec import direct_deps, load_spec, recipe_of, subpackages
 
@@ -224,8 +224,8 @@ def cmd_deps(args) -> None:
 
 
 def cmd_list(args) -> None:
-    if not PACKAGES_DIR.is_dir():
-        print("(还没有 packages/ 目录)")
+    if not RECIPES_DIR.is_dir():
+        print("(还没有 recipes/ 目录)")
         return
     from .spec import all_recipe_names, kind_of
     names = all_recipe_names()

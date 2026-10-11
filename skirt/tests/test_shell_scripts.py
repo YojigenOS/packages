@@ -36,7 +36,7 @@ class TestShellVariableBoundaries(unittest.TestCase):
     BAD = re.compile(rb"\$([A-Za-z_][A-Za-z0-9_]*)(?=[\x80-\xff])")
 
     def _shell_files(self):
-        for pat in ("scripts/*.sh", "packages/*/*/steps.sh", "packages/*/*/files/*"):
+        for pat in ("scripts/*.sh", "recipes/*/*/steps.sh", "recipes/*/*/files/*"):
             for f in sorted(ROOT.glob(pat)):
                 if f.is_file():
                     yield f

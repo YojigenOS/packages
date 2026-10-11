@@ -49,7 +49,7 @@ jobs:
           path: |
             cache
             ccache
-          key: src-x86_64-${{ hashFiles('packages/**/spec.toml') }}
+          key: src-x86_64-${{ hashFiles('recipes/**/spec.toml') }}
           restore-keys: src-x86_64-
 
       - name: 用满整台 runner 的核

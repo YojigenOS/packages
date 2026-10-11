@@ -63,7 +63,7 @@ class TestCommonConstants(unittest.TestCase):
         """常量写错路径不会报错，只会在用到时才发现——所以在这里就查。"""
         from skirtlib import common
 
-        for name in ("PACKAGES_DIR", "VARIANTS_DIR", "HOST_PROVIDES_FILE"):
+        for name in ("RECIPES_DIR", "VARIANTS_DIR", "HOST_PROVIDES_FILE"):
             path = getattr(common, name)
             self.assertTrue(path.exists(), f"{name} 指向的 {path} 不存在")
 

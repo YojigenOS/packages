@@ -374,7 +374,7 @@ def run_in_container(srcrel: str, arch: str, spec: dict, epoch: int) -> None:
         '  find "$WORK/dest" -mindepth 1 | sed "s|^$WORK/dest||" \\\n'
         '    | awk \'{print tolower($0) "\\t" $0}\' | sort \\\n'
         '    | awk -F"\\t" \'{ if ($1 == p && $2 != pp) { print "         " pp "   ↔   " $2 } p=$1; pp=$2 }\' | head -10\n'
-        '  echo "[产物] 处理办法：配方不要装这类路径。参考 packages/perl 的 package()。"\n'
+        '  echo "[产物] 处理办法：配方不要装这类路径。参考 recipes/perl 的 package()。"\n'
         "  exit 1\n"
         "fi\n"
     )

@@ -34,7 +34,7 @@ from skirtlib import collect as collect_mod
 from skirtlib import spec as spec_mod
 from skirtlib import deps as deps_mod
 from skirtlib.build import run_in_container
-from skirtlib.common import PACKAGES_DIR, build_jobs
+from skirtlib.common import RECIPES_DIR, build_jobs
 
 #: 依赖闭包测试要用的基线。直接用真实的 bootstrap/provides.txt——不要在这里
 #: 另写一份：【另写一份就会漂移】，而它漂移的表现是测试莫名其妙地报环，
@@ -60,7 +60,7 @@ class TestContainerCommand(unittest.TestCase):
 
     def _cmd(self, arch: str = "aarch64") -> list[str]:
         spec = {"package": {"name": "x", "version": "1", "release": 1},
-                "_dir": PACKAGES_DIR}
+                "_dir": RECIPES_DIR}
         with mock.patch("skirtlib.build.subprocess.run") as run:
             run.return_value.returncode = 0
             run_in_container(".", arch, spec, self.EPOCH)

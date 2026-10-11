@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import graphlib
 
-from .common import PACKAGES_DIR
+from .common import RECIPES_DIR
 from .deps import load_host_provides
 from .spec import direct_deps, load_spec, recipe_of
 
