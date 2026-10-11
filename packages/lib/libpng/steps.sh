@@ -90,3 +90,41 @@ build() {
 #
 #        docker pull --platform linux/amd64 yojigenos/base-devel:edge
 #        docker tag yojigenos/base-devel:edge yojigenos/base-devel:x86_64
+#
+# ============================================================================
+# 2026-10-11 续查：断点定位到 options.awk 的 version=search
+# ============================================================================
+#
+# 生成的链路（Makefile 的 pnglibconf.out 规则）：
+#
+#     gawk -f scripts/options.awk out=pnglibconf.tf4 version=search \
+#          ./pngconf.h ./scripts/pnglibconf.dfa ./pngusr.dfa     ← ①
+#     gawk -f scripts/options.awk out=pnglibconf.tf5 pnglibconf.tf4  ← ②
+#     mv pnglibconf.tf5 pnglibconf.c
+#     gcc -E ... -DPNG_BUILDING_SYMBOL_TABLE pnglibconf.c > tf1      ← ③
+#     gawk -f scripts/dfn.awk out=tf2 tf1
+#     mv tf2 pnglibconf.out                                          ← ④
+#
+# 实测 ①② 都产出了东西（pnglibconf.c 有 10545 行、含 SETJMP 16 处），
+# ③④ 也跑完了——但 **④ 的结果里每一个选项都是 undef**。
+#
+# 说明 pnglibconf.c 里的 #ifdef 链【全部走到了 #else】。而那些开关来自 ①：
+# `version=search ./pngconf.h` —— 意思是"从 pngconf.h 里搜出支持标记"。
+# 我们的 gawk 5.4.1 在那一步【什么都没搜到】，Debian 的 gawk 5.2.1 搜到了。
+#
+# 注意 ①② 单独跑在两边都能看到 "option: SETJMP enabled"——所以光看中间产物
+# 是看不出来的，要看 ① 生成的 pnglibconf.c 里那些 #ifdef 实际取哪一支。
+#
+# 下一步：把两个环境里 ① 的产物 pnglibconf.c diff 一下（或者直接看它开头
+# 那些 #ifdef/#else 的走向）。两个 gawk 对 options.awk 里 search 模式的
+# 行为差异就是答案。
+#
+# 手动复现（一分钟）：
+#
+#   docker run --rm -v $PWD/<libpng源>:/w -w /w yojigenos/base-devel:x86_64 \
+#     bash -c './configure --prefix=/usr --disable-static >/dev/null && \
+#              make pnglibconf.out && sed -n "113p" pnglibconf.out'
+#
+# 本地要有 yojigenos/base-devel:x86_64 这个标签（发布的是 edge-x86_64）：
+#   docker pull --platform linux/amd64 yojigenos/base-devel:edge
+#   docker tag yojigenos/base-devel:edge yojigenos/base-devel:x86_64
