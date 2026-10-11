@@ -1,0 +1,111 @@
+#!/bin/sh
+# 把一个架构的所有 .apk 收成一个 apk 软件仓库
+#
+# 用法：
+#     ./scripts/repo.sh                    # aarch64
+#     ./scripts/repo.sh --arch x86_64
+#     ./scripts/repo.sh --sign-key ~/.yojigenos/yojigenos.rsa
+#
+# 产出：
+#     var/repo/<arch>/APKINDEX.tar.gz      ← 索引（唯一的"特殊"文件）
+#     var/repo/<arch>/*.apk                ← 所有已发布的包
+#
+# ── 一个 apk 仓库【不是一个服务】────────────────────────────────────────
+#
+# 它就是【一个目录 + 一个索引文件】。没有数据库、没有要跑的程序、没有 API。
+# 所以任何能发静态文件的托管都行：nginx / Cloudflare R2 / S3 / 普通 web 目录。
+#
+#     repo.os.yojigen.cn/
+#     ├── aarch64/
+#     │   ├── APKINDEX.tar.gz
+#     │   ├── hello-2.12.3-r1.apk
+#     │   └── …（每个包每个版本一份）
+#     └── x86_64/
+#         └── 同上
+#
+# ── 仓库 URL 和 pkgname-spec 的配合（踩过）────────────────────────────────
+#
+# 客户端那边的写法是【仓库根】，apk 自己会加架构那层：
+#
+#     --repository https://repo.os.yojigen.cn
+#       → 它去拿 https://repo.os.yojigen.cn/aarch64/APKINDEX.tar.gz
+#
+# 所以 --pkgname-spec 要【带】架构前缀——它是相对于仓库根的：
+#
+#     --pkgname-spec 'aarch64/${name}-${version}.apk'
+#
+# 两边都带就变成 aarch64/aarch64/… （实测 404），两边都不带也拿不到包。
+#
+# ── 为什么不用 sync --delete ──────────────────────────────────────────────
+#
+# 包仓库是【只增不减】的：manifest 钉住版本，半年后还要能按同样的版本重建。
+# 所以上传用 `rclone copy`，不能用 `rclone sync`（那会删掉旧版本）。
+
+set -eu
+
+cd "$(dirname "$0")/.."
+
+ARCH=aarch64
+SIGN_KEY="${SIGN_KEY:-}"
+DESC=""
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --arch)     ARCH="$2"; shift 2 ;;
+        --sign-key) SIGN_KEY="$2"; shift 2 ;;
+        --desc)     DESC="$2"; shift 2 ;;
+        -h|--help)  sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        *) echo "未知参数: $1" >&2; exit 1 ;;
+    esac
+done
+
+PKGS="$PWD/var/pkgs/$ARCH"
+REPO="$PWD/var/repo/$ARCH"
+
+[ -d "$PKGS" ] || { echo "还没有包。先跑 scripts/pack.sh。" >&2; exit 1; }
+
+COUNT=$(ls "$PKGS"/*.apk 2>/dev/null | wc -l | tr -d ' ')
+[ "$COUNT" -gt 0 ] || { echo "$PKGS 里没有 .apk" >&2; exit 1; }
+
+echo
+echo "  收拢 $COUNT 个包 → var/repo/$ARCH/"
+
+mkdir -p "$REPO"
+# ★ 用 cp 而不是 mv —— var/pkgs 是"打包的产物"，var/repo 是"要发布的东西"，
+#   两者是不同的东西，repo 可以从 pkgs 重新生成。
+cp "$PKGS"/*.apk "$REPO/"
+
+# 签名参数：没给密钥就不签（本地开发够用，装的时候 --allow-untrusted）
+if [ -n "$SIGN_KEY" ]; then
+    [ -f "$SIGN_KEY" ] || { echo "找不到签名密钥: $SIGN_KEY" >&2; exit 1; }
+    SIGN_ARGS="--sign-key /key.rsa"
+    SIGN_MOUNT="-v $SIGN_KEY:/key.rsa:ro"
+    echo "  用密钥签名: $(basename "$SIGN_KEY")"
+else
+    SIGN_ARGS="--allow-untrusted"
+    SIGN_MOUNT=""
+    echo "  ★ 不签名（本地开发用；装的时候要 --allow-untrusted）"
+fi
+
+DESC="${DESC:-YojigenOS $ARCH 软件仓库}"
+
+echo
+# shellcheck disable=SC2086
+docker run --rm -v "$REPO:/repo" $SIGN_MOUNT alpine:latest sh -c "
+    set -e
+    cd /repo
+    rm -f APKINDEX.tar.gz
+    apk mkndx $SIGN_ARGS \
+        --pkgname-spec 'aarch64/\${name}-\${version}.apk' \
+        --description '$DESC' \
+        --output APKINDEX.tar.gz *.apk
+" 2>&1 | grep -viE '^\s*warning: support for packages without datahash' | sed 's/^/  /'
+
+echo
+printf '  ✓ var/repo/%s/APKINDEX.tar.gz  %s 字节\n' "$ARCH" "$(wc -c < "$REPO/APKINDEX.tar.gz" | tr -d ' ')"
+echo
+echo "  本地试一下（起个静态服务，然后从它装）："
+echo "      cd var/repo && python3 -m http.server 18080"
+echo "      apk add --allow-untrusted --repository http://localhost:18080 \\"
+echo "              --root /tmp/r --initdb <包名>"
+echo
