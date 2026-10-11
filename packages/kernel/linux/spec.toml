@@ -50,11 +50,26 @@ runtime = []
 #   bison   和 flex 搭配，生成语法分析器
 #   rsync   内核的 headers_install 用它（linux-headers 已经证明过）
 #   perl    内核的若干脚本用它
-build = ["make", "gcc", "rsync", "flex", "bison", "bc", "perl", "bash", "coreutils"]
+#
+#   openssl certs/extract-cert 用它读 X.509 证书。这是第三个实测撞出来的，
+#           但它的结论和前两个不同——不是「加个包就完了」，中间有一段：
+#
+#           先试过关掉内核内建的信任钥匙串（CONFIG_SYSTEM_TRUSTED_KEYRING），
+#           关不掉：它被 SYSTEM_DATA_VERIFICATION 一路 select 下来，而
+#           Kconfig 的 select 会覆盖配置文件里的显式值。那四个 select 源头
+#           精确关掉之后它依然是 y。
+#
+#           所以最终是加 openssl 包（packages/lib/openssl）。那不是绕过，
+#           是本来就要它——python3 的 https、curl、git、包签名都挂在上面。
+#
+#           ★ 但它必须【声明在这里】：驱动只把声明的依赖合并进构建容器，
+#             配方里没写就等于容器里没有。第一次重建内核时 openssl 已经建好
+#             了，内核却还是报 openssl/bio.h 找不到——就是这个原因。
+build = ["make", "gcc", "rsync", "flex", "bison", "bc", "perl", "bash", "coreutils", "openssl"]
 
 [dependencies.x86_64]
 runtime = []
-build = ["make", "gcc", "rsync", "flex", "bison", "bc", "perl", "bash", "coreutils"]
+build = ["make", "gcc", "rsync", "flex", "bison", "bc", "perl", "bash", "coreutils", "openssl"]
 
 [build]
 # custom：内核有自己的构建体系（Kbuild），套不进 autotools 那套映射
