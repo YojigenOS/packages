@@ -32,110 +32,20 @@ BUILDENV_IMAGE = os.environ.get("SKIRT_BUILDENV", "yojigenos/buildenv")
 # 价值就在「能留住」。挂在宿主目录里，它跟着工作区走，能看见、能备份。
 # 用环境变量 SKIRT_CCACHE 覆盖。
 CCACHE_DIR = Path(os.environ.get("SKIRT_CCACHE", ROOT.parent / "ccache"))
-
-# GNU 包的备用镜像写在【配方】里，不由驱动补。
+# GNU 包的备用镜像写在【配方】里，驱动不补。
 #
-# 我原来在驱动里加过一段「自动给 ftp.gnu.org 的包补镜像」，理由是 21 个包
-# 改 21 处太啰嗦。那个理由不足以抵消它的坏处：**配方应该是自包含的**——
-# 读一个配方就该知道它的源码全部从哪来。驱动偷偷加源会让行为不可见，
-# 排查时你会问"它为什么从 USTC 下载？我没写这个"。
+# 我原来在驱动里加过一段「自动给 ftp.gnu.org 的包补镜像」，理由是 21 个包改
+# 21 处太啰嗦。那个理由不足以抵消它的坏处：**配方应该是自包含的**——读一个
+# 配方就该知道它的源码全部从哪来。驱动偷偷加源会让行为不可见，排查时你会问
+# "它为什么从 USTC 下载？我没写这个"。
 #
 # Arch 也是这么分的：PKGBUILD 里写上游，镜像配在 /etc/pacman.d/mirrorlist。
 # 配方那份是【身份】，系统那份是【政策】。
 #
 # 而"中美环境不同"这个担心不成立：`url`（上游）排在第一位，镜像只是兜底——
 # ftp.gnu.org 在两地都不算慢（实测本机 2.9 秒），所以镜像在 CI 上永远轮不到。
-# 真到了要换镜像的时候，改配方是对的：那是关于"这个包从哪来"的事实。
 
-VARIANTS_DIR = ROOT / "variants"
-OUTPUT_DIR = ROOT / "output"
-CACHE_DIR = ROOT / "cache"
-BUILD_DIR = ROOT / "build"
-HOST_PROVIDES_FILE = ROOT / "host" / "provides.txt"
-#: 构建环境镜像。默认是 Debian 底的那个（tools/buildenv 构建出来的）。
-#:
-#: 用 SKIRT_BUILDENV 可以换掉它——这正是自举的验证方式：把 base-devel 拼出来
-#: 导入成镜像，然后 `SKIRT_BUILDENV=yojigenos/base-devel ./tools/skirt build ...`。
-#: 跑得通，就说明我们的系统能构建我们自己的东西；跑不通，第一个报错就是答案。
-BUILDENV_IMAGE = os.environ.get("SKIRT_BUILDENV", "yojigenos/buildenv")
-
-# ccache 缓存放在仓库外面（工作区根目录下）。
-#
-# 两个理由：它体积大且完全可再生，不该进版本控制；同时也不能放 Docker
-# 命名卷——docker volume prune 和磁盘清理会连它一起扫掉，而缓存的全部
-# 价值就在「能留住」。挂在宿主目录里，它跟着工作区走，能看见、能备份。
-# 用环境变量 SKIRT_CCACHE 覆盖。
-CCACHE_DIR = Path(os.environ.get("SKIRT_CCACHE", ROOT.parent / "ccache"))
-
-#: GNU 包的备用镜像【列表】。
-#:
-#: 为什么是列表而不是一个：**哪个镜像快取决于机器在哪**。实测（同一台中国
-#: 的机器，gettext-1.0.tar.xz，10 MB）：
-#:
-#:     ftp.gnu.org       2.9s      阿里云         56.1s  ← 有，但慢 70 倍
-#:     mirrors.ustc.edu.cn 1.0s    mirrors.kernel.org  3.1s
-#:     mirror.nju.edu.cn   0.8s    ftpmirror.gnu.org   4.3s（它指到了巴西）
-#:
-#: 而所有镜像的 sha256 是【同一个】——所以换镜像不降低信任，只是换条路。
-#: （这也是为什么校验不用跟着改。）
-#:
-#: CI 跑在 GitHub 的 runner 上（美国/欧洲），中文镜像对它是【慢】的。所以
-#: 顺序里 ftp.gnu.org 排第一——它对哪儿都不算差，而中文镜像只在前面都失败
-#: 时才轮到。真要按环境调，用 SKIRT_GNU_MIRROR 覆盖。
-#:
-#: 格式：逗号分隔。主源的路径是 https://ftp.gnu.org/gnu/<路径>，
-#: 镜像站对应 <镜像>/gnu/<路径>。设成空串关掉这个行为。
-GNU_MIRRORS = [
-    m.strip().rstrip("/")
-    for m in os.environ.get(
-        "SKIRT_GNU_MIRROR",
-        #: 顺序就是偏好顺序。清华不在第一位：实测它有限速。
-        "https://mirrors.ustc.edu.cn,"
-        "https://mirror.nju.edu.cn,"
-        "https://mirrors.tuna.tsinghua.edu.cn,"
-        "https://mirrors.kernel.org,"
-        "https://mirrors.aliyun.com",
-    ).split(",")
-    if m.strip()
-]
-
-#: 兼容旧名字。
-GNU_MIRROR = GNU_MIRRORS[0] if GNU_MIRRORS else ""
-
-VARIANTS_DIR = ROOT / "variants"
-OUTPUT_DIR = ROOT / "output"
-CACHE_DIR = ROOT / "cache"
-BUILD_DIR = ROOT / "build"
-HOST_PROVIDES_FILE = ROOT / "host" / "provides.txt"
-#: 构建环境镜像。默认是 Debian 底的那个（tools/buildenv 构建出来的）。
-#:
-#: 用 SKIRT_BUILDENV 可以换掉它——这正是自举的验证方式：把 base-devel 拼出来
-#: 导入成镜像，然后 `SKIRT_BUILDENV=yojigenos/base-devel ./tools/skirt build ...`。
-#: 跑得通，就说明我们的系统能构建我们自己的东西；跑不通，第一个报错就是答案。
-BUILDENV_IMAGE = os.environ.get("SKIRT_BUILDENV", "yojigenos/buildenv")
-
-# ccache 缓存放在仓库外面（工作区根目录下）。
-#
-# 两个理由：它体积大且完全可再生，不该进版本控制；同时也不能放 Docker
-# 命名卷——docker volume prune 和磁盘清理会连它一起扫掉，而缓存的全部
-# 价值就在「能留住」。挂在宿主目录里，它跟着工作区走，能看见、能备份。
-# 用环境变量 SKIRT_CCACHE 覆盖。
-CCACHE_DIR = Path(os.environ.get("SKIRT_CCACHE", ROOT.parent / "ccache"))
-
-#: GNU 包的备用镜像。
-#:
-#: ftp.gnu.org 实测时通时不通——同一台机器上、同一个 URL，构建 glibc 时是通
-#: 的，加 patch 配方时就不通了；CI 上也断过（gettext 那一步）。
-#:
-#: 一个一个往配方里写 urls 是错的做法：21 个包都用它，而且换镜像时得改 21 处。
-#: GNU 的所有发布包在镜像站上的路径是可以算出来的（把 ftp.gnu.org/gnu/ 换成
-#: <镜像>/gnu/），所以让驱动自己补一个备选。sha256 不变——镜像就是同一份字节。
-#:
-#: 可以用 SKIRT_GNU_MIRROR 换掉，或者设成空串关掉这个行为。
-GNU_MIRROR = os.environ.get("SKIRT_GNU_MIRROR",
-                            "https://mirrors.tuna.tsinghua.edu.cn")
-
-#: ccache 在容器里看到的缓存目录。宿主的 CCACHE_DIR 挂到这里。
+#: 缓存在容器里看到的目录。宿主的 CCACHE_DIR 挂到这里。
 #:
 #: 驱动会把它显式传进容器（`-e CCACHE_DIR=...`），不靠镜像的 ENV——
 #: base-devel 是 docker import 出来的，那种镜像不带 ENV。
