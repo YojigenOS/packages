@@ -102,6 +102,22 @@ def _write_package(out: Path, destdir: Path, wanted: set[str]) -> None:
             dst.symlink_to(os.readlink(src))
         elif src.is_dir():
             dst.mkdir(parents=True, exist_ok=True)
+            # ★ 目录的模式也要带过来。
+            #
+            # mkdir 用默认的 0755，于是 /tmp 的 1777 和 /root 的 0700 全丢了。
+            # 文件那一路有 shutil.copy2 兜着，只有目录会中招——所以
+            # home/etc/var 看着是对的（它们本来就是 0755），而 tmp/var/tmp/root
+            # 全错。
+            #
+            # 代价实测过：本地自举跑到最后一个包 glibc，configure 报
+            #
+            #     config.guess: cannot create a temporary directory in /tmp
+            #
+            # 因为构建是【降权】跑的，而 /tmp 成了 0755。
+            #
+            # merge_tree（deps.py）里早就写着同一件事——"丢了这些模式，构建会
+            # 以莫名其妙的 Permission denied 失败"。它那里修了，这里漏了。
+            shutil.copystat(src, dst)
         else:
             shutil.copy2(src, dst, follow_symlinks=False)
 

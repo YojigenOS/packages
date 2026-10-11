@@ -196,3 +196,44 @@ class TestBuildScriptDefaults(unittest.TestCase):
                     f"{sorted(need - declared)}")
         # 不能因为一个都没有就静默通过——那正是「空验证」的形状
         self.assertGreater(checked, 0, "没有任何配方在用 autoreconf，这条测试是空的")
+
+
+class TestCollectPreservesModes(unittest.TestCase):
+    """收集产物时，**目录的模式也要带过来**。
+
+    这一条是真出过事的：_write_package 用 dst.mkdir() 建目录，默认 0755，
+    于是 filesystem 里 chmod 1777 的 /tmp 和 chmod 0700 的 /root 全变成 0755。
+    文件那一路有 shutil.copy2 兜着，所以只有目录会中招——这也是它一直没被
+    发现的原因：home/etc/var 本来就是 0755，看起来都对。
+
+    代价实测过：本地自举跑到最后一个包 glibc，configure 报
+    "config.guess: cannot create a temporary directory in /tmp"——因为构建是
+    降权跑的，而 /tmp 成了 0755。
+
+    merge_tree（deps.py）里早就写着同一件事，它那里修了，collect 这里漏了。
+    """
+
+    def test_目录模式要被保留(self):
+        import stat
+        from skirtlib import collect as collect_mod
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            dest = root / "dest"
+            out = root / "out"
+            # 一个 1777 的目录、一个 0700 的目录、一个普通文件
+            (dest / "tmp").mkdir(parents=True)
+            (dest / "root").mkdir(parents=True)
+            (dest / "usr/bin").mkdir(parents=True)
+            (dest / "usr/bin/hello").write_text("x")
+            os.chmod(dest / "tmp", 0o1777)
+            os.chmod(dest / "root", 0o700)
+
+            wanted = {"tmp", "root", "usr", "usr/bin", "usr/bin/hello"}
+            collect_mod._write_package(out, dest, wanted)
+
+            payload = out / "payload"
+            got_tmp = stat.S_IMODE(os.stat(payload / "tmp").st_mode)
+            got_root = stat.S_IMODE(os.stat(payload / "root").st_mode)
+            self.assertEqual(oct(got_tmp), oct(0o1777),
+                             "/tmp 的 1777 丢了——构建会以莫名其妙的 Permission denied 失败")
+            self.assertEqual(oct(got_root), oct(0o700), "/root 的 0700 丢了")
