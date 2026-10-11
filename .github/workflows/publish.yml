@@ -137,7 +137,11 @@ jobs:
           IMAGE_OS: ${{ runner.os }}
           IMAGE_VERSION: ${{ runner.arch }}
         run: |
-          DATE=$(date -u +%Y.%m.%d)
+          # 用【这轮运行的起始时间】而不是"现在"：一轮要跑约两小时，跨了
+          # UTC 午夜的话，manifest job 那份「现在」就会是另一个日期，
+          # 于是它去找 base-devel:<另一个日期>-<arch>，找不到就失败。
+          # 一处事实，两处引用。
+          DATE=$(date -u -d "${{ github.run_started_at }}" +%Y.%m.%d)
           echo "date=$DATE" >> "$GITHUB_OUTPUT"
 
           ARCH=${{ matrix.arch }}
@@ -331,7 +335,9 @@ jobs:
 
       - name: 合成清单
         run: |
-          for TAG in edge "$(date -u +%Y.%m.%d)"; do
+          # 和 build job 用同一个来源（见那里的注释）
+          DATE=$(date -u -d "${{ github.run_started_at }}" +%Y.%m.%d)
+          for TAG in edge "$DATE"; do
             docker manifest create "yojigenos/base-devel:$TAG" \
               --amend "yojigenos/base-devel:$TAG-aarch64" \
               --amend "yojigenos/base-devel:$TAG-x86_64"
