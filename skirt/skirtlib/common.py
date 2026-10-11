@@ -10,18 +10,18 @@ import sys
 import time
 from pathlib import Path
 
-# 模块在 tools/skirtlib/ 下，仓库根是上三级
+# 模块在 skirt/skirtlib/ 下，仓库根是上三级
 ROOT = Path(__file__).resolve().parent.parent.parent
 PACKAGES_DIR = ROOT / "packages"
 VARIANTS_DIR = ROOT / "variants"
 OUTPUT_DIR = ROOT / "output"
 CACHE_DIR = ROOT / "cache"
 BUILD_DIR = ROOT / "build"
-HOST_PROVIDES_FILE = ROOT / "host" / "provides.txt"
-#: 构建环境镜像。默认是 Debian 底的那个（tools/buildenv 构建出来的）。
+HOST_PROVIDES_FILE = ROOT / "bootstrap" / "provides.txt"
+#: 构建环境镜像。默认是 Debian 底的那个（bootstrap 构建出来的）。
 #:
 #: 用 SKIRT_BUILDENV 可以换掉它——这正是自举的验证方式：把 base-devel 拼出来
-#: 导入成镜像，然后 `SKIRT_BUILDENV=yojigenos/base-devel ./tools/skirt build ...`。
+#: 导入成镜像，然后 `SKIRT_BUILDENV=yojigenos/base-devel ./skirt/skirt build ...`。
 #: 跑得通，就说明我们的系统能构建我们自己的东西；跑不通，第一个报错就是答案。
 BUILDENV_IMAGE = os.environ.get("SKIRT_BUILDENV", "yojigenos/buildenv")
 

@@ -34,7 +34,7 @@ def _recipe_spec(name: str) -> dict:
     if recipe is not None and recipe != name:
         die(
             f"{name} 是 {recipe} 的子包，不能单独构建。\n"
-            f"       它由 {recipe} 一次产出的：tools/skirt build {recipe}"
+            f"       它由 {recipe} 一次产出的：skirt/skirt build {recipe}"
         )
     return load_spec(name)      # 不认识的会在这里报「找不到配方」
 
@@ -149,7 +149,7 @@ def cmd_bootstrap(args) -> None:
     for i, name in enumerate(order, 1):
         print(f"  [{i:2d}/{len(order)}] {name:<16}", end="", flush=True)
         t0 = monotonic()
-        r = subprocess.run([sys.executable, str(ROOT / "tools" / "skirt"),
+        r = subprocess.run([sys.executable, str(ROOT / "skirt" / "skirt"),
                             "build", name, "--arch", arch],
                            capture_output=True, text=True)
         dt = int(monotonic() - t0)

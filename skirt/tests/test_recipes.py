@@ -2,13 +2,13 @@
 """skirt 的单元测试。
 
 跑法:
-    python3 -m unittest discover -s tools/tests -v
+    python3 -m unittest discover -s skirt/tests -v
 
 这些测试不需要 Docker，也不构建任何东西——只覆盖纯逻辑。重点在
 deps.dep_closure()：那里编码的是自举语义，是 skirt 里最容易出错、
 也最不该出错的部分。三条规则都是踩坑踩出来的：
 
-  1. 构建环境基线（host/provides.txt）里的包，跳过
+  1. 构建环境基线（bootstrap/provides.txt）里的包，跳过
   2. 自己依赖自己 = 用上一轮构建产物，**不是**成环
   3. 真正的环（glibc → make → glibc）必须报错
 
@@ -36,7 +36,7 @@ from skirtlib import deps as deps_mod
 from skirtlib.build import run_in_container
 from skirtlib.common import PACKAGES_DIR, build_jobs
 
-#: 依赖闭包测试要用的基线。直接用真实的 host/provides.txt——不要在这里
+#: 依赖闭包测试要用的基线。直接用真实的 bootstrap/provides.txt——不要在这里
 #: 另写一份：【另写一份就会漂移】，而它漂移的表现是测试莫名其妙地报环，
 #: 或者更糟：报一个已经不存在的环。工具链和 autotools 都在里面，原因见
 #: 那个文件自己的注释（它们都是「构建构建系统」的工具，靠排序解不开）。
@@ -98,7 +98,7 @@ class TestEveryRealSpec(unittest.TestCase):
         glibc = load_spec("glibc")
         deps = [load_spec(n)
                 for n in deps_mod.dep_closure(glibc, "aarch64", host_provides)]
-        # 原来这里断言 binutils 在闭包里。现在它在 host/provides.txt 里——
+        # 原来这里断言 binutils 在闭包里。现在它在 bootstrap/provides.txt 里——
         # 工具链属于构建环境的起点（编译器没法依赖自己：gcc 要 gmp，gmp 要
         # 编译器）。基线里的包不参与闭包，所以换成断言 bison：它是 glibc 的
         # 构建依赖，而且【不在】基线里，同样能验证「依赖把包推到后面」。

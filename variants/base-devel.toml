@@ -74,7 +74,7 @@ packages = [
   # git 树里没有 configure，得现场 autoreconf。而 autoconf 是 Perl 程序，
   # automake 调用 autoconf，libtool 靠 m4 宏——所以是这四个一起。
   #
-  # 它们也在 host/provides.txt 里：libxcrypt → autoconf → perl → libxcrypt
+  # 它们也在 bootstrap/provides.txt 里：libxcrypt → autoconf → perl → libxcrypt
   # 是个真的环，靠排序解不开。和工具链同族。
   "perl",
   "autoconf",

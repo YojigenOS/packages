@@ -62,7 +62,7 @@ jobs:
         run: |
           # Dockerfile 是 FROM debian:stable-slim——架构中立，
           # 在哪台 runner 上建就是哪个架构的。
-          docker build -t yojigenos/buildenv:aarch64 tools/buildenv
+          docker build -t yojigenos/buildenv:aarch64 bootstrap
 
       # ★ 构建环境【建完就推】，不等引导。
       #
@@ -91,10 +91,10 @@ jobs:
       - name: 引导 —— 建出全部包
         id: bootstrap
         run: |
-          ./tools/skirt order | head -50
+          ./skirt/skirt order | head -50
           # bootstrap 失败时非零退出（这是它该做的）。但我们要先把日志传出去，
           # 所以这里不让它中断，改成记下结论、后面再失败。
-          ./tools/skirt bootstrap --report || echo "bootstrap_failed=1" >> "$GITHUB_OUTPUT"
+          ./skirt/skirt bootstrap --report || echo "bootstrap_failed=1" >> "$GITHUB_OUTPUT"
 
       # ★ 失败那一刻就把日志拿到手。
       #
@@ -129,7 +129,7 @@ jobs:
 
       - name: 拼出 base-devel 镜像
         run: |
-          ./tools/skirt image base-devel
+          ./skirt/skirt image base-devel
           ls -lh output/aarch64/yojigenos-base-devel-aarch64.tar.gz
 
       - name: 导入并打标签
@@ -224,7 +224,7 @@ jobs:
         env:
           SKIRT_BUILDENV: yojigenos/base-devel
         run: |
-          ./tools/skirt bootstrap --report || echo "bootstrap_failed=1" >> "$GITHUB_OUTPUT"
+          ./skirt/skirt bootstrap --report || echo "bootstrap_failed=1" >> "$GITHUB_OUTPUT"
 
       - name: 上传自举日志
         if: always() && inputs.selfhost
@@ -246,7 +246,7 @@ jobs:
         if: ${{ inputs.selfhost }}
         run: |
           ARCH=aarch64
-          ./tools/skirt image base-devel
+          ./skirt/skirt image base-devel
           NEW=output/$ARCH/yojigenos-base-devel-$ARCH.tar.gz
 
           echo "### 自举验证 [$ARCH]" >> "$GITHUB_STEP_SUMMARY"

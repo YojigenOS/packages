@@ -4,20 +4,20 @@
 短裙里装着四次元空间；这里装着所有的包。
 
 用法:
-    tools/skirt build <包名>              构建一个包（默认当前架构）
-    tools/skirt build --arch x86_64 <包名>
-    tools/skirt list                      列出所有包
-    tools/skirt deps <包名>               查看依赖解析结果（不构建）
-    tools/skirt clean [包名]              清理构建目录 / 该包的产物
+    skirt/skirt build <包名>              构建一个包（默认当前架构）
+    skirt/skirt build --arch x86_64 <包名>
+    skirt/skirt list                      列出所有包
+    skirt/skirt deps <包名>               查看依赖解析结果（不构建）
+    skirt/skirt clean [包名]              清理构建目录 / 该包的产物
 
 依赖机制:
     构建一个包之前，驱动会：
       1. 递归解析它的 runtime + build 依赖（按依赖顺序排好）
-      2. 把 host/provides.txt 里列出的包视为「构建环境已提供」，跳过
+      2. 把 bootstrap/provides.txt 里列出的包视为「构建环境已提供」，跳过
       3. 其余依赖必须已经在 output/<架构>/ 里构建过
       4. 把它们的 payload 叠加成 sysroot，合并进构建容器的根文件系统
 
-    host/provides.txt 是「构建环境基线」，不是待办清单。它永远不会空——
+    bootstrap/provides.txt 是「构建环境基线」，不是待办清单。它永远不会空——
     glibc 构建需要 make，make 运行需要 glibc，这个环是内在的。真正的自举
     标志是：基线里的东西是我们自己构建的，且构建环境是我们自己搭的。
 
@@ -31,7 +31,7 @@
     commands.py  子命令
 
 首次使用前需要准备构建环境:
-    docker build -t yojigen/buildenv:$(uname -m | sed 's/arm64/aarch64/') tools/buildenv
+    docker build -t yojigen/buildenv:$(uname -m | sed 's/arm64/aarch64/') bootstrap
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ import os
 import sys
 from pathlib import Path
 
-# 允许直接以脚本方式运行（./tools/skirt），无需安装
+# 允许直接以脚本方式运行（./skirt/skirt），无需安装
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from skirtlib.commands import main

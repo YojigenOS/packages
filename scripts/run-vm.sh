@@ -40,8 +40,26 @@ case "$ARCH" in
     *) echo "不认识的架构: $ARCH" >&2; exit 1 ;;
 esac
 
+# --no-prepare：跳过拼 rootfs 和打 initramfs，直接用上次留下的。
+#
+# 它们的产物在 output/$ARCH/.vm/ 里，都在宿主上（不是 Docker 里的），
+# 所以只要没换过包，复用是安全的——重复跑本来也会得到同一份字节。
+# 从零准备大约要两分钟，跳过就只剩 QEMU 启动的那一秒。
+PREPARE=1
+for a in "$@"; do
+    case "$a" in
+        --no-prepare) PREPARE=0 ;;
+        -h|--help) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        *) echo "未知参数: $a" >&2; exit 1 ;;
+    esac
+done
+
 RUN=output/$ARCH/.vm
 mkdir -p "$RUN"
+
+INITRAMFS="$RUN/initramfs.cpio.gz"
+
+if [ "$PREPARE" = 1 ]; then
 
 # ---------------------------------------------------------------- 1. 包列表
 #
@@ -62,11 +80,10 @@ PACKAGES="$PACKAGES yojigenos-init"
 # ---------------------------------------------------------------- 2. rootfs
 echo "[2/4] 拼 rootfs"
 ROOTFS="$RUN/rootfs.tar.gz"
-./tools/skirt rootfs --arch "$ARCH" --output "$ROOTFS" $PACKAGES
+./skirt/skirt rootfs --arch "$ARCH" --output "$ROOTFS" $PACKAGES
 
 # ---------------------------------------------------------------- 3. initramfs
 echo "[3/4] 打成 initramfs"
-INITRAMFS="$RUN/initramfs.cpio.gz"
 # 挂【目录】而不是单个文件。挂文件在 Docker Desktop / OrbStack 上有个已知的
 # 坑：守护进程会把那个路径当成目录去 mkdir，然后报
 #     mkdir .../rootfs.tar.gz: file exists
@@ -78,7 +95,7 @@ INITRAMFS="$RUN/initramfs.cpio.gz"
 # （也已经加进 variants/base-devel.toml——将来的镜像会自带，那时这几行可以删。）
 CPIO=$(ls -d output/"$ARCH"/cpio-*/payload 2>/dev/null | head -1 || true)
 if [ -z "$CPIO" ]; then
-    echo "  ✗ 没找到 cpio。先建它：./tools/skirt build cpio --arch $ARCH" >&2
+    echo "  ✗ 没找到 cpio。先建它：./skirt/skirt build cpio --arch $ARCH" >&2
     exit 1
 fi
 docker run --rm \
@@ -110,12 +127,14 @@ docker run --rm \
         echo "    initramfs: $(du -h /vm/initramfs.cpio.gz | cut -f1)"
     '
 
+fi   # PREPARE
+
 # ---------------------------------------------------------------- 4. 内核
 echo "[4/4] 找内核"
 KERNEL=$(ls -d output/"$ARCH"/linux-*/payload/boot/vmlinuz 2>/dev/null | head -1 || true)
 if [ -z "$KERNEL" ]; then
     echo "  ✗ 没找到内核镜像。" >&2
-    echo "    先建它：./tools/skirt build linux --arch $ARCH" >&2
+    echo "    先建它：./skirt/skirt build linux --arch $ARCH" >&2
     exit 1
 fi
 echo "    内核: $KERNEL"

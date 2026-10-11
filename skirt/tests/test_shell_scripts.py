@@ -28,7 +28,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(ROOT / "tools"))
+sys.path.insert(0, str(ROOT / "skirt"))
 
 
 class TestShellVariableBoundaries(unittest.TestCase):

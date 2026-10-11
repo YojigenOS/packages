@@ -9,7 +9,7 @@
     glibc → binutils → gcc → glibc
 
 所以顺序**不是配方的纯函数**——它取决于构建环境已经提供什么。这正是
-`docs/决策记录/0011` 说的那件事：`host/provides.txt` 里的包由构建环境满足，
+`docs/决策记录/0011` 说的那件事：`bootstrap/provides.txt` 里的包由构建环境满足，
 指向它们的边断在那里，环就开了。
 
 ## 一个容易搞错的地方
@@ -109,10 +109,10 @@ def build_order(arch: str = "aarch64",
             f"  {' → '.join(cycle)}\n"
             "\n"
             "环必须由构建环境提供一个起点。把环上最底层的那一个加进\n"
-            "host/provides.txt（它会由构建环境满足，不再等待先建好），\n"
+            "bootstrap/provides.txt（它会由构建环境满足，不再等待先建好），\n"
             "然后在构建环境里真的提供它。\n"
             "\n"
-            f"当前的基线（host/provides.txt）: {sorted(host_provides) or '（空）'}"
+            f"当前的基线（bootstrap/provides.txt）: {sorted(host_provides) or '（空）'}"
         )
         raise  # die 不会返回；这里只是让类型检查满意
 

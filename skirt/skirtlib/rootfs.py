@@ -36,7 +36,7 @@ def resolve_set(packages: list[str], arch: str) -> list[str]:
 
       - **只跟 runtime 依赖**。rootfs 是最终系统，不该包含编译器、make
         这类只在构建时需要的东西。
-      - **不看 host/provides.txt**。那份列表说的是「构建环境提供什么」，
+      - **不看 bootstrap/provides.txt**。那份列表说的是「构建环境提供什么」，
         和「最终系统里应该有什么」是两回事。glibc 在基线的意思是构建时
         不必处理它，不是说成品系统里不需要 C 库。
 
@@ -80,7 +80,7 @@ def assemble(packages: list[str], arch: str, output: Path | None = None) -> tupl
     #
     # source_date_epoch 跟的是【构建】依赖链（构建环境会改变产物字节），而
     # 那条链里有真实的自举环：glibc 的构建依赖 make，make 的运行时依赖 glibc。
-    # 这个环平时由 host/provides.txt 切开——它声明「这一环由宿主提供，不用
+    # 这个环平时由 bootstrap/provides.txt 切开——它声明「这一环由宿主提供，不用
     # 自己解析」。传空集就等于把切口堵上，dep_closure 会直接报「依赖成环」。
     #
     # 而且这不只是崩不崩的问题：传空集就算侥幸不环，算出来的值也会和各包

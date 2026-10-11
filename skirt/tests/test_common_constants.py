@@ -32,9 +32,9 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(ROOT / "tools"))
+sys.path.insert(0, str(ROOT / "skirt"))
 
-COMMON = ROOT / "tools" / "skirtlib" / "common.py"
+COMMON = ROOT / "skirt" / "skirtlib" / "common.py"
 
 
 class TestCommonConstants(unittest.TestCase):

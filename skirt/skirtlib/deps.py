@@ -13,7 +13,7 @@ from .spec import direct_deps, latest_date, load_spec, package_rel, recipe_of
 # ---------------------------------------------------------------- 依赖解析
 
 def load_host_provides() -> set[str]:
-    """读取 host/provides.txt —— 宿主已经提供的包。"""
+    """读取 bootstrap/provides.txt —— 宿主已经提供的包。"""
     if not HOST_PROVIDES_FILE.is_file():
         return set()
     out = set()
@@ -120,7 +120,7 @@ def dep_payload(name: str, arch: str) -> tuple[Path, str]:
     if not payload.is_dir():
         die(
             f"依赖 {name} 还没有构建（找不到 {payload.relative_to(ROOT)}/）\n"
-            f"       先执行:  tools/skirt build {recipe_of(name)}"
+            f"       先执行:  skirt/skirt build {recipe_of(name)}"
         )
     return payload, rel
 

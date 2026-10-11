@@ -90,7 +90,7 @@ fi
 # 先删掉上一次的产物，否则「构建成功」可能只是在看旧的。
 echo "  ② 端到端构建 $PROBE"
 rm -rf output/"$ARCH"/"$PROBE"-*/
-if ./tools/skirt build "$PROBE" --arch "$ARCH" > /tmp/smoke-build.log 2>&1; then
+if ./skirt/skirt build "$PROBE" --arch "$ARCH" > /tmp/smoke-build.log 2>&1; then
     pass "构建成功"
 else
     fail "构建失败——日志在 /tmp/smoke-build.log" "build"
