@@ -54,6 +54,24 @@ configure = [
   # 最低支持的运行时内核版本。取 5.4（LTS）：比它旧的内核不保证可用，
   # 比它新的都能用。
   "--enable-kernel=5.4",
+
+  # ★ 显式打开 CET（Intel 控制流保护）。
+  #
+  # 驱动的加固参数里，x86_64 会加 -fcf-protection=full。而 glibc 的 configure
+  # 会检测「编译器是否默认开 CET」（configure 里的 libc_cv_compiler_default_cet），
+  # 那个检测说不开 → 于是不编 sysdeps/x86/dl-cet.c → 但别的文件因为
+  # -fcf-protection=full 引用了 _dl_cet_*，链接时全部找不到：
+  #
+  #     /usr/bin/ld: librtld.os: undefined reference to `_dl_cet_check'
+  #     /usr/bin/ld: ld.so.new: hidden symbol `_dl_cet_open_check' isn't defined
+  #     /usr/bin/ld: final link failed: bad value
+  #
+  # **加固参数本身没错，错的是它没被 configure 看见。** 显式打开，
+  # 检测和构建就一致了——加固照旧，只是让它自洽。
+  #
+  # 实测只在 x86_64 上出现（CET 是 Intel 的特性）。但 --enable-cet 是 glibc
+  # 的通用 configure 选项（configure 第 1494 行声明的），aarch64 传它无害。
+  "--enable-cet",
 ]
 
 # ---------------------------------------------------------------- 子包
