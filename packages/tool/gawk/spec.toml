@@ -2,7 +2,7 @@
 
 [package]
 name        = "gawk"
-version     = "5.4.1"
+version     = "5.4.0"
 release     = 1
 date        = 2026-10-10T06:39:13Z
 description = "GNU awk，文本处理语言"
@@ -20,7 +20,7 @@ urls = [
   "https://mirrors.tuna.tsinghua.edu.cn/gnu/gawk/gawk-$VERSION.tar.xz",
   "https://mirrors.aliyun.com/gnu/gawk/gawk-$VERSION.tar.xz",
 ]
-sha256 = "07f6f7342b7febe4313fc2c2542ad93d64fe20ad8717200109f105a826f5fd37"
+sha256 = "3dd430f0cd3b4428c6c3f6afc021b9cd3c1f8c93f7a688dc268ca428a90b4ac1"
 
 [dependencies]
 runtime = ["glibc"]
@@ -30,6 +30,26 @@ build   = ["make", "gettext", "gcc"]
 runtime = ["glibc"]
 build   = ["make", "gettext", "gcc"]
 
+# ★ 暂时停在 5.4.0，不用 5.4.1。
+#
+# 5.4.1 有一个会破坏构建的回归：一个"读过但从未赋值"的数组元素，一旦参与过
+# 比较或判断，再当字符串用就会变成 "0" 而不是空串：
+#
+#     $ gawk 'BEGIN { if (a["x"] == "") ; a["x"] = a["x"] "y"; print "[" a["x"] "]" }'
+#     [0y]      # 5.4.1
+#     [y]       # 5.4.0、mawk、以及 POSIX 期望的结果
+#
+# 这不是边角情况——5.4.1 自己的 make check 就有 6 个测试失败
+# （arraysort2、delarpm2、elemnew2、elemnew4、matchuninitialized、typeof7）。
+# 上游邮件列表里还提到它同样会让 GCC 16.2 的构建失败。
+#
+# 我们这儿是这么撞上的：libpng 的 scripts/options.awk 读 requires["UNKNOWN_CHUNKS"]
+# 这个从没赋过值的键，于是 pnglibconf.h 里每一项都变成 undef（PNG_0_SUPPORTED
+# 这种），最后报出来的是"setjmp 没有声明"——完全指不到真正的原因。
+#
+# 触发条件和我们一样：**gawk 建的时候没有 MPFR**（我们的 gawk --version 里确实
+# 没有 MPFR 那一段）。上游说 5.4.0 行为正确，5.4.2 还没发布，所以先停在 5.4.0。
+# 等 5.4.2 出来就升回去。
 [build]
 type      = "autotools"
 configure = ["--prefix=/usr"]
