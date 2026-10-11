@@ -13,7 +13,6 @@ from pathlib import Path
 # 模块在 skirt/skirtlib/ 下，仓库根是上三级
 ROOT = Path(__file__).resolve().parent.parent.parent
 RECIPES_DIR = ROOT / "recipes"
-VARIANTS_DIR = ROOT / "variants"
 OUTPUT_DIR = ROOT / "var" / "output"
 CACHE_DIR = ROOT / "var" / "cache"
 BUILD_DIR = ROOT / "var" / "work"
