@@ -188,8 +188,16 @@ jobs:
       - name: 自检 —— 从刚生成的仓库装一遍
         run: |
           set -euo pipefail
-          ( cd "var/repo/${{ inputs.arch }}" && python3 -m http.server 18080 >/dev/null 2>&1 & echo $! > /tmp/http.pid )
+          # ★ 服务的根要是 var/repo，不是 var/repo/<arch>。
+          #   apk 会自己在仓库 URL 后面加 /<arch>，所以仓库 URL 是
+          #   http://localhost:18080 而索引在 /aarch64/APKINDEX.tar.gz。
+          #   在 <arch> 目录里起服务的话，apk 会去拿 /aarch64/aarch64/… → 404。
+          ( cd var/repo && python3 -m http.server 18080 >/dev/null 2>&1 & echo $! > /tmp/http.pid )
           sleep 2
+          echo "  确认索引可读:"
+          curl -fsS -o /dev/null -w "    HTTP %{http_code}  %{size_download} 字节\n" \
+            "http://localhost:18080/${{ inputs.arch }}/APKINDEX.tar.gz" || {
+              echo "    ✗ 本地服务拿不到索引"; exit 1; }
 
           docker run --rm --network host \
             -v "$PWD/var/repo:/repo:ro" \
