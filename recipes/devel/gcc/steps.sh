@@ -132,4 +132,21 @@ package() {
   #
   # 注意 gcc 自己【会】建 c++，所以只缺 cc——这也是它一直没被发现的原因。
   ln -s gcc "$PKGDEST/usr/bin/cc"
+
+  # ★ 把上面那个 /usr/lib64 符号链接【从产物里拿掉】。
+  #
+  #   它是为了让 make install 把 gcc 的 multilib 输出落到 /usr/lib 才临时建的
+  #   （那个重定向确实生效了，文件都在 /usr/lib 里）。但建完就留在产物里，
+  #   于是这个包也"提供"了 /usr/lib64——而它按决策记录 0001 是 filesystem 的
+  #   职责。两个包都提供同一个路径，apk 拒绝：
+  #
+  #       ERROR: gcc-16.2.0-r1: trying to overwrite usr/lib64
+  #              owned by filesystem-1.0-r1.
+  #
+  #   ★ 我一度以为"两边都是指向 lib 的相同符号链接，apk 会认"——**不会**。
+  #     是在 x86_64 发布前的自检里第二次撞上才确认的。
+  #
+  #   ★ 为什么删了没影响：make install 已经跑完了，它redirect 过去的文件都在
+  #     $PKGDEST/usr/lib/ 里。这个链接只是个路标，删掉路标不影响已经走过的路。
+  rm -f "$PKGDEST/usr/lib64"
 }
