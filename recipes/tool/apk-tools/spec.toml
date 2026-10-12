@@ -1,0 +1,76 @@
+# apk-tools —— 包管理器
+#
+# 这是 0006 那条路的终点：包格式和工具早就用上了（mkpkg/mkndx/adbsign 都是
+# apk 自己的），但这个【客户端】一直没有。有了它，系统才能自己装软件。
+#
+# ── 依赖 ──────────────────────────────────────────────────────────────────
+#
+# 运行时:
+#   glibc            基础
+#   openssl          libcrypto.so.3（apk 用它验包签名、也用它做 TLS）
+#   zlib             libz.so.1（APKINDEX 和包的解压）
+#   ca-certificates  ★ HTTPS 仓库要验证书链
+#
+# 最后那条是 Alpine 的注释点出来的（"ca-certificates-bundle needed for
+# https certificate validation"）。少了它，apk 能跑但连不上任何 https 仓库——
+# 而这个系统里所有仓库都是 https。
+#
+# ★ 这几个依赖【本该】由 so: 自动推导出来（apk 自己 NEED libcrypto.so.3 和
+#   libz.so.1）。但 mkpkg 不扫描 ELF——实测它建出来的包 provides 和 depends
+#   都是空的，Alpine 的 so: 是 abuild + scanelf 生成的。所以在那件事做出来
+#   之前，这里只能手写，而手写就会漏。见 docs/记录/未声明依赖的审计.md。
+#
+# 构建时:
+#   meson  ninja      上游只有 meson 这一条路
+#   openssl  zlib     头文件（我们还没拆 -dev 子包，它们的头文件在主包里）
+#   linux-headers
+#   gcc               C 编译器
+#
+# ── 构建选项 ──────────────────────────────────────────────────────────────
+#
+# 全部照 Alpine 的 APKBUILD，去掉它特有的那个补丁（repo-hash-sha1.patch 是
+# 它迁移期的缓存兼容措施，把索引缓存的哈希从 sha256 改回 sha1，和我们无关）。
+#
+#   --auto-features=disabled   没显式打开的都不打开
+#   --bindir=/sbin             apk 装在 /sbin（不是 /usr/bin）
+#   -Darch=aarch64             目标架构名
+#   -Ddocs=disabled            要 scdoc，我们没有
+#   -Dhelp=disabled            要 lua，我们不要（--help 的用法还在）
+#   -Dlua/-Dpython/-Dtests=disabled
+#   -Dzstd=disabled            不装 zstd 支持
+#
+# ★ 不改 url_backend：它默认就是 libfetch——apk 自己做 HTTP，不需要 curl。
+#   这一点 0006 说过，我在 strings 里也确认过（没有 wget 相关的符号）。
+
+[package]
+name        = "apk-tools"
+version     = "3.0.8"
+release     = 1
+date        = 2026-10-12T16:50:00Z
+description = "包管理器（Alpine Package Keeper）"
+section     = "core"
+url         = "https://gitlab.alpinelinux.org/alpine/apk-tools"
+license     = "GPL-2.0-only"
+
+[[source]]
+url    = "https://gitlab.alpinelinux.org/alpine/apk-tools/-/archive/v3.0.8/apk-tools-v3.0.8.tar.gz"
+sha256 = "e81c64a6e7c3806d45d4622c253e757aee970be84048554fa0eed79310e9453e"
+
+[dependencies]
+runtime = ["glibc", "openssl", "zlib", "ca-certificates"]
+build   = ["meson", "ninja", "openssl", "zlib", "linux-headers", "gcc"]
+
+[dependencies.x86_64]
+runtime = ["glibc", "openssl", "zlib", "ca-certificates"]
+build   = ["meson", "ninja", "openssl", "zlib", "linux-headers", "gcc"]
+
+[build]
+type = "meson"
+
+# ★ 选项【不在】这里，在 steps.sh 的 build() 里。
+#
+# 原因是 -Darch：它必须跟着目标架构走（aarch64 / x86_64），而 spec.toml 的
+# 变量展开只认 $NAME 和 $VERSION，没有 $ARCH。steps.sh 里有 $PKGARCH。
+#
+# 其余选项照 Alpine 的 APKBUILD，去掉它特有的那个补丁（repo-hash-sha1.patch
+# 是它迁移期的缓存兼容措施，把索引缓存的哈希从 sha256 改回 sha1，和我们无关）。
