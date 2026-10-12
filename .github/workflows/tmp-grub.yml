@@ -77,6 +77,9 @@ jobs:
           SKIRT_BUILDENV: yojigenos/base-devel
         run: |
           set -euo pipefail
+          # ★ flex 不在 devel 里（pkgconf 在、flex 不在），所以先建它。
+          #   第一次跑就是死在这：36 秒退出，日志里是「依赖 flex 还没有构建」。
+          ./skirt/skirt build flex
           ./skirt/skirt build grub
           echo
           echo "── 这个配方自带的断言说了什么 ──"
