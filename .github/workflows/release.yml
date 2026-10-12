@@ -1,0 +1,251 @@
+# 打包 + 签名 + 发布
+#
+# 把 packages 建出来的东西打成 .apk、签名、生成仓库索引，然后推到
+# repo.os.yojigen.cn。
+#
+# ── 为什么必须在这里做 ────────────────────────────────────────────────────
+#
+# 因为签名密钥在 organization secret 里（SIGNING_KEY）。本地只有一份副本，
+# 而"能签名的地方"应该是受控的、每次都可复现的那一处。
+#
+# ── 和前两个 workflow 的关系 ──────────────────────────────────────────────
+#
+#   buildenv-{aarch64,x86_64}.yml   建构建环境 + 全量自举 + 推 base-devel 镜像
+#   buildenv-manifest.yml           合成多架构清单
+#   ★ release.yml（这个）★          从已建好的包出发，打包 → 签名 → 发布
+#
+# 它【复用】同样的建包过程（同一个 buildenv 镜像、同一个 bootstrap），
+# 不重造。多出来的只有最后三步。
+#
+# ── 发布哪些包 ────────────────────────────────────────────────────────────
+#
+# 由【风味的定义】决定，不是写死在这儿的：distro 仓库的 variants/<风味>.toml
+# 里那张包列表是唯一出处。所以这里要 checkout 两个仓库。
+#
+# （项目里为"同一个东西两个出处"吃过亏——文档里留着那条教训。所以哪怕
+# 多一次 checkout 也不把包列表抄进来。）
+
+name: release (aarch64)
+
+on:
+  workflow_dispatch:
+    inputs:
+      flavor:
+        description: '要发布的风味（对应 distro/variants/<名字>.toml）'
+        required: true
+        default: base
+      arch:
+        description: '架构'
+        required: true
+        type: choice
+        options: [aarch64, x86_64]
+        default: aarch64
+      deploy:
+        description: '真的推送到 repo.os.yojigen.cn（不勾就是干跑）'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  release:
+    runs-on: ${{ inputs.arch == 'aarch64' && 'ubuntu-26.04-arm' || 'ubuntu-26.04' }}
+    timeout-minutes: 240
+
+    steps:
+      - name: 取 packages
+        uses: actions/checkout@v5
+
+      - name: 取 distro（风味定义和公钥在那儿）
+        uses: actions/checkout@v5
+        with:
+          repository: YojigenOS/distro
+          path: .distro
+
+      # ★ 路径是 var/cache 和 ../ccache。
+      #   原来写的 cache / ccache 是重组之前的路径——那时缓存永远不命中，
+      #   而"不命中"不会报错，只会每次重头建。所以这个错误很安静。
+      - name: 缓存源码与 ccache
+        uses: actions/cache@v4
+        with:
+          path: |
+            var/cache
+            ccache
+          key: release-${{ inputs.arch }}-${{ hashFiles('recipes/**/spec.toml') }}
+          restore-keys: |
+            release-${{ inputs.arch }}-
+            src-${{ inputs.arch }}-
+
+      - name: 用满整台 runner 的核
+        run: echo "SKIRT_JOBS=$(nproc)" >> "$GITHUB_ENV"
+
+      - name: 建构建环境
+        run: docker build -t "yojigenos/buildenv:${{ inputs.arch }}" bootstrap
+
+      # ── 建包 ────────────────────────────────────────────────────────────
+      #
+      # 这一步和 buildenv workflow 里那次是同一件事。glibc、gcc、linux 这些
+      # 大包要几十分钟，有 ccache 时快得多。
+      - name: 建出全部包
+        env:
+          SKIRT_BUILDENV: yojigenos/buildenv
+        run: |
+          ./skirt/skirt order | head -20
+          ./skirt/skirt bootstrap --report
+
+      - name: 收集构建日志
+        if: always()
+        run: |
+          mkdir -p var/logs
+          echo "共 $(ls var/logs/ 2>/dev/null | wc -l) 个包的日志"
+
+      - name: 上传构建日志
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-build-logs-${{ inputs.arch }}
+          path: var/logs
+          if-no-files-found: ignore
+          retention-days: 7
+
+      # ── 密钥 ────────────────────────────────────────────────────────────
+      - name: 把签名密钥从 secret 落到文件
+        env:
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          [ -n "$SIGNING_KEY" ] || { echo "::error::SIGNING_KEY 是空的"; exit 1; }
+
+          KEY="$RUNNER_TEMP/signing.rsa"
+          printf '%s\n' "$SIGNING_KEY" > "$KEY"
+          chmod 600 "$KEY"
+
+          # ★ 只看指纹，绝不打印内容。
+          openssl rsa -in "$KEY" -noout -check >/dev/null 2>&1 \
+            || { echo "::error::SIGNING_KEY 不是一个有效的 RSA 私钥"; exit 1; }
+          echo "  密钥可用，$(wc -c < "$KEY" | tr -d ' ') 字节"
+
+          # ★ 关键的三方一致性检查：secret 里那把，必须是【会烤进交付物的】
+          #   公钥之一。不匹配就直接失败——否则会发布出「签名者不在信任列表里」
+          #   的包，那些包装到系统上会被拒绝，而且很难查。
+          MOD=$(openssl rsa -in "$KEY" -modulus -noout | sed 's/Modulus=//')
+          FOUND=0
+          for PUB in .distro/keys/*.rsa.pub; do
+            [ -f "$PUB" ] || continue
+            PMOD=$(openssl rsa -pubin -in "$PUB" -modulus -noout 2>/dev/null | sed 's/Modulus=//')
+            if [ "$MOD" = "$PMOD" ]; then
+              echo "  ✓ 和交付物里的公钥配对：$(basename "$PUB")"
+              FOUND=1
+            fi
+          done
+          [ "$FOUND" = 1 ] || {
+            echo "::error::SIGNING_KEY 和 distro/keys/ 里的任何公钥都不配对"
+            echo "  distro/keys/ 里有："
+            ls -1 .distro/keys/*.rsa.pub 2>/dev/null || echo "  （空）"
+            exit 1
+          }
+
+          echo "SIGNING_KEY_FILE=$KEY" >> "$GITHUB_ENV"
+
+      # ── 读风味 ──────────────────────────────────────────────────────────
+      #
+      # ★ 包列表从 distro 的风味定义里读，不写死在这里。
+      #   那张列表是唯一出处。
+      - name: 读风味 ${{ inputs.flavor }} 的包列表
+        run: |
+          set -euo pipefail
+          SPEC=".distro/variants/${{ inputs.flavor }}.toml"
+          [ -f "$SPEC" ] || { echo "::error::找不到 $SPEC"; ls .distro/variants/; exit 1; }
+
+          python3 - "$SPEC" <<'PY'
+          import sys, tomllib, pathlib
+          v = tomllib.loads(pathlib.Path(sys.argv[1]).read_text())["variant"]
+          pkgs = " ".join(v["packages"])
+          with open(pathlib.Path.home() / "flavor.env", "w") as f:
+              f.write(f"FLAVOR_PACKAGES={pkgs}\n")
+              f.write(f"FLAVOR_NAME={v['name']}\n")
+          print(f"  风味 {v['name']}：{len(v['packages'])} 个包")
+          print(f"  {pkgs}")
+          PY
+
+          cat "$HOME/flavor.env" >> "$GITHUB_ENV"
+
+      # ── 打包 + 签名 ─────────────────────────────────────────────────────
+      #
+      # ★ 签名必须在这一步 —— 包建出来就是签好的。
+      #   不然后面 mkndx 建索引时会逐个验证，全部报 UNTRUSTED signature，
+      #   然后拒绝建索引。
+      - name: 打包并签名
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC2086
+          ./scripts/pack.sh $FLAVOR_PACKAGES \
+              --arch "${{ inputs.arch }}" \
+              --sign-key "$SIGNING_KEY_FILE"
+
+      - name: 生成仓库索引
+        run: |
+          ./scripts/repo.sh \
+              --arch "${{ inputs.arch }}" \
+              --sign-key "$SIGNING_KEY_FILE" \
+              --desc "YojigenOS ${{ inputs.arch }} 软件仓库"
+
+      # ── 自检：从自己的仓库装一遍 ────────────────────────────────────────
+      #
+      # ★ 发布前先证明"这个仓库能装"。本地起一个静态服务，让 apk 从它装
+      #   风味里的包，跑一个命令。装不上就别发。
+      #
+      #   这正是 packages 侧待办里缺的那一条检查——"用包管理器装"比
+      #   "直接叠 payload"严格，它会把声明不全的依赖立刻暴露出来。
+      - name: 自检 —— 从刚生成的仓库装一遍
+        run: |
+          set -euo pipefail
+          ( cd "var/repo/${{ inputs.arch }}" && python3 -m http.server 18080 >/dev/null 2>&1 & echo $! > /tmp/http.pid )
+          sleep 2
+
+          docker run --rm --network host \
+            -v "$PWD/var/repo:/repo:ro" \
+            -v "$PWD/.distro/keys:/keys:ro" \
+            alpine:latest sh -c '
+              set -e
+              mkdir -p /newroot/etc/apk/keys
+              cp /keys/*.rsa.pub /newroot/etc/apk/keys/
+              echo "http://localhost:18080" > /newroot/etc/apk/repositories
+
+              # ★ 不用 --allow-untrusted —— 真的验签
+              apk add --keys-dir /newroot/etc/apk/keys \
+                  --repository http://localhost:18080 \
+                  --root /newroot --initdb '"$FLAVOR_PACKAGES"'
+
+              echo "  装了 $(apk --root /newroot info 2>/dev/null | wc -l | tr -d " ") 个包"
+              echo "  usr/bin 下 $(ls /newroot/usr/bin 2>/dev/null | wc -l | tr -d " ") 个命令"
+            '
+          kill "$(cat /tmp/http.pid)" 2>/dev/null || true
+
+      # ── 发布 ────────────────────────────────────────────────────────────
+      #
+      # deploy.sh 做的事：先传包、后传索引（索引是切换点），而且用 copy
+      # 不用 sync —— 旧版本必须留着，manifest 钉住版本，半年后还要能重建。
+      - name: 发布到 repo.os.yojigen.cn
+        if: ${{ inputs.deploy }}
+        env:
+          S3_AK: ${{ secrets.S3_AK }}
+          S3_SK: ${{ secrets.S3_SK }}
+          S3_BASE_URL: ${{ secrets.S3_BASE_URL }}
+          S3_BUCKET: ${{ secrets.S3_BUCKET }}
+        run: ./scripts/deploy.sh --arch "${{ inputs.arch }}" --go
+
+      - name: 干跑说明
+        if: ${{ !inputs.deploy }}
+        run: |
+          echo '  没有勾 deploy —— 只做到了「生成仓库」，没有推送。' 
+          echo "  产物在 var/repo/${{ inputs.arch }}/"
+
+      - name: 留存仓库副本
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: repo-${{ inputs.arch }}
+          path: var/repo/${{ inputs.arch }}
+          retention-days: 7

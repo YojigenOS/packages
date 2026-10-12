@@ -47,17 +47,24 @@ set -eu
 cd "$(dirname "$0")/.."
 
 ARCH=aarch64
+ALL=0
+SIGN_KEY="${SIGN_KEY:-}"
 TARGETS=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --arch) ARCH="$2"; shift 2 ;;
-        --all)  TARGETS="$TARGETS --all"; shift ;;
+        --sign-key) SIGN_KEY="$2"; shift 2 ;;
+        --all)  ALL=1; shift ;;
         -h|--help) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         -*) echo "未知参数: $1" >&2; exit 1 ;;
         *) TARGETS="$TARGETS $1"; shift ;;
     esac
 done
-[ -n "$TARGETS" ] || { echo "用法: $0 <包名>… 或 --all" >&2; exit 1; }
+[ -n "$TARGETS" ] || [ "$ALL" = 1 ] || { echo "用法: $0 <包名>… 或 --all" >&2; exit 1; }
+if [ -n "$SIGN_KEY" ]; then
+    [ -f "$SIGN_KEY" ] || { echo "找不到签名密钥: $SIGN_KEY" >&2; exit 1; }
+    echo "  签名: $(basename "$SIGN_KEY")"
+fi
 
 OUT="$PWD/var/pkgs/$ARCH"
 mkdir -p "$OUT"
@@ -66,12 +73,11 @@ mkdir -p "$WORK/pack"   # inner.sh 放这里面——挂目录比挂单文件可
 trap 'rm -rf "$WORK"' EXIT
 
 # 找产物目录。名字后面必须跟 -数字，否则 hello 会匹配到 hello-world。
-if [ "$TARGETS" = "--all" ]; then
+if [ "$ALL" = 1 ]; then
     DIRS=$(ls -d var/output/"$ARCH"/*/ 2>/dev/null || true)
 else
     DIRS=""
     for want in $TARGETS; do
-        [ "$want" = "--all" ] && continue
         one=$(ls -d var/output/"$ARCH"/"$want"-[0-9]*/ 2>/dev/null | sort -V | tail -1 || true)
         [ -n "$one" ] && DIRS="$DIRS $one"
     done
@@ -88,9 +94,10 @@ for d in $DIRS; do
     # meta.json → 内层脚本。生成脚本而不是拼命令行，是为了绕开引号：
     # 描述里有中文、空格、逗号，直接塞进 sh -c 会被吃掉。
     # 第三个参数是【容器里】的输出目录（挂载点是 /out），不是宿主路径。
-    python3 - "$d" "$WORK/pack/inner.sh" /out <<'PY'
+    python3 - "$d" "$WORK/pack/inner.sh" /out "${SIGN_KEY:+yes}" <<'PY'
 import json, pathlib, shlex, sys
 d, out_script, out_dir = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2]), sys.argv[3]
+signed = len(sys.argv) > 4 and sys.argv[4] == "yes"
 m = json.loads((d / "meta.json").read_text())
 
 name    = m["name"]
@@ -126,8 +133,13 @@ fields = [
     ("depends",     " ".join(m.get("depends") or [])),
 ]
 
+# ★ 签名必须在这里做——包建出来就是签好的。
+#   不然后面 mkndx 建索引时会逐个验证，全部报 UNTRUSTED signature，
+#   然后拒绝建索引（"14 errors, not creating index"）。
+sign_arg = "--sign-key /key.rsa " if signed else ""
+
 lines = ["#!/bin/sh", "set -e", "mkdir -p /data", "cp -a /in/payload/. /data/",
-         "exec apk mkpkg \\"]
+         f"exec apk mkpkg {sign_arg}\\"]
 for k, v in fields:
     if v:
         lines.append(f"  --info {shlex.quote(f'{k}:{v}')} \\")
@@ -143,8 +155,11 @@ print(f\"{m['name']}-{m['version']}-r{m['release']}.apk\")")
 
     printf '  %-30s ' "$APK"
     rm -f "$OUT/$APK"
+    SIGN_MOUNT=""
+    [ -n "$SIGN_KEY" ] && SIGN_MOUNT="-v $SIGN_KEY:/key.rsa:ro"
+    # shellcheck disable=SC2086
     docker run --rm -e "SOURCE_DATE_EPOCH=$(cat "$WORK/pack/epoch" 2>/dev/null || echo 0)" \
-         -v "$PWD/$d:/in:ro" -v "$OUT:/out" -v "$WORK/pack:/pack:ro" \
+         -v "$PWD/$d:/in:ro" -v "$OUT:/out" -v "$WORK/pack:/pack:ro" $SIGN_MOUNT \
          alpine:latest sh /pack/inner.sh > "$WORK/log" 2>&1 || true
     # ★ 两道检查，缺一不可：
     #   退出码是 0 不等于【产出了东西】。上面那次就是这样——docker 成功了，

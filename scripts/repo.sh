@@ -78,13 +78,27 @@ cp "$PKGS"/*.apk "$REPO/"
 # 签名参数：没给密钥就不签（本地开发够用，装的时候 --allow-untrusted）
 if [ -n "$SIGN_KEY" ]; then
     [ -f "$SIGN_KEY" ] || { echo "找不到签名密钥: $SIGN_KEY" >&2; exit 1; }
-    SIGN_ARGS="--sign-key /key.rsa"
-    SIGN_MOUNT="-v $SIGN_KEY:/key.rsa:ro"
-    echo "  用密钥签名: $(basename "$SIGN_KEY")"
+
+    # ★ 公钥是【现场从私钥推导】的，不存副本——一个源头，不会漂移。
+    #
+    # 为什么需要它：mkndx 建索引时会【逐个验证】它索引的包，不信任就拒绝：
+    #     ERROR: x.apk: UNTRUSTED signature
+    #     ERROR: 1 errors, not creating index
+    # 所以 --keys-dir 指的目录里必须有对应的公钥。
+    KEYS=$(mktemp -d)
+    trap 'rm -rf "$KEYS"' EXIT
+    openssl rsa -in "$SIGN_KEY" -pubout -out "$KEYS/$(basename "$SIGN_KEY").pub" 2>/dev/null || {
+        echo "从私钥导出公钥失败。是有效的 RSA 私钥吗？" >&2; exit 1
+    }
+
+    SIGN_ARGS="--sign-key /key.rsa --keys-dir /keys"
+    SIGN_MOUNT="-v $SIGN_KEY:/key.rsa:ro -v $KEYS:/keys:ro"
+    echo "  签名: $(basename "$SIGN_KEY")  （公钥现场从它推导）"
 else
     SIGN_ARGS="--allow-untrusted"
     SIGN_MOUNT=""
     echo "  ★ 不签名（本地开发用；装的时候要 --allow-untrusted）"
+    echo "     签名：scripts/keys.sh gen 然后 $0 --sign-key ~/.yojigenos/keys/yojigenos-2026-1.rsa"
 fi
 
 DESC="${DESC:-YojigenOS $ARCH 软件仓库}"
@@ -99,7 +113,17 @@ docker run --rm -v "$REPO:/repo" $SIGN_MOUNT alpine:latest sh -c "
         --pkgname-spec 'aarch64/\${name}-\${version}.apk' \
         --description '$DESC' \
         --output APKINDEX.tar.gz *.apk
-" 2>&1 | grep -viE '^\s*warning: support for packages without datahash' | sed 's/^/  /'
+" 2>&1 | grep -viE '^\s*warning: support for packages without datahash' | sed 's/^/  /' || true
+
+# ★ 检查【产物】而不是退出码。
+#   上面那条管道里的 grep 和 sed 会把 mkndx 的退出码吃掉——脚本曾经在
+#   "14 errors, not creating index" 之后照样打出一个 ✓。
+if [ ! -s "$REPO/APKINDEX.tar.gz" ]; then
+    echo >&2
+    echo "  ✗ 索引没有生成。上面那些 ERROR 就是原因。" >&2
+    echo "    最常见的是包没签名——pack.sh 要带 --sign-key。" >&2
+    exit 1
+fi
 
 echo
 printf '  ✓ var/repo/%s/APKINDEX.tar.gz  %s 字节\n' "$ARCH" "$(wc -c < "$REPO/APKINDEX.tar.gz" | tr -d ' ')"
