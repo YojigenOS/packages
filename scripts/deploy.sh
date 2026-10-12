@@ -137,9 +137,37 @@ DRY=""
 
 # ── 第一步：传包（除索引外的一切）────────────────────────────────────────
 echo "  [1/2] 传包（不含索引）"
+#
+# ★★ 强制分片上传。
+#
+#   rclone 的 --s3-upload-cutoff 默认是 200Mi——**小于它的文件一次 PUT 传完**。
+#   而前面那层 nginx 对【单个请求】的 body 有上限，于是大的包被挡：
+#
+#       ERROR : gcc-16.2.0-r1.apk:     StatusCode: 413   (95.3 MiB)
+#       ERROR : python3-3.14.8-r1.apk: StatusCode: 413   (61.6 MiB)
+#       47 / 49 传完了，就这两个大的被挡
+#
+#   （413 = Payload Too Large。后面还跟着一句「XML syntax error: element <hr>
+#     closed by </body>」——那个"XML"其实是 nginx 的 HTML 错误页。）
+#
+#   S3 的分片上传（multipart）把大文件拆成多个 HTTP 请求，每个分片是独立的
+#   PUT。所以只要把 cutoff 调到比那两个文件小，限制就绕过去了——**不用改
+#   服务端**。
+#
+#   8Mi 这个值：让 8Mi 以上的文件都走分片，而每片是下面的 chunk-size（5Mi），
+#   远低于任何合理的请求体上限。小文件仍然一次传完（少几次往返）。
+#
+#   ★ 为什么不是"把包做小"：gcc 95MiB 是编译器本体，已经 strip 过了。为了绕
+#     一个上传限制去拆包是本末倒置——而且拆完还是要传同样多的字节。
+#
+#   ★ aarch64 从来没撞上，因为它的仓库里没有 gcc。这是发布一个 95MiB 的包
+#     才暴露出来的。
 $RCLONE copy "$SRC_FOR_RCLONE/" "$REMOTE/$ARCH/" \
     --exclude 'APKINDEX.tar.gz' \
     --checksum \
+    --s3-upload-cutoff 8Mi \
+    --s3-chunk-size 5Mi \
+    --s3-upload-concurrency 4 \
     --progress \
     $DRY
 
