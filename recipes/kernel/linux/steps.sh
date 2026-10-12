@@ -28,13 +28,27 @@ build() {
     make olddefconfig
 
     # 编译。文件系统镜像（Image / bzImage）是自解的，不需要额外工具。
-    make Image
+    #
+    # ★ 目标名分架构：arm64 叫 Image，x86_64 叫 bzImage。
+    #
+    #   这里原来写死 `make Image`——在 aarch64 上一直是对的，在 x86_64 上会
+    #   报 `No rule to make target 'Image'`，而且是在【编了几十分钟之后】才报。
+    #   x86_64 的内核到 2026-10-12 才第一次真去建，所以这行从写下那天起就是错的，
+    #   只是没人撞上。
+    case "$(uname -m)" in
+        aarch64) make Image   ;;
+        x86_64)  make bzImage ;;
+        *) echo "不认识的架构: $(uname -m)" >&2; return 1 ;;
+    esac
 }
 
 package() {
     case "$(uname -m)" in
         aarch64) IMG=arch/arm64/boot/Image   ;;
-        x86_64)  IMG=arch/x86_64/boot/bzImage ;;
+        # ★ 是 arch/x86/ 而不是 arch/x86_64/：x86 的源码树一个目录
+        #   管 32/64 位，没有 arch/x86_64/ 这个目录（写错的后果是
+        #   编完之后在 install 那一步找不到文件）。
+        x86_64)  IMG=arch/x86/boot/bzImage    ;;
         *) echo "不认识的架构: $(uname -m)" >&2; return 1 ;;
     esac
 
