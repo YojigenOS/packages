@@ -68,4 +68,22 @@ configure = [
   "--disable-nls",
   "--disable-debuginfod",
   "--disable-libdebuginfod",
+
+  # ★ 【临时】把 pkg-config 指到一个空实现上。
+  #
+  #   elfutils 的 configure 无条件要求 pkg-config 存在：
+  #       checking for pkg-config... no
+  #       configure: error: pkg-config not found
+  #
+  #   但它真正用到的库（zlib / bz2 / lzma / zstd）都是用 AC_CHECK_LIB 直接
+  #   探测的（日志里看得到：checking for library containing gzdirect... -lz）。
+  #   pkg-config 只服务于那些可选特性，而 debuginfod 那一路我们已经显式关掉。
+  #
+  #   为什么现在要这么绕：CI 的构建环境里 SKIRT_PROVIDES 声明了 pkgconf
+  #   （它确实在 base-devel.toml 里），所以 skirt 不会把它合并进构建容器——
+  #   而手推的那个 x86_64 镜像里其实【没有】它。镜像和声明不一致。
+  #
+  #   ★ 这是临时措施：等 x86_64 的 devel 镜像从我们自己的仓库重建之后
+  #     （那时 pkgconf 真的在里面），这一行就该删掉。
+  "PKG_CONFIG=/bin/true",
 ]
