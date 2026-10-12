@@ -47,7 +47,11 @@ jobs:
       - name: 公开端点 repo.os.yojigen.cn
         continue-on-error: true
         run: |
-          set -uo pipefail    # 刻意不加 -e：每一步都要留下输出
+          # ★ GitHub 的默认 shell 是 bash -e，而 set -uo 只【添加】选项，
+          #   不会去掉已有的 -e。所以要显式 set +e——否则第一个失败的
+          #   docker run 就会中断这一步，后面的探测全都不跑。
+          set +e
+          set -uo pipefail
           echo "── https://repo.os.yojigen.cn/ ──"
           curl -sS --max-time 25 -o /dev/null \
             -w '  HTTP %{http_code} · 连接 %{time_connect}s · 总 %{time_total}s\n' \
@@ -67,7 +71,11 @@ jobs:
         env:
           S3_BASE_URL: ${{ secrets.S3_BASE_URL }}
         run: |
-          set -uo pipefail    # 刻意不加 -e：每一步都要留下输出
+          # ★ GitHub 的默认 shell 是 bash -e，而 set -uo 只【添加】选项，
+          #   不会去掉已有的 -e。所以要显式 set +e——否则第一个失败的
+          #   docker run 就会中断这一步，后面的探测全都不跑。
+          set +e
+          set -uo pipefail
           [ -n "$S3_BASE_URL" ] || { echo "  ✗ S3_BASE_URL 是空的"; exit 0; }
 
           # 只报告形态，不报告内容（GitHub 会把 secret 打码）
@@ -102,7 +110,11 @@ jobs:
           S3_BASE_URL: ${{ secrets.S3_BASE_URL }}
           S3_BUCKET: ${{ secrets.S3_BUCKET }}
         run: |
-          set -uo pipefail    # 刻意不加 -e：每一步都要留下输出
+          # ★ GitHub 的默认 shell 是 bash -e，而 set -uo 只【添加】选项，
+          #   不会去掉已有的 -e。所以要显式 set +e——否则第一个失败的
+          #   docker run 就会中断这一步，后面的探测全都不跑。
+          set +e
+          set -uo pipefail
           for v in S3_AK S3_SK S3_BASE_URL S3_BUCKET; do
             [ -n "$(eval echo "\${$v:-}")" ] || echo "  ✗ $v 是空的"
           done
