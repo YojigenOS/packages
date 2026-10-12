@@ -4,27 +4,36 @@
 #
 # ## 它为什么存在
 #
-# bootstrap.yml 一次建 58 个包，跑 50 分钟，而它【在第一个失败处就停】。于是
-# 排查一个包的问题要 50 分钟，而且一次只能看到一个失败。
+# bootstrap.yml 一次建 58 个包、跑 50 分钟，而且在【第一个失败处就停】。于是
+# 排查一个包要 50 分钟，一次还只能看到一个失败。
 #
-# 但被排查的往往只是其中一步：比如"合并了我们的 openssl 之后，-lssl 到底链到
-# 哪个库"。这个问题不需要重建前面 40 个包——只需要构建环境镜像（2 分钟）加上
-# 那几个包本身（几分钟）。
+# 但被排查的往往只是其中一步。而 `skirt bootstrap` **支持指定目标**——它只建
+# 那些包和它们的依赖闭包（实测闭包大小）：
 #
-# 所以这个工作流把 bootstrap 拆开，让你只跑关心的那一段。
+#     ./skirt/skirt bootstrap openssl     3 个包     ~2 分钟
+#     ./skirt/skirt bootstrap shadow      15 个包
+#     ./skirt/skirt bootstrap openssh     19 个包
+#     ./skirt/skirt bootstrap（不给目标）  61 个包     ~50 分钟
+#
+# 所以「用 bootstrap 调一个包」这件事本身是可行的，缺的只是把目标选择暴露出来。
 #
 # ## 用法
 #
-#     prebuild  先在 Debian 环境里建这些包（空格分隔），之后它们被当作"已提供"
-#     target    接着建这些包——prebuild 的产物会被合并进容器的 /
-#     script    最后跑的一段诊断 shell，在同一个容器语义下
+#     targets  要建的包（空格分隔）。会连依赖闭包一起建，顺序由 skirt 推导。
+#     script   建完后跑的一段诊断 shell。产物会按和 skirt 一样的方式铺进容器。
 #
-# 空着就跳过对应的步骤。三者可以只用其中一个。
+# ## 两个踩过的坑
+#
+# ① 别用 `skirt build X` 代替 `skirt bootstrap X`。`build` 【不建依赖】——
+#    它要求依赖已经建好，否则直接报「依赖 libxcrypt 还没有构建」。第一次派发
+#    就撞在这上面，56 秒失败（快是快，但什么都没验到）。
+#
+# ② `--keep-going` 不存在。想让一个包失败也继续建后面的，得先给 skirt 加上。
 #
 # ## 为什么不用本地 docker
 #
-# 本地是 macOS（arm64），只能跑 aarch64，而且 x86_64 那条腿根本没法验。CI 上
-# 两个架构都是原生的，还快。
+# 本地是 macOS（arm64），只能跑 aarch64，x86_64 那条腿根本没法验。CI 上两个
+# 架构都是原生的，而且快。
 
 name: debug
 
@@ -36,16 +45,12 @@ on:
         type: choice
         options: [aarch64, x86_64]
         default: aarch64
-      prebuild:
-        description: 先建的包（空格分隔，产物会被当作"已提供"）
+      targets:
+        description: 要建的包（空格分隔，只建它们和依赖闭包）
         type: string
-        default: ""
-      target:
-        description: 接着建的包（prebuild 的产物会合并进容器）
-        type: string
-        default: ""
+        required: true
       script:
-        description: 最后跑的诊断脚本
+        description: 建完后跑的诊断脚本（可空）
         type: string
         default: ""
       buildenv:
@@ -60,12 +65,11 @@ jobs:
   debug:
     name: debug (${{ inputs.arch }})
     runs-on: ${{ inputs.arch == 'aarch64' && 'ubuntu-26.04-arm' || 'ubuntu-26.04' }}
-    timeout-minutes: 90
+    timeout-minutes: 120
     env:
       ARCH: ${{ inputs.arch }}
-      PREBUILD: ${{ inputs.prebuild }}
-      TARGET: ${{ inputs.target }}
-      # ★ 裸镜像名，不带 tag——skirt 自己会补 :<arch>（build.py）。
+      TARGETS: ${{ inputs.targets }}
+      # ★ 裸镜像名，不带 tag——skirt 自己会补 :<arch>（见 skirtlib/build.py）。
       SKIRT_BUILDENV: ${{ inputs.buildenv != '' && inputs.buildenv || 'yojigenos/buildenv' }}
 
     steps:
@@ -80,54 +84,35 @@ jobs:
             'grep -E "^VERSION=" /etc/os-release; echo "  debian_version: $(cat /etc/debian_version)"' \
             | sed 's/^/  /'
 
-      # ── 第一步：先在 Debian 环境里建出 prebuild ────────────────────────────
-      #
-      # 这一步【不加 SKIRT_PROVIDES】——用的就是 bootstrap 的基线
-      # （bootstrap/provides.txt：gcc make binutils gettext glibc）。
-      # 和 bootstrap.yml 第一段完全一致的语义。
-      - name: 预建 ${{ inputs.prebuild }}
-        if: inputs.prebuild != ''
+      # ── 建目标 ────────────────────────────────────────────────────────────
+      - name: 建 ${{ inputs.targets }}
+        id: bootstrap
         run: |
           set -euo pipefail
-          echo "::group::预建 $PREBUILD"
-          ./skirt/skirt build $PREBUILD 2>&1 | tail -40
+
+          echo "::group::闭包"
+          ./skirt/skirt order $TARGETS 2>&1 | tail -30
           echo "::endgroup::"
+
+          set +e
+          ./skirt/skirt bootstrap --arch "$ARCH" $TARGETS
+          RC=$?
+          set -e
+
+          echo "退出码 $RC"
           echo "产物: $(ls -1 var/pkgs/${ARCH}/*.apk 2>/dev/null | wc -l | tr -d ' ') 个 apk"
+          exit $RC
 
-      # ── 第二步：建 target，把 prebuild 当作已提供 ──────────────────────────
-      #
-      # SKIRT_PROVIDES 里加上 prebuild 的名字 = "这些已经有了，别再建，但把它们
-      # 的 payload 合并进容器"。这正是要复现的那个状态：我们的包铺在 Debian 之上。
-      - name: 建 ${{ inputs.target }}
-        if: inputs.target != ''
-        run: |
-          set -euo pipefail
-          # ★ 基线用 bootstrap/provides.txt，【不用】base-devel.toml 的闭包。
-          #
-          #   这里要复现的是【引导】那个状态：构建环境是 Debian，只提供基线里
-          #   那 5 个包，其余全靠 prebuild 现场建。用 base-devel 的闭包会把
-          #   构建环境已经有的东西也算成"已提供"，那就不是引导了。
-          #
-          #   （base-devel.toml 在 distro 仓库里，这个仓库看不到它——这也是
-          #     一个不该在这儿依赖它的理由。）
-          PROV="$(grep -vE '^\s*#|^\s*$' bootstrap/provides.txt | tr '\n' ' ') $PREBUILD"
-          echo "当作已提供: $PROV"
-          echo "::group::建 $TARGET"
-          SKIRT_PROVIDES="$PROV" ./skirt/skirt build $TARGET 2>&1 | tail -60
-          echo "::endgroup::"
-
-      # ── 第三步：诊断 ──────────────────────────────────────────────────────
-      #
-      # 用和 skirt 一样的方式把包铺进容器，然后跑给定的脚本。这样看到的就是
-      # 构建时真正看到的环境。
+      # ── 诊断 ──────────────────────────────────────────────────────────────
       - name: 诊断
-        if: inputs.script != ''
+        if: always() && inputs.script != ''
         env:
           # ★ 脚本走环境变量，不用 heredoc。
           #
           #   写成 `cat > f <<'DIAG'` 加一个缩进的 DIAG 是【坏的】：
           #   ${{ inputs.script }} 展开出来在行首，而终止符缩进了，heredoc
-          #   不会结束——整段被当成脚本内容，然后报一个和真正问题毫无关系的错。
+          #   不会结束——整段被当成脚本内容，然后报一个和真正问题毫无关系
+          #   的错。
           DIAG: ${{ inputs.script }}
         run: |
           set -euo pipefail
@@ -163,8 +148,8 @@ jobs:
 
       # ── 传日志和产物 ──────────────────────────────────────────────────────
       #
-      # ★ 连 var/pkgs 一起传。bootstrap.yml 只传日志，所以上一轮建出来的 .apk
-      #   拿不到，任何"接着上一轮继续"的调试都做不了。
+      # ★ 连 var/pkgs 一起传。bootstrap.yml 只传日志，所以上一轮建出来的
+      #   .apk 拿不到——任何「接着上一轮继续」的调试都做不了。
       - name: 收集
         if: always()
         run: |
