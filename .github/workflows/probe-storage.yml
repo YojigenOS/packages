@@ -47,7 +47,7 @@ jobs:
       - name: 公开端点 repo.os.yojigen.cn
         continue-on-error: true
         run: |
-          set -uo pipefail
+          set -uo pipefail    # 刻意不加 -e：每一步都要留下输出
           echo "── https://repo.os.yojigen.cn/ ──"
           curl -sS --max-time 25 -o /dev/null \
             -w '  HTTP %{http_code} · 连接 %{time_connect}s · 总 %{time_total}s\n' \
@@ -67,7 +67,7 @@ jobs:
         env:
           S3_BASE_URL: ${{ secrets.S3_BASE_URL }}
         run: |
-          set -uo pipefail
+          set -uo pipefail    # 刻意不加 -e：每一步都要留下输出
           [ -n "$S3_BASE_URL" ] || { echo "  ✗ S3_BASE_URL 是空的"; exit 0; }
 
           # 只报告形态，不报告内容（GitHub 会把 secret 打码）
@@ -102,7 +102,7 @@ jobs:
           S3_BASE_URL: ${{ secrets.S3_BASE_URL }}
           S3_BUCKET: ${{ secrets.S3_BUCKET }}
         run: |
-          set -uo pipefail
+          set -uo pipefail    # 刻意不加 -e：每一步都要留下输出
           for v in S3_AK S3_SK S3_BASE_URL S3_BUCKET; do
             [ -n "$(eval echo "\${$v:-}")" ] || echo "  ✗ $v 是空的"
           done
@@ -127,7 +127,7 @@ jobs:
             -e RCLONE_CONFIG_YOJIGEN_SECRET_ACCESS_KEY="$S3_SK" \
             -e RCLONE_CONFIG_YOJIGEN_FORCE_PATH_STYLE=true \
             -e RCLONE_CONFIG_YOJIGEN_REGION=us-east-1 \
-            rclone/rclone lsf "yojigen:$S3_BUCKET" --max-depth 2 -vv 2>&1 | tail -30
+            rclone/rclone lsf "yojigen:$S3_BUCKET" --max-depth 2 2>&1 || echo "  ✗ 列桶失败（退出码 $?）"
 
           echo
           echo "════ ★ 写一个探针文件再删掉（验证写权限）════"
@@ -140,8 +140,8 @@ jobs:
             -e RCLONE_CONFIG_YOJIGEN_SECRET_ACCESS_KEY="$S3_SK" \
             -e RCLONE_CONFIG_YOJIGEN_FORCE_PATH_STYLE=true \
             -e RCLONE_CONFIG_YOJIGEN_REGION=us-east-1 \
-            rclone/rclone copy /probe/probe.txt "yojigen:$S3_BUCKET/" -v 2>&1 | tail -12
-          echo "  （上面若出现 Transferred: 1 / 1 就是写成功了）"
+            rclone/rclone copy /probe/probe.txt "yojigen:$S3_BUCKET/" -v 2>&1 || echo "  ✗ 写入失败（退出码 $?）"
+          echo "  （上面若出现 Transferred: 1 / 1 就是写成功了；空桶时 lsf 无输出是正常的）"
 
           docker run --rm \
             -v "$PROBEDIR:/probe" \
@@ -152,5 +152,5 @@ jobs:
             -e RCLONE_CONFIG_YOJIGEN_SECRET_ACCESS_KEY="$S3_SK" \
             -e RCLONE_CONFIG_YOJIGEN_FORCE_PATH_STYLE=true \
             -e RCLONE_CONFIG_YOJIGEN_REGION=us-east-1 \
-            rclone/rclone delete "yojigen:$S3_BUCKET/probe.txt" 2>&1 | tail -5
+            rclone/rclone delete "yojigen:$S3_BUCKET/probe.txt" 2>&1 || true
           echo "  ✓ 探针文件已删（不留垃圾）"
