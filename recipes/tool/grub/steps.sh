@@ -33,6 +33,23 @@ grub_moddir() {
 }
 
 build() {
+    # ── 摘掉构建环境 CFLAGS 里的 -fcf-protection ─────────────────────────
+    #
+    # 它是 x86_64 的 CET 加固特性；而 i386-pc 的模块是【32 位目标】，cc1 直接
+    # 拒绝（实测，就是它挡住了第一次构建）：
+
+    #     cc1: error: '-fcf-protection' is not compatible with this target
+    #     make[3]: *** [Makefile:48701: trig_module-trigtables.o] Error 1
+    #
+    # ★ 这不是"缺 multilib"。32 位的模块编译一路都是好的——GRUB 是
+    #   freestanding 的（不链 libc），所以根本不需要 32 位 glibc。真正的问题
+    #   是【我们构建环境的 CFLAGS 里有一条只对 x86_64 成立的标志】。
+    #
+    #   所以只摘这一条，其余加固标志（-fstack-protector-strong、FORTIFY）留着
+    #   ——grub-install 那些工具是要发出去的。
+    CFLAGS=$(echo "${CFLAGS:-}" | sed 's/-fcf-protection[^ ]*//g')
+    export CFLAGS
+
     mkdir -p "$WORK/build"
     for t in $(grub_targets); do
         tgt="${t%%:*}"; plat="${t##*:}"
