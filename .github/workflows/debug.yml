@@ -122,32 +122,41 @@ jobs:
       # 构建时真正看到的环境。
       - name: 诊断
         if: inputs.script != ''
+        env:
+          # ★ 脚本走环境变量，不用 heredoc。
+          #
+          #   写成 `cat > f <<'DIAG'` 加一个缩进的 DIAG 是【坏的】：
+          #   ${{ inputs.script }} 展开出来在行首，而终止符缩进了，heredoc
+          #   不会结束——整段被当成脚本内容，然后报一个和真正问题毫无关系的错。
+          DIAG: ${{ inputs.script }}
         run: |
           set -euo pipefail
-          cat > /tmp/diag.sh <<'DIAG'
-          ${{ inputs.script }}
-          DIAG
+          printf '%s\n' "$DIAG" > /tmp/diag.sh
+
           echo "::group::诊断脚本"
           cat /tmp/diag.sh
           echo "::endgroup::"
 
-          # 把 prebuild + target 的产物都铺进容器，再跑脚本
-          MERGE=$(ls -d var/output/${ARCH}/*/payload 2>/dev/null | tr '\n' ' ')
-          echo "要合并的 payload: $(echo $MERGE | wc -w | tr -d ' ') 个"
-
-          docker run --rm -i \
+          # 用和 skirt 一样的方式把产物铺进容器，再跑脚本。
+          #
+          # ★ 排除项必须和 build.py 里那套【逐字一致】（bin sbin lib lib64
+          #   usr/lib64），否则这里看到的环境和构建时看到的不一样——那这个
+          #   诊断就是在骗自己。
+          docker run --rm \
             -v "$PWD/var/output/${ARCH}:/out:ro" \
             -v /tmp/diag.sh:/diag.sh:ro \
             "yojigenos/buildenv:${ARCH}" \
             sh -c '
               set -e
+              n=0
               for p in $(ls -d /out/*/payload 2>/dev/null); do
                 tar -C "$p" -cf - \
                     --exclude=./bin --exclude=./sbin --exclude=./lib \
                     --exclude=./lib64 --exclude=./usr/lib64 . 2>/dev/null \
-                  | tar -C / -xf - 2>/dev/null || true
+                  | tar -C / -xf - 2>/dev/null && n=$((n+1)) || true
               done
-              echo "── 合并完成 ──"
+              echo "── 已合并 $n 个 payload ──"
+              echo
               sh /diag.sh
             ' 2>&1 | tee /tmp/diag.out
           echo "::endgroup::"
