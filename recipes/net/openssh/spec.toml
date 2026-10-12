@@ -1,0 +1,101 @@
+# openssh —— SSH 客户端与服务端
+#
+# 【为什么它必须存在】
+#
+# 决策记录 0008 和 0013 都指望它：可启动的镜像要能【SSH 进去】。没有它，DD 装完
+# 之后只能从 VNC 敲键盘——那不是能用，那是能看。
+#
+# 【这个配方必须在意的两件事】
+#
+# 1. **主机密钥绝对不能打进包里。** 打进包 = 所有装了这个包的机器共用同一把
+#    主机密钥，中间人攻击的门就开着。所以 package() 里显式删掉
+#    /etc/ssh/ssh_host_*，并且【确认真的没有了】，改由首启钩子 ssh-keygen -A
+#    现场生成。这不是"上游应该不会"的事——上游在某些条件下确实会顺手生成。
+#
+# 2. **权限分离用户 sshd。** OpenSSH 从 7.5 起没有关闭它的开关：系统里必须有
+#    这个用户，以及 /var/empty（711、属主 root）。用户写在 filesystem 的
+#    /etc/passwd 里——那是 /etc 基础文件的归属地，也免了装包时去改 /etc。
+#
+# 【依赖里为什么没有 libcrypto / libssl / zlib】
+#
+# 它们由打包时的 ELF 扫描自动补成 `so:` 依赖（见 openssl 那边 libssl 子包的
+# 注释："它们的 so: 依赖会被 ELF 扫描自动补齐"）。手抄一遍只会多一处会过期的
+# 抄写——而这个仓库已经为"同一个东西两个出处"吃过亏。
+#
+# ★ 但注意：`so:` 依赖指向的包必须在仓库里【真的发布过】。openssh 会要
+#   libz.so.1 → zlib 包；openssl 也要它。发仓库的清单里别忘了 zlib。
+#
+# 【镜像源：为什么 sha256 要钉死】
+#
+# 这个值是从两个镜像各下一份比对出来的：NJU 与清华一致，
+# **阿里云那份不一致**（b1438c919a…）。少了这个 sha256，换错镜像就是一个
+# 谁也查不出来的构建。
+
+[package]
+name        = "openssh"
+# ★ 上游叫 10.5p1，包版本必须写 10.5_p1——两个写法都要，理由不同：
+#
+#   上游的 tarball 名字是 openssh-10.5p1.tar.gz（下面 URL 里是它），
+#   而 apk 的版本号语法只认 `_p` 这种补丁级后缀（_alpha/_beta/_pre/_rc/
+#   _p/_cvs/_svn/_git/_hg）。写成 10.5p1 的话打包会直接拒绝：
+#
+#       ERROR: info field 'version' has invalid value:
+#              package version is invalid
+#
+#   Alpine 也是写作 10.5_p1。——所以这里不是"翻译一下"，是两套语法各写各的。
+version     = "10.5_p1"
+release     = 1
+date        = 2026-10-12T10:15:00Z
+description = "SSH 客户端与服务端"
+section     = "net"
+url         = "https://www.openssh.com/"
+license     = "SSH-OpenSSH"
+
+[[source]]
+# URL 里的版本是【上游的写法】（10.5p1），不是包版本（10.5_p1）。
+# 所以这里不写 $VERSION——它展开出来的是包版本。
+url    = "https://mirrors.nju.edu.cn/OpenBSD/OpenSSH/portable/openssh-10.5p1.tar.gz"
+sha256 = "d44d28a839ea9daf969cc69150fde59910b2b39361dad81a3bd6cbd19218db11"
+
+[dependencies]
+runtime = ["glibc"]
+# ★ openssl / libcrypto / libssl 三个都要声明，少一个的后果很隐蔽：
+#
+#   openssl 主包只有【头文件和 .a】，共享库在 libcrypto / libssl 两个子包
+#   里。只声明 openssl 的话，configure 能找到头（能编过），但链接时找不到
+#   libcrypto.so，于是【退回去静态链接 libcrypto.a】——构建成功、程序能跑，
+#   只是 `readelf -d sshd` 里没有 libcrypto。
+#
+#   为什么这不能接受：静态链进去的那个 OpenSSL，将来它的安全更新到不了
+#   sshd。而 SSH 恰恰是最需要这类更新的地方。
+#
+#   所以构建依赖必须覆盖到【共享库那一层】。
+build   = ["make", "gcc", "perl", "openssl", "libcrypto", "libssl", "zlib",
+           "coreutils", "bash", "sed", "grep", "findutils", "gawk", "tar",
+           "gzip", "xz"]
+
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["make", "gcc", "perl", "openssl", "libcrypto", "libssl", "zlib",
+           "coreutils", "bash", "sed", "grep", "findutils", "gawk", "tar",
+           "gzip", "xz"]
+
+[build]
+type = "autotools"
+configure = [
+  "--prefix=/usr",
+
+  # 配置落在 /etc/ssh。上游默认是 $prefix/etc（也就是 /usr/etc），不是这个——
+  # 而所有人（包括我们自己）都去 /etc/ssh 找 sshd_config。
+  "--sysconfdir=/etc/ssh",
+
+  # 权限分离的沙箱目录和用户。默认值虽然和这里一样，但这是【系统契约】：
+  # 用户在 filesystem 的 /etc/passwd 里、目录在 package() 里建、守护进程在
+  # 首启钩子里起。三处写出来，才看得出它们是一件事。
+  "--with-privsep-path=/var/empty",
+  "--with-privsep-user=sshd",
+
+  # strip 交给 skirt：它只 strip ELF，而且分得清 .o 和可执行文件
+  # （见 build.py 里那段注释：.a 用 --strip-debug，.o 绝对不碰）。
+  "--disable-strip",
+]

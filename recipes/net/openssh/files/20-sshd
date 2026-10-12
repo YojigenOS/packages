@@ -1,0 +1,41 @@
+#!/bin/sh
+# 首启：生成 SSH 主机密钥（如果还没有），然后启动 sshd。
+#
+# 由 /init 按 /usr/lib/yojigenos/boot.d/ 下的名字顺序调用。
+#
+# 【为什么不把主机密钥打进包】
+#
+# 见 ../spec.toml。一句话：带了就是所有机器共用同一把主机密钥，那等于没有。
+# 所以每台机器第一次启动时自己生成——`ssh-keygen -A` 按 sshd_config 里出现的
+# 类型逐个生成，只做一次（RSA 2048 要几百毫秒，之后不再有代价）。
+#
+# 【为什么这里不能失败**
+#
+# 启动脚本的责任是"让它起来"，不是"拦住启动"。起不来就吵一声，继续跑——
+# 用户还能从串口/VNC 进去查。反过来说，如果这里 exit 1，整个系统就停在
+# 一个连 shell 都没有的地方，那比 sshd 没起来严重得多。
+
+set -u
+
+# ── 主机密钥 ────────────────────────────────────────────────────────────────
+if ! ls /etc/ssh/ssh_host_*_key >/dev/null 2>&1; then
+    echo "  生成 SSH 主机密钥（第一次启动，之后不再做）…"
+    ssh-keygen -A || echo "  ⚠ 主机密钥生成失败，sshd 起不来"
+fi
+
+# ── 启动 ────────────────────────────────────────────────────────────────────
+if [ ! -x /usr/sbin/sshd ]; then
+    echo "  ⚠ 找不到 /usr/sbin/sshd"
+    exit 0
+fi
+
+# sshd 的权限分离要一个运行时目录（Debian 那边由 systemd 的 RuntimeDirectory
+# 提供，我们没有 systemd，所以自己建）。
+mkdir -p /run/sshd
+
+# sshd 自己会 daemon 化并 fork，所以这里不加 &。
+if /usr/sbin/sshd; then
+    echo "  sshd 已启动（端口 22，只认公钥）"
+else
+    echo "  ⚠ sshd 启动失败——用 /usr/sbin/sshd -t 看配置哪里不对"
+fi
