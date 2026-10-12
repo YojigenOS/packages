@@ -63,7 +63,7 @@ class TestContainerCommand(unittest.TestCase):
                 "_dir": RECIPES_DIR}
         with mock.patch("skirtlib.build.subprocess.run") as run:
             run.return_value.returncode = 0
-            run_in_container(".", arch, spec, self.EPOCH)
+            run_in_container(".", "src.tar", arch, spec, self.EPOCH)
         return run.call_args[0][0]
 
     def _wrapper(self, arch: str = "aarch64") -> str:

@@ -137,7 +137,8 @@ def make_build_script(spec: dict) -> str:
     )
 
 
-def run_in_container(srcrel: str, srcname: str, arch: str, spec: dict, epoch: int) -> None:
+def run_in_container(srcrel: str, srcname: str, arch: str, spec: dict, epoch: int,
+                     unpack: bool = True) -> None:
     pkg = spec["package"]
     (BUILD_DIR / "sysroot").mkdir(parents=True, exist_ok=True)
     CCACHE_DIR.mkdir(parents=True, exist_ok=True)
@@ -349,8 +350,11 @@ def run_in_container(srcrel: str, srcname: str, arch: str, spec: dict, epoch: in
         #   `python3 -m zipfile … \` 后面接 `else` 会把两行接成一行，
         #   变成 `python3 … else tar …` —— 语法错误。续行符只在【确实要
         #   续行】时用，命令之间的分界靠 `;`。
-        '[ -f /in/src.tar ] && { '
-        'if python3 -c "import zipfile,sys; sys.exit(0 if zipfile.is_zipfile(\'/in/src.tar\') else 1)" 2>/dev/null; '
+        # ★ unpack = false 时【不解压】——那个 source 本身就是源码，
+        #   直接放进 $SRCDIR 下（用它的原文件名）。见 commands.py 里的说明。
+        f'[ -f /in/src.tar ] && {{ '
+        f'if [ "{("1" if unpack else "0")}" = "0" ]; then cp /in/src.tar "$WORK/src/{srcname}"; '
+        'elif python3 -c "import zipfile,sys; sys.exit(0 if zipfile.is_zipfile(\'/in/src.tar\') else 1)" 2>/dev/null; '
         'then python3 -m zipfile -e /in/src.tar "$WORK/src"; '
         'else tar -xf /in/src.tar -C "$WORK/src"; fi; }\n'
         '[ -f /in/steps.sh ] && cp /in/steps.sh "$WORK/steps.sh"\n'

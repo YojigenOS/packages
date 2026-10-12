@@ -1,0 +1,68 @@
+# ca-certificates —— Mozilla 的根证书列表
+#
+# 系统信任哪些 HTTPS 站点，由这个包决定。apk 自己就要它：它用 OpenSSL 的
+# libfetch 取仓库，会验 TLS 证书链（strings libapk 能看到 SSL_CTX_load_verify_locations
+# 和 Verify hostname）。没有这个包，apk 连不上任何 https 仓库。
+#
+# ── 为什么从 Mozilla 的 certdata.txt 现场生成 ─────────────────────────────
+#
+# 三条路：
+#
+#   A  取一份现成的（Debian / Alpine 的 ca-certificates.crt）
+#      ✗ 那是一份别人生成的产物，我们不知道它是怎么筛的
+#   B  用 PyPI 的 certifi
+#      ✗ 它确实就是那份列表，但它是个 Python 包——为了 C 程序信任证书而
+#        装一个 Python 包，说不通
+#   C  ★ 从 Mozilla 的 certdata.txt 生成 ★
+#
+# 选 C。它是这份列表的【源头】——Debian 和 Alpine 都是从这里生成的，
+# 区别只在用谁写的脚本。而生成规则本身不长（见 make-ca-bundle.py），
+# 关键是几个容易做错的地方，都写在那个脚本的注释里了。
+#
+# ── 可复现 ────────────────────────────────────────────────────────────────
+#
+# certdata.txt 是【活的】文件（mozilla-central 的 raw-file/tip 随时会变），
+# 所以这里钉住一个发布 tag：
+#
+#     releases/mozilla-release/raw-file/FIREFOX_140_0_RELEASE/…
+#
+# ★ 实测同一个 tag 取两次，sha256 一致。所以「现场生成」和「可复现」不冲突。
+#
+# ★ 想跟进新证书时，改这个 tag 然后重发——那是一次【显式的动作】，而不是
+#   "某天构建突然产出不一样的东西"。那正是决策记录 0005 要防的。
+#
+# ── 这个包顺便验证了 skirt 的另一个新能力 ────────────────────────────────
+#
+# certdata.txt 是【一个文件】，不是归档。skirt 原来会对每个 source 调
+# srcrel_of 读归档成员名，对一个纯文本会失败。所以加了 unpack = false：
+# 声明"这个 source 本身就是源码，别解它"。
+
+[package]
+name        = "ca-certificates"
+version     = "2026.10.12"
+release     = 1
+date        = 2026-10-12T16:20:00Z
+description = "Mozilla 的根证书列表（HTTPS 信任链）"
+section     = "core"
+url         = "https://wiki.mozilla.org/CA"
+# ★ Mozilla 那份 certdata.txt 自己就是 MPL-2.0。我们生成的是它的衍生物。
+license     = "MPL-2.0"
+
+[[source]]
+url    = "https://hg.mozilla.org/releases/mozilla-release/raw-file/FIREFOX_140_0_RELEASE/security/nss/lib/ckfw/builtins/certdata.txt"
+sha256 = "8944ec6b572b577daee4fc681a425881f841ec2660e4cb5f0eee727f84620697"
+# ★ 它不是归档，别试着解开——见上面那段说明。
+unpack = false
+
+[dependencies]
+# 只要 python3 来跑生成脚本。★ 没有 openssl 依赖：生成的是 PEM 文本，
+# 不需要解析 X.509，DER 转 PEM 就是 base64（标准库）。
+runtime = ["python3"]
+build   = ["python3"]
+
+[dependencies.x86_64]
+runtime = ["python3"]
+build   = ["python3"]
+
+[build]
+type = "custom"

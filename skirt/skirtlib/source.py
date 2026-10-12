@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import shutil
+import subprocess
 import tarfile
 import zipfile
 import urllib.request
@@ -108,6 +110,49 @@ def fetch_git(spec: dict, src: dict) -> Path:
 
 # -------------------------------------------------------------- 下载校验
 
+def _download(url: str, dest: Path) -> None:
+    """下载一个 URL 到 dest。失败抛异常。
+
+    ★ 为什么会有 curl 这条回退 ─────────────────────────────────────────────
+
+    macOS 上 Python 的 SSL 栈对 hg.mozilla.org 会【握手成功、然后在读数据时
+    断掉】：
+
+        URLError: <urlopen error [SSL: UNEXPECTED_EOF_WHILE_READING]
+                   EOF occurred in violation of protocol>
+
+    而同一个 URL、同一台机器，curl 一次就下来了——sha256 和 CI 上的一致。
+    握手本身是成功的（TLSv1.3 / TLS_AES_256_GCM_SHA384），断在数据阶段，
+    像是按 TLS 客户端指纹做了什么。
+
+    Linux 上（CI 的 runner、容器里）Python 一切正常。所以这是 macOS 这台
+    【开发机】的问题，不是配方的问题。
+
+    ★ 回退不降低任何安全性：调用方仍然按 sha256 校验，那才是信任边界。
+      这里决定的只是"用哪个客户端去取字节"。
+    """
+    try:
+        urllib.request.urlretrieve(url, dest)
+        return
+    except Exception as first:                      # noqa: BLE001
+        curl = shutil.which("curl")
+        if not curl:
+            raise
+
+        dest.unlink(missing_ok=True)
+        proc = subprocess.run(
+            [curl, "-fsSL", "--max-time", "300", "-o", str(dest), url],
+            capture_output=True,
+            text=True,
+        )
+        if proc.returncode != 0:
+            dest.unlink(missing_ok=True)
+            raise RuntimeError(
+                f"urllib 失败（{type(first).__name__}: {first}）；"
+                f"curl 也失败（退出码 {proc.returncode}: {proc.stderr.strip()[:200]}）"
+            ) from first
+
+
 def _candidates(spec: dict, src: dict) -> list[str]:
     """按顺序返回该试的 URL：`url` 优先，然后是 `urls` 里的备选。
 
@@ -170,7 +215,7 @@ def fetch(spec: dict) -> Path:
     for i, url in enumerate(urls):
         log("下载" if i == 0 else "换源", url)
         try:
-            urllib.request.urlretrieve(url, tmp)
+            _download(url, tmp)
         except Exception as exc:                    # noqa: BLE001
             errors.append(f"{url}\n           {type(exc).__name__}: {exc}")
             tmp.unlink(missing_ok=True)

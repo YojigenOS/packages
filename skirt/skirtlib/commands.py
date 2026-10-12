@@ -135,7 +135,18 @@ def cmd_build(args) -> None:
         #     1. 读 tar 里的名字，算出源码根目录叫什么——名字只是字符串
         #     2. 把 tar 原样递进容器——单个文件，没有大小写问题
         #   解压由容器做，那里是 Linux 原生文件系统。
-        srcrel = srcrel_of(archive)
+        # ★ unpack = false：这个 source【不是归档】✗ 它本身就是源码 ✓
+        #
+        # 起因是 ca-certificates：它的源码是 Mozilla 的 certdata.txt，
+        # 一份 1.4 MB 的文本文件。它不是 tar 也不是 zip，所以 srcrel_of
+        # 读成员名会失败。
+        #
+        # ★ 与其把它包成 tar.gz 再托管一份，不如承认「单个文件也可以是源码」
+        #   这件事——它是通用的，将来还会有别的（二进制 blob、单个配置…）。
+        # spec["source"] 是个数组，第一个是主源（fetch 也只看第一个）。
+        unpack = (spec["source"][0].get("unpack", True)
+                  if spec.get("source") else True)
+        srcrel = srcrel_of(archive) if unpack else "."
         shutil.copy2(archive, BUILD_DIR / "src.tar")
         # ★ 再放一份【保持原文件名】的，硬链接到 src.tar（不占额外空间）。
         #
@@ -173,7 +184,9 @@ def cmd_build(args) -> None:
     (BUILD_DIR / "run.sh").write_text(make_build_script(spec), encoding="utf-8")
 
     print()
-    run_in_container(srcrel, srcname, arch, spec, source_date_epoch(spec, arch, host_provides))
+    run_in_container(srcrel, srcname, arch, spec,
+                     source_date_epoch(spec, arch, host_provides),
+                     unpack=unpack)
 
     results = collect(spec, arch)
     print()

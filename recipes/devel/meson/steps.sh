@@ -11,7 +11,7 @@
 #
 #     ERROR: Invalid wheel filename (wrong number of parts): '*'
 #
-# 因为 skirt 解压时把 wheel 的【内容】铺到了 $SRCDIR，那儿没有 .whl 文件。
+# 因为 skirt 解压时把 wheel 的【内容】铺到了 ${SRCDIR}，那儿没有 .whl 文件。
 #
 # ── 为什么还要改个名字 ────────────────────────────────────────────────────
 #
