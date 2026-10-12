@@ -3,17 +3,33 @@
 [package]
 name        = "coreutils"
 version     = "9.12"
-# ★ release 2：加了 ELF 扫描生成的 so: 依赖。
+# ★ release 2：加了 ELF 扫描生成的 so: 依赖（expr / factor / basenc 需要
+#   so:libgmp.so.10）。payload 没变但包变了，所以版本号要跟着走。
 #
-#   expr / factor / basenc 需要 so:libgmp.so.10
+# ★ release 3：显式 --with-libgmp，并声明 gmp 为构建依赖。
 #
-#   payload 没变，但包变了——所以版本号要跟着走。不 bump 的话本地和线上
-#   会各有一个 coreutils-9.12-r1，内容不同、哈希不同，而 apk 面对两个同版本
-#   号不知道该选哪个。这个坑在 bash 上踩过一次。
+#   原来什么都没写，于是【构建环境里恰好有没有 libgmp-dev】决定了产物：
 #
-#   ★ 这些 so: 由 gmp / mpfr 提供，它们和这次一起发。
-release     = 2
-date        = 2026-10-12T20:30:00Z
+#     Debian 自举环境   build-essential 里有 libgmp10（gcc 的运行时依赖），
+#                       但没有 libgmp-dev——没有给链接器用的 libgmp.so
+#                       → 找不到 -lgmp → gnulib 用自带的内嵌 mini-gmp
+#     我们的 devel 镜像  有完整的 gmp（gcc 要它）
+#                       → 链上 libgmp.so.10
+#
+#   同一份配方两种二进制、两种 depends、两种哈希。这正是 bootstrap/Dockerfile
+#   里那条判据要抓的东西：「换一个 Debian 版本，产物应该一样」。
+#
+#   ★ 和 gawk 的处理方向相反，是故意的。gawk 选的是 --without-mpfr（关掉那个
+#     可选特性），因为 gawk -M 不常用，而少一个依赖更省。这里选的是钉住它：
+#     GMP 是 expr 和 factor 的【实际实现】，关掉就退化成 mini-gmp——功能一样，
+#     但大数乘法慢 31 倍（实测 4500 位 × 4500 位 × 200 次：84 ms vs 2628 ms）。
+#     保持功能的标准，就把它钉住。
+#
+#   ★ 声明 gmp 为【构建】依赖，自举时 skirt 会先建它——所以 Debian 环境下
+#     也是链我们自己的 gmp，不再取决于 Debian 装了什么。运行时依赖里也写一份，
+#     让"coreutils 需要 gmp"这件事在配方里看得见；so: 那条由 ELF 扫描补。
+release     = 3
+date        = 2026-10-12T21:30:00Z
 description = "核心文件与文本工具（ls、cp、cat、mkdir…）"
 section     = "base"
 url         = "https://www.gnu.org/software/coreutils/"
@@ -32,13 +48,16 @@ urls = [
 sha256 = "a480198559733e9b3da999e90543ac6f888a2caa544d8d664c5a1f17e528e210"
 
 [dependencies]
-runtime = ["glibc"]
-build   = ["make", "gettext", "gcc"]
+runtime = ["glibc", "gmp"]
+build   = ["make", "gettext", "gcc", "gmp"]
 
 [dependencies.x86_64]
-runtime = ["glibc"]
-build   = ["make", "gettext", "gcc"]
+runtime = ["glibc", "gmp"]
+build   = ["make", "gettext", "gcc", "gmp"]
 
 [build]
 type      = "autotools"
-configure = ["--prefix=/usr"]
+# ★ --with-libgmp 是"要求它"，不是"有就用"——gnulib 的 AC_LIB_HAVE_LINKFLAGS
+#   在显式 --with- 时找不到库会直接报错。所以构建环境里没有 gmp 时它不会悄悄
+#   降级，而是当场失败——那正是我们要的：宁可失败，也不要两份不同的产物。
+configure = ["--prefix=/usr", "--with-libgmp"]
