@@ -369,6 +369,14 @@ def run_in_container(srcrel: str, srcname: str, arch: str, spec: dict, epoch: in
         f'if [ "{("1" if unpack else "0")}" = "0" ]; then cp /in/src.tar "$WORK/src/{srcname}"; '
         'elif python3 -c "import zipfile,sys; sys.exit(0 if zipfile.is_zipfile(\'/in/src.tar\') else 1)" 2>/dev/null; '
         'then python3 -m zipfile -e /in/src.tar "$WORK/src"; '
+        # ★ .tar.bz2 靠 GNU tar 自己去 exec bzip2。所以【构建依赖里要有 bzip2】
+        #   ——没有它，tar 报 `cannot exec bzip2`。
+        #
+        #   试过用 python3 的 tarfile 代替（想省掉这个依赖）：不行。python3 的
+        #   bz2 不是内建的，它是 _bz2 这个 C 模块，要链 libbz2——而我们连
+        #   bzip2 都没有，所以解释器里根本没有这个模块：
+        #       tarfile.CompressionError: bz2 module is not available
+        #   （zlib 那条路能走通，是因为我们【有】zlib。）
         'else tar -xf /in/src.tar -C "$WORK/src"; fi; }\n'
         '[ -f /in/steps.sh ] && cp /in/steps.sh "$WORK/steps.sh"\n'
         '[ -d /in/pkg ] && cp -a /in/pkg "$WORK/pkg"\n'

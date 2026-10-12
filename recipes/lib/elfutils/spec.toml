@@ -1,0 +1,71 @@
+# elfutils —— ELF 与 DWARF 处理库（libelf / libdw）以及 eu-* 工具
+#
+# 【为什么它必须存在（不是"顺手加的库"）】
+#
+# x86_64 的内核构建要编 tools/objtool，而 objtool 直接 #include <gelf.h>：
+#
+#     tools/objtool/include/objtool/elf.h:10:10:
+#         fatal error: gelf.h: No such file or directory
+#
+# objtool 是 ORC 栈回溯器要用的工具，而 **它是 x86 独有的**——arm64 根本不编它，
+# 所以这个缺口一直没暴露（今天第四次"只在 x86_64 发作"的坑）。
+#
+# 备选方案是关掉 ORC、改用 frame-pointer 回溯，那等于拿栈回溯的可靠性和一批
+# 加固特性去换"少一个库"，不划算。
+#
+# 【为什么不带 debuginfod】
+#
+# elfutils 在能找到 libcurl 时会默认打开 debuginfod（在线调试信息服务器），
+# 对我们是纯粹的依赖负担：拖进 libcurl 和它的一整串依赖。显式关掉。
+#
+# 【--disable-nls】
+#
+# 和 binutils 同一个理由：工具自带翻译，但构建需要 gettext 的 msgfmt。
+# 我们要的是库（gelf.h + libelf.so），不是 eu-* 的界面语言。
+#
+# 【源是 .tar.bz2，而我们的构建环境没有 bzip2】
+#
+# 这不需要额外的包：构建器解压时对 bz2 走 python3 的 tarfile（见 build.py 里
+# 那段注释）。所以这里保持【上游原样】的 tarball 和它真实的 sha256。
+
+[package]
+name        = "elfutils"
+version     = "0.196"
+release     = 1
+date        = 2026-10-12T10:35:00Z
+description = "ELF 与 DWARF 处理库（libelf / libdw）及 eu-* 工具"
+section     = "lib"
+url         = "https://sourceware.org/elfutils/"
+license     = "GPL-3.0-or-later AND LGPL-3.0-or-later"
+
+[[source]]
+# 上游只有 .tar.bz2 这一种格式——构建器能解（见上面的说明）。
+url    = "https://mirrors.nju.edu.cn/sourceware/elfutils/0.196/elfutils-0.196.tar.bz2"
+sha256 = "fd5cc6b77ad6773cac93cb3f415f9318ac3b3455eecf801f6b4a742c4f6c7209"
+
+[dependencies]
+runtime = ["glibc", "zlib"]
+# ★ bzip2 是【必须】的：源是 .tar.bz2，而 GNU tar 对它是去 exec bzip2。
+#   声明在这里 = 驱动会把它的 payload 合并进构建容器 = PATH 上有 bzip2。
+# ★ pkgconf 也是必须的：elfutils 的 configure 无条件要 pkg-config。
+build   = ["make", "gcc", "flex", "bison", "zlib", "bzip2", "pkgconf",
+           "coreutils", "bash", "sed",
+           "grep", "findutils", "gawk", "tar", "gzip", "xz"]
+
+[dependencies.x86_64]
+runtime = ["glibc", "zlib"]
+# ★ bzip2 是【必须】的：源是 .tar.bz2，而 GNU tar 对它是去 exec bzip2。
+#   声明在这里 = 驱动会把它的 payload 合并进构建容器 = PATH 上有 bzip2。
+# ★ pkgconf 也是必须的：elfutils 的 configure 无条件要 pkg-config。
+build   = ["make", "gcc", "flex", "bison", "zlib", "bzip2", "pkgconf",
+           "coreutils", "bash", "sed",
+           "grep", "findutils", "gawk", "tar", "gzip", "xz"]
+
+[build]
+type = "autotools"
+configure = [
+  "--prefix=/usr",
+  "--disable-nls",
+  "--disable-debuginfod",
+  "--disable-libdebuginfod",
+]

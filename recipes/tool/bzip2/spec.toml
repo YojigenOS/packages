@@ -1,0 +1,53 @@
+# bzip2 —— .bz2 压缩与 libbz2
+#
+# 【为什么需要它（不是"顺便加的压缩工具"）】
+#
+# 内核要编 x86_64 才需要的 objtool，objtool 要 gelf.h，gelf.h 来自 elfutils，
+# 而 elfutils 上游【只发布 .tar.bz2】。GNU tar 对 .tar.bz2 是去 exec bzip2——
+# 构建环境里没有它，解压就报：
+#
+#     tar: cannot exec bzip2
+#
+# 试过绕开：用 python3 的 tarfile 解。不行——python3 的 bz2 不是内建的，它是
+# 要链 libbz2 的 C 模块，而正因为没有 bzip2 才没有它：
+#
+#     tarfile.CompressionError: bz2 module is not available
+#
+# 所以这个包是那条链的地基。顺带它本身也是该有的：.tar.bz2 是很常见的归档格式，
+# 而 base 里有 gzip 和 xz、偏偏没有 bzip2。
+#
+# 【为什么自己写 steps.sh】
+#
+# bzip2 没有 configure——它是个 1990 年代风格的 Makefile，而且：
+#   · 不认 DESTDIR（只能把 PREFIX 指到目标根里）
+#   · `make install` 会用 `ln -f`（硬链接，绝对路径）造 bunzip2/bzcat
+#   · 默认的 make 【不建共享库】，要单独 make -f Makefile-libbz2_so
+#
+# 最后一条最要紧：只装 libbz2.a 的话，链接它的东西会【静默变成静态链接】——
+# 和 openssh 那边撞到的 OpenSSL 是同一个坑。
+
+[package]
+name        = "bzip2"
+version     = "1.0.8"
+release     = 1
+date        = 2026-10-12T10:40:00Z
+description = ".bz2 压缩工具与 libbz2"
+section     = "utils"
+url         = "https://sourceware.org/bzip2/"
+license     = "bzip2-1.0.6"
+
+[[source]]
+url    = "https://mirrors.nju.edu.cn/sourceware/bzip2/bzip2-1.0.8.tar.gz"
+sha256 = "ab5a03176ee106d3f0fa90e381da478ddae405918153cca248e682cd0c4a2269"
+
+[dependencies]
+runtime = ["glibc"]
+build   = ["make", "gcc", "coreutils", "bash", "sed", "grep"]
+
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["make", "gcc", "coreutils", "bash", "sed", "grep"]
+
+[build]
+# 没有 configure，全是 Makefile —— 见上面的说明
+type = "custom"

@@ -69,7 +69,13 @@ build = ["make", "gcc", "rsync", "flex", "bison", "bc", "perl", "bash", "coreuti
 
 [dependencies.x86_64]
 runtime = []
-build = ["make", "gcc", "rsync", "flex", "bison", "bc", "perl", "bash", "coreutils", "openssl"]
+# ★ elfutils 【只在 x86_64 上要】：x86 的内核要编 tools/objtool（ORC 栈回溯
+#   用它），而 objtool 直接 #include <gelf.h>。arm64 根本不编 objtool，所以
+#   加在通用那一段里会给 aarch64 白添一个依赖。
+#   撞上的原话：
+#       tools/objtool/include/objtool/elf.h:10:10: fatal error: gelf.h: No such file
+build = ["make", "gcc", "rsync", "flex", "bison", "bc", "perl", "bash", "coreutils",
+         "openssl", "elfutils"]
 
 [build]
 # custom：内核有自己的构建体系（Kbuild），套不进 autotools 那套映射

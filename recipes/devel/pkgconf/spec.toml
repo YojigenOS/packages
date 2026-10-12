@@ -1,0 +1,57 @@
+# pkgconf —— pkg-config 的现代实现（不依赖 glib）
+#
+# 【为什么它必须在】
+#
+# elfutils 的 configure 无条件要 pkg-config：
+#
+#     checking for pkg-config... no
+#     configure: error: pkg-config not found
+#
+# 而 elfutils 是 x86_64 的内核（objtool 要 gelf.h）要的。于是这条链是：
+#
+#     bzip2（解 .tar.bz2）→ elfutils → objtool → x86_64 内核
+#                          ↑ pkgconf 在这里
+#
+# 每一个都是"上一个是它的前置"，没有一个是可有可无的。
+#
+# 【为什么用 pkgconf 而不是 freedesktop 的 pkg-config】
+#
+# 老的那个依赖 GLib——为了"查一个库的编译参数"拖进整套 GLib 不划算。
+# pkgconf 是它的现代替代（多数发行版都换过去了），零 glib 依赖，并且
+# 【同时安装 pkg-config 这个名字】，所以别的构建脚本照常能找到它。
+#
+# 【为什么用 autotools 而不是 meson】
+#
+# 上游两种都提供。用 autotools 是因为 meson / ninja 还不在 base-devel 里：
+# 走 meson 就得把这两个也拉进依赖链，而这条链已经够长了。
+
+[package]
+name        = "pkgconf"
+version     = "3.0.8"
+release     = 1
+date        = 2026-10-12T10:50:00Z
+description = "pkg-config 的现代实现"
+section     = "devel"
+url         = "https://github.com/pkgconf/pkgconf"
+license     = "ISC"
+
+[[source]]
+url    = "https://github.com/pkgconf/pkgconf/releases/download/pkgconf-3.0.8/pkgconf-3.0.8.tar.xz"
+sha256 = "943f0bc88bcaeceb630b00262e2a8ad5ea4fac3fba72a4267d8b9ec6b35d1194"
+
+[dependencies]
+runtime = ["glibc"]
+build   = ["make", "gcc", "coreutils", "bash", "sed", "grep", "findutils", "gawk"]
+
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["make", "gcc", "coreutils", "bash", "sed", "grep", "findutils", "gawk"]
+
+[build]
+type = "autotools"
+configure = [
+  "--prefix=/usr",
+  # pkgconf 默认会把 pkg-config 这个兼容名也装上；显式写出来是因为
+  # 【别的构建脚本认的就是这个名字】，不是可有可无的别名。
+  "--with-pkg-config-dir=/usr/lib/pkgconfig:/usr/share/pkgconfig",
+]
