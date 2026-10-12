@@ -51,23 +51,71 @@ while [ $# -gt 0 ]; do
     esac
 done
 
+# ★ rclone 用【容器里的】，本地不用装。
+#
+# 这台机器是 mac，装 rclone 要 brew；而 CI 上装它又是一条命令。两者版本还可能
+# 不同。放进容器里，这件事就只有一个实现——和 tar 那次同一个理由。
+#
+# 有本机 rclone 就用本机的（快一点），没有就起容器。
+if command -v rclone >/dev/null 2>&1; then
+    RCLONE="rclone"
+else
+    # ★ 用【具名 remote】（yojigen:）而不是 :s3: 连接字符串——
+    #   只有具名 remote 才读 RCLONE_CONFIG_<名字>_* 环境变量。用 :s3: 的话
+    #   它会报 `s3 provider "" not known`，然后拿默认值去连。
+    RCLONE="docker run --rm -v $PWD/var/repo:/repo"
+    for v in RCLONE_CONFIG_YOJIGEN_TYPE RCLONE_CONFIG_YOJIGEN_PROVIDER \
+             RCLONE_CONFIG_YOJIGEN_ENDPOINT RCLONE_CONFIG_YOJIGEN_ACCESS_KEY_ID \
+             RCLONE_CONFIG_YOJIGEN_SECRET_ACCESS_KEY RCLONE_CONFIG_YOJIGEN_FORCE_PATH_STYLE \
+             RCLONE_CONFIG_YOJIGEN_REGION; do
+        RCLONE="$RCLONE -e $v"
+    done
+    RCLONE="$RCLONE rclone/rclone"
+    # 用容器时，源路径是容器里的 /repo
+    SRC_IN_CONTAINER=1
+fi
+
+# ── 凭据：环境变量优先，省掉交互式 rclone config ────────────────────────────
+#
+# 本地和 CI 用【同一套】写法。CI 里那几个 organization secret 直接映射过来：
+#
+#     S3_AK        → RCLONE_CONFIG_R2_ACCESS_KEY_ID
+#     S3_SK        → RCLONE_CONFIG_R2_SECRET_ACCESS_KEY
+#     S3_BASE_URL  → RCLONE_CONFIG_R2_ENDPOINT
+#     S3_BUCKET    → 桶名（不是 remote 配置，是路径的一部分）
+#
+# 设了这些之后，rclone 就把 `:s3:` 当成一个可用的 remote，不用 rclone config。
+if [ -n "${S3_AK:-}" ] && [ -n "${S3_SK:-}" ] && [ -n "${S3_BASE_URL:-}" ]; then
+    export RCLONE_CONFIG_YOJIGEN_TYPE=s3
+    export RCLONE_CONFIG_YOJIGEN_PROVIDER=Other
+    export RCLONE_CONFIG_YOJIGEN_ENDPOINT="$S3_BASE_URL"
+    export RCLONE_CONFIG_YOJIGEN_ACCESS_KEY_ID="$S3_AK"
+    export RCLONE_CONFIG_YOJIGEN_SECRET_ACCESS_KEY="$S3_SK"
+    # ★ RustFS / MinIO 都是路径式。不开这个的话 rclone 会用虚拟主机式
+    #   （bucket.host 形式），而那个通常没配 DNS。
+    export RCLONE_CONFIG_YOJIGEN_FORCE_PATH_STYLE=true
+    # 自建服务没有 region 概念，但 SDK 要一个值
+    export RCLONE_CONFIG_YOJIGEN_REGION=us-east-1
+
+    # 没给 remote 的话，用环境变量拼出来的这个
+    if [ -z "$REMOTE" ] && [ -n "${S3_BUCKET:-}" ]; then
+        REMOTE="yojigen:$S3_BUCKET"
+    fi
+    echo "  凭据:    来自环境变量（S3_BASE_URL=${S3_BASE_URL}）"
+fi
+
 [ -n "$REMOTE" ] || { echo "用法: $0 <rclone-remote>:<桶路径> [--go]" >&2; exit 1; }
 
 SRC="var/repo/$ARCH"
 [ -f "$SRC/APKINDEX.tar.gz" ] || { echo "找不到 $SRC/APKINDEX.tar.gz。先跑 scripts/repo.sh。" >&2; exit 1; }
 
-command -v rclone >/dev/null 2>&1 || {
-    echo "没有 rclone。装它：" >&2
-    echo "    brew install rclone            # macOS" >&2
-    echo "    apk add rclone                 # Alpine" >&2
-    exit 1
-}
+
 
 COUNT=$(ls "$SRC"/*.apk 2>/dev/null | wc -l | tr -d ' ')
 SIZE=$(du -sh "$SRC" | cut -f1)
 
 echo
-echo "  源:      $SRC   （$COUNT 个包，$SIZE）"
+echo "  源:      $SRC   （$COUNT 个包，${SIZE}）"
 echo "  目标:    $REMOTE/$ARCH/"
 echo "  模式:    $([ "$GO" = 1 ] && echo '★ 真的传' || echo '干跑（加 --go 才真的传）')"
 echo
@@ -84,9 +132,12 @@ echo
 DRY=""
 [ "$GO" = 1 ] || DRY="--dry-run"
 
+# 用容器里的 rclone 时，源路径是容器里的挂载点
+[ "${SRC_IN_CONTAINER:-0}" = 1 ] && SRC_FOR_RCLONE="/repo/$ARCH" || SRC_FOR_RCLONE="$SRC/"
+
 # ── 第一步：传包（除索引外的一切）────────────────────────────────────────
 echo "  [1/2] 传包（不含索引）"
-rclone copy "$SRC/" "$REMOTE/$ARCH/" \
+$RCLONE copy "$SRC_FOR_RCLONE/" "$REMOTE/$ARCH/" \
     --exclude 'APKINDEX.tar.gz' \
     --checksum \
     --progress \
@@ -95,7 +146,7 @@ rclone copy "$SRC/" "$REMOTE/$ARCH/" \
 # ── 第二步：传索引（切换点）──────────────────────────────────────────────
 echo
 echo "  [2/2] 传索引（这一步之后新版本才对外可见）"
-rclone copy "$SRC/APKINDEX.tar.gz" "$REMOTE/$ARCH/" \
+$RCLONE copy "$SRC_FOR_RCLONE/APKINDEX.tar.gz" "$REMOTE/$ARCH/" \
     --checksum \
     --progress \
     $DRY
