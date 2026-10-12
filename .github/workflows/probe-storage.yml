@@ -34,7 +34,7 @@ jobs:
 
     steps:
       - name: 取 packages（要 scripts/deploy.sh）
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       - name: 报告 runner 在哪
         run: |

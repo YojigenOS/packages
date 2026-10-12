@@ -70,12 +70,12 @@ jobs:
 
     steps:
       - name: 取 packages
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       # 公钥在 distro 里——它是"会烤进交付物的那份"。这里读它是为了做
       # 三方一致性检查：secret 里那把私钥，必须是这些公钥之一。
       - name: 取 distro（公钥在那儿）
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           repository: YojigenOS/distro
           path: .distro
@@ -92,7 +92,7 @@ jobs:
       #
       #   ★ 加 arch 到 key 里：两个架构的产物不能混用一个缓存。
       - name: ccache 缓存
-        uses: actions/cache@v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: ${{ env.SKIRT_CCACHE }}
           key: ccache-${{ runner.os }}-${{ inputs.arch }}-${{ github.sha }}
@@ -184,7 +184,7 @@ jobs:
       - name: 上传构建日志
         if: always()
         continue-on-error: true
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: release-logs-${{ inputs.arch }}
           path: var/logs
@@ -333,7 +333,7 @@ jobs:
       - name: 留存仓库副本
         if: always()
         continue-on-error: true
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: repo-${{ inputs.arch }}
           path: var/repo/${{ inputs.arch }}

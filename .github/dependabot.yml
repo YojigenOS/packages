@@ -1,0 +1,37 @@
+# Dependabot —— 让上面那些 commit SHA 不要烂在旧版本上。
+#
+# ── 为什么 action 用 SHA 而不是 tag ──────────────────────────────────────
+#
+#   uses: actions/checkout@v7                    ← ✗ tag 可以被移动
+#   uses: actions/checkout@3d3c42e5aac5ba8…      ← ✓ SHA 不能
+#
+# tag 是【可变引用】——维护者（或者拿到账号的人）可以把它指向另一个 commit，
+# 而那之后所有引用它的 workflow 就跑的是新代码。SHA 是内容哈希，改不了。
+#
+# GitHub 官方对第三方 action 的建议就是钉 SHA（自家那几个 action 用 tag 是
+# 可接受的，但我们统一钉住，规则简单一条）。
+#
+# ── 那代价是什么 ────────────────────────────────────────────────────────
+#
+# 钉死的 SHA 不会自己变新——安全更新也进不来。所以钉 SHA 必须配一个自动
+# 更新机制，否则过几个月就是在跑一个有已知问题的旧版本。
+#
+# 这个文件就是那个机制：Dependabot 会读 action 后面那行 `# v7.0.1` 注释，
+# 有新版时提 PR——SHA 和注释一起改。人只需要看 PR 和合并。
+#
+# ★ 它顺带也管 pip 之类的，但我们这里是纯 shell + python 标准库，没有清单
+#   文件，所以只有 github-actions 这一项。
+
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(ci)"
+    labels:
+      - dependencies
+      - ci
