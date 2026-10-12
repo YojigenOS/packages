@@ -12,8 +12,17 @@
 [package]
 name        = "glibc"
 version     = "2.44"
-release     = 1
-date        = 2026-10-10T15:00:00Z
+# ★ release 2：provides 里多了 27 个 so: 名字（libc.so.6、libm.so.6、
+#   ld-linux-aarch64.so.1 之类）。
+#
+#   那是打包时扫 ELF 自动生成的（见 scripts/elf-deps.py）。payload 一个字节
+#   都没变，但【包变了】——所以版本号必须跟着走。
+#
+#   ★ 不 bump 的后果是实打实的：本地和线上会各有一个 glibc-2.44-r1，内容
+#     不同、哈希不同，而 apk 面对两个同版本号不知道该选哪个。这个坑刚踩过
+#     （bash 那次。）
+release     = 2
+date        = 2026-10-12T19:00:00Z
 description = "GNU C 库：动态链接器与标准 C 库"
 section     = "core"
 url         = "https://www.gnu.org/software/libc/"
