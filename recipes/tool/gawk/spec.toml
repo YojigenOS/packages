@@ -3,8 +3,17 @@
 [package]
 name        = "gawk"
 version     = "5.4.0"
-release     = 1
-date        = 2026-10-10T06:39:13Z
+# ★ release 2：加了 ELF 扫描生成的 so: 依赖。
+#
+#   gawk 需要 so:libmpfr.so.6 和 so:libgmp.so.10
+#
+#   payload 没变，但包变了——所以版本号要跟着走。不 bump 的话本地和线上
+#   会各有一个 gawk-5.4.0-r1，内容不同、哈希不同，而 apk 面对两个同版本
+#   号不知道该选哪个。这个坑在 bash 上踩过一次。
+#
+#   ★ 这些 so: 由 gmp / mpfr 提供，它们和这次一起发。
+release     = 2
+date        = 2026-10-12T20:30:00Z
 description = "GNU awk，文本处理语言"
 section     = "base"
 url         = "https://www.gnu.org/software/gawk/"

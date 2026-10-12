@@ -3,8 +3,17 @@
 [package]
 name        = "coreutils"
 version     = "9.12"
-release     = 1
-date        = 2026-10-10T06:39:12Z
+# ★ release 2：加了 ELF 扫描生成的 so: 依赖。
+#
+#   expr / factor / basenc 需要 so:libgmp.so.10
+#
+#   payload 没变，但包变了——所以版本号要跟着走。不 bump 的话本地和线上
+#   会各有一个 coreutils-9.12-r1，内容不同、哈希不同，而 apk 面对两个同版本
+#   号不知道该选哪个。这个坑在 bash 上踩过一次。
+#
+#   ★ 这些 so: 由 gmp / mpfr 提供，它们和这次一起发。
+release     = 2
+date        = 2026-10-12T20:30:00Z
 description = "核心文件与文本工具（ls、cp、cat、mkdir…）"
 section     = "base"
 url         = "https://www.gnu.org/software/coreutils/"
