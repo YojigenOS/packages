@@ -48,6 +48,10 @@ on:
         required: false
         type: boolean
         default: false
+      check_flavor:
+        description: '自检装哪个风味（留空则只检查包有没有建出来）'
+        required: false
+        default: 'base'
 
 jobs:
   release:
@@ -279,42 +283,101 @@ jobs:
       # ★ 发布前先证明"这个仓库能装"。
       #   这正是 packages 侧待办里缺的那条检查——「用包管理器装」比
       #   「直接叠 payload」严格，它会把声明不全的依赖立刻暴露出来。
-      - name: 自检 —— 从刚生成的仓库装一遍
+      - name: 自检 —— 包都在，而且能装出一个系统
         run: |
           set -euo pipefail
-          # ★ 服务的根要是 var/repo，不是 var/repo/<arch>。
-          #   apk 会自己在仓库 URL 后面加 /<arch>，所以仓库 URL 是
-          #   http://localhost:18080 而索引在 /aarch64/APKINDEX.tar.gz。
-          #   在 <arch> 目录里起服务的话，apk 会去拿 /aarch64/aarch64/… → 404。
+
+          # ── 这一步检查什么 ────────────────────────────────────────────────
+          #
+          # 两件事，都要过：
+          #
+          #   ① 这次让我建的包【都产出了】——便宜，一个 ls
+          #   ② 从刚生成的仓库能【装出一个风味】——真的跑一次 apk add
+          #
+          # ── 为什么装风味，而不是装「这次建的包」 ──────────────────────────
+          #
+          # 原来这里是 `apk add ${{ inputs.packages }}`，那等于把【构建工具】
+          # 当成【交付物】来验收。实测就失败了：
+          #
+          #     libgcc (no such package):   required by: ninja
+          #     python3 (no such package):  required by: meson
+          #
+          # 而 ninja / meson 是 apk-tools 的【构建】依赖——它们不进 base，
+          # 也不需要在这个仓库里可安装。拿它们当验收对象是问错了问题。
+          #
+          # 真正的判据是「能不能从这个仓库装出一个系统」。所以按风味装。
+          # 这也天然排除了构建期才用的东西。
+          #
+          # ★ 用 .distro 里的风味文件，不在这里另写一份包列表——那份列表是
+          #   发行版的事，写第二遍就会漂（0014 和 base.toml 的注释都说过）。
+
           ( cd var/repo && python3 -m http.server 18080 >/dev/null 2>&1 & echo $! > /tmp/http.pid )
           sleep 2
+
           echo "  确认索引可读:"
           curl -fsS -o /dev/null -w "    HTTP %{http_code}  %{size_download} 字节\n" \
             "http://localhost:18080/${{ inputs.arch }}/APKINDEX.tar.gz" || {
-              echo "    ✗ 本地服务拿不到索引"; exit 1; }
+              echo "    ✗ 本地服务拿不到索引（服务的根要是 var/repo，不是 var/repo/<arch>）"
+              exit 1; }
+
+          FLAVOR="${{ inputs.check_flavor }}"
+          if [ -n "$FLAVOR" ]; then
+            FLAVOR_FILE=".distro/variants/$FLAVOR.toml"
+            [ -f "$FLAVOR_FILE" ] || { echo "    ✗ 找不到风味文件 $FLAVOR_FILE"; exit 1; }
+            FLAVOR_PKGS=$(python3 -c "
+          import tomllib, pathlib
+          v = tomllib.loads(pathlib.Path('$FLAVOR_FILE').read_text())['variant']
+          print(' '.join(v['packages']))")
+            echo "  风味 $FLAVOR: $(echo $FLAVOR_PKGS | wc -w | tr -d ' ') 个包"
+          else
+            FLAVOR_PKGS=""
+            echo "  （没指定风味，只检查包有没有建出来）"
+          fi
 
           docker run --rm --network host \
             -v "$PWD/var/repo:/repo:ro" \
             -v "$PWD/.distro/keys:/keys:ro" \
+            -e "REQUESTED=${{ inputs.packages }}" \
+            -e "FLAVOR_PKGS=$FLAVOR_PKGS" \
+            -e "FLAVOR=$FLAVOR" \
+            -e "ARCH=${{ inputs.arch }}" \
             alpine:latest sh -c '
               set -e
               mkdir -p /newroot/etc/apk/keys
               cp /keys/*.rsa.pub /newroot/etc/apk/keys/
               echo "http://localhost:18080" > /newroot/etc/apk/repositories
 
+              echo "  ── ① 这次要建的包都产出了吗 ──"
+              missing=""
+              for p in $REQUESTED; do
+                ls /repo/$ARCH/$p-*.apk >/dev/null 2>&1 || missing="$missing $p"
+              done
+              if [ -n "$missing" ]; then
+                echo "    ✗ 没建出来:$missing"
+                exit 1
+              fi
+              echo "    ✓ $(echo $REQUESTED | wc -w | tr -d " ") 个都在"
+
+              [ -n "$FLAVOR" ] || exit 0
+
+              echo "  ── ② 装风味 $FLAVOR ──"
               # ★ 不用 --allow-untrusted —— 真的验签
               apk add --keys-dir /newroot/etc/apk/keys \
                   --repository http://localhost:18080 \
-                  --root /newroot --initdb ${{ inputs.packages }}
+                  --root /newroot --initdb $FLAVOR_PKGS
 
-              echo "  装了 $(apk --root /newroot info 2>/dev/null | wc -l | tr -d " ") 个包"
+              echo "    装了 $(apk --root /newroot info 2>/dev/null | wc -l | tr -d " ") 个包"
+
+              # ★ 如果装进去了 apk-tools，就让【它自己】报个版本。
+              #   那是「用我们自己的包管理器管理我们自己的系统」这句话的
+              #   最小验证——比"文件都在"强得多。
+              if apk --root /newroot info -e apk-tools >/dev/null 2>&1; then
+                echo "  ── ③ 新系统里的 apk 自己报版本 ──"
+                chroot /newroot /sbin/apk --version
+              fi
             '
           kill "$(cat /tmp/http.pid)" 2>/dev/null || true
 
-      # ── 发布 ────────────────────────────────────────────────────────────
-      #
-      # deploy.sh 先传包、后传索引（索引是切换点），而且用 copy 不用 sync——
-      # 旧版本必须留着，manifest 钉住版本，半年后还要能重建。
       - name: 发布到 repo.os.yojigen.cn
         if: ${{ inputs.deploy }}
         env:
