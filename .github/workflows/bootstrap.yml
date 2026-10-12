@@ -97,7 +97,7 @@ jobs:
       #
       # ★ 键里带架构：两个架构的 ccache 不能混。
       - name: ccache 缓存
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: |
             var/cache
@@ -185,6 +185,32 @@ jobs:
       # ★ 必须先把日志抄进工作区：upload-artifact 只认工作区里的路径，给 /tmp
       # 会被拒绝——实测 aarch64 那轮【引导成功了】却因为这一步失败让整个 job
       # 挂掉，连带下游一起被跳过。
+      # ★★ 建完就存，而且 `if: always()`。
+      #
+      #   `actions/cache` 把"存"放在 job 的【后置步骤】里，而那个步骤在 job 失败
+      #   时会被跳过。实测这一轮：
+      #
+      #       Post ccache 缓存   completed/skipped
+      #
+      #   而最近这些引导轮次全是 failure——所以 **ccache 一次都没攒下来**。
+      #   "失败的那几轮最需要它攒下来"，这正是缓存存在的理由 ✗。
+      #
+      #   拆成两个显式步骤（官方文档里就是这个模式）：
+      #     cache/restore   恢复，在开头
+      #     cache/save      保存，在【引导之后】且带 if: always()
+      #
+      #   放在引导之后而不是最末尾，是因为这样后面无论哪一步失败（打包、自检、
+      #   发布），辛苦建出来的东西都已经存住了。放最后就会重蹈覆辙。
+      - name: 存 ccache
+        if: always()
+        continue-on-error: true
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: |
+            var/cache
+            .ccache
+          key: bootstrap-${{ matrix.arch }}-${{ hashFiles('recipes/**/spec.toml', 'skirt/**/*.py') }}
+
       - name: 收集构建日志
         if: always()
         run: |
