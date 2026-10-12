@@ -52,9 +52,34 @@ section     = "core"
 url         = "https://gitlab.alpinelinux.org/alpine/apk-tools"
 license     = "GPL-2.0-only"
 
+# ★ 用 git 形式而不是归档链接。
+#
+#   原来的写法是 gitlab.alpinelinux.org 的 tarball 链接 + sha256。第一次构建
+#   成功了，但 CI 上再跑就失败：
+#
+#       RuntimeError: urllib 失败（HTTPError: HTTP Error 418: I'm a teapot）；
+#                     curl 也失败（退出码 22: error: 418）
+#
+#   418 是 GitLab 的反爬/限流。实测它是按【来源 IP】判的——本机 Python 能拿到
+#   390,114 字节，本机 curl 和 CI 上两种客户端都是 418。
+#
+#   而 GitHub 上有官方镜像（alpinelinux/apk-tools），HTTP 200。
+#
+#   ★ 但不能简单地把 URL 换掉、sha256 留着：两个托管生成的归档【字节不同】——
+#     gitlab 那份 390,114 字节，GitHub 那份 390,070。差 44 字节，哈希自然不同。
+#     一个 sha256 盖不住两个镜像。
+#
+#   ★ 所以换成 git 形式。skirt 会 clone 并按 commit 校验：commit hash 就是那棵
+#     树的内容哈希，比 sha256 更强——它不关心"归档怎么打的"，只关心"树是什么"。
+#     于是同一份配方可以列任意多个镜像，内容对不对由 git 保证。
+#
+#   commit 是 v3.0.8 这个 annotated tag 解引用出来的。
 [[source]]
-url    = "https://gitlab.alpinelinux.org/alpine/apk-tools/-/archive/v3.0.8/apk-tools-v3.0.8.tar.gz"
-sha256 = "e81c64a6e7c3806d45d4622c253e757aee970be84048554fa0eed79310e9453e"
+git    = "https://github.com/alpinelinux/apk-tools.git"
+commit = "44dcdfc255c26a4e19a4a27f66a54169cce5ca72"
+# GitLab 是上游，但它在 CI 上返回 418。留着当备用：GitHub 不通时才轮到它，
+# 而那时的失败是安全的（git 按 commit 校验，拿错内容不会通过）。
+mirrors = ["https://gitlab.alpinelinux.org/alpine/apk-tools.git"]
 
 [dependencies]
 # ★ openssl 拆出了 libcrypto / libssl 两个运行时子包。

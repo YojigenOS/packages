@@ -177,8 +177,36 @@ def collect(spec: dict, arch: str) -> list[tuple[Path, int]]:
             desc = sub.get("description", "")
             section = sub.get("section", pkg.get("section", ""))
             lic, url = pkg.get("license", ""), pkg.get("url", "")
-            # 子包依赖主包：它的文件是主包的一部分，单独装没有意义。
-            sub_depends = [pkg["name"]] + [d for d in runtime if d != pkg["name"]]
+
+            # ── ★ 子包【不】依赖主包 ──────────────────────────────────────
+            #
+            # 原来这里是 `sub_depends = [pkg["name"]] + [...]`，注释写着
+            # 「子包依赖主包：它的文件是主包的一部分，单独装没有意义」。
+            #
+            # **那个前提在构建期成立，在安装语义上是反的。** 子包的文件确实
+            # 是从主包的 $PKGDEST 分出来的，但分完之后主包的 payload 里
+            # 【已经没有了】——那是分流的意思。所以：
+            #
+            #     libcrypto 的文件不在 openssl 里面
+            #     libssl    的文件不在 openssl 里面
+            #     libgcc    的文件不在 gcc 里面
+            #
+            # 装子包不需要主包；反过来"单独装没有意义"才是错的——单独装正是
+            # 子包存在的理由。
+            #
+            # ★ 实测代价：openssl 主包 17 MB、gcc 主包 253 MB。带着那条依赖，
+            #   装 libssl 会拖进 17 MB，装 libgcc 会拖进 253 MB——而那正好是
+            #   拆子包要避免的事。
+            #
+            # ★ 对比 Alpine：它的 libgcc 只依赖 musl，不依赖 gcc。
+            #
+            # ★ 可以覆盖：[[subpackage]] 写 depends 就用它的。默认继承主包的
+            #   runtime（过度但保守），因为子包通常需要主包依赖里的某几样
+            #   （libcrypto 要 glibc）。
+            if "depends" in sub:
+                sub_depends = list(sub["depends"])
+            else:
+                sub_depends = [d for d in runtime if d != pkg["name"]]
 
         # ── provides / provider-priority ────────────────────────────────
         #

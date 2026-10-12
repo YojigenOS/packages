@@ -89,6 +89,9 @@ type = "custom"
 name        = "libgcc"
 description = "GCC 的运行时库（libgcc_s.so.1）"
 section     = "libs"
+# ★ 不继承主包的 runtime——那里面有 gmp/mpfr/mpc，而这两个文件一个都不需要。
+#   实际依赖由 ELF 扫描补齐（libc.so.6 和 ld-linux）。
+depends     = ["glibc"]
 # .so.1 是运行时；.so 是给链接器的符号链接（132 字节），也一并收着——
 # 有些构建会直接 -lgcc_s。
 files       = ["usr/lib/libgcc_s.so.1", "usr/lib/libgcc_s.so"]
@@ -97,4 +100,5 @@ files       = ["usr/lib/libgcc_s.so.1", "usr/lib/libgcc_s.so"]
 name        = "libstdc++"
 description = "GCC 的 C++ 标准库（libstdc++.so.6）"
 section     = "libs"
+depends     = ["glibc", "libgcc"]
 files       = ["usr/lib/libstdc++.so.6*"]

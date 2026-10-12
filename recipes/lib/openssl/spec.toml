@@ -98,6 +98,10 @@ type = "custom"
 name        = "libcrypto"
 description = "OpenSSL 的加密库（libcrypto.so.3）"
 section     = "libs"
+# ★ 显式声明，不用默认的"继承主包 runtime"——那个默认是保守的过度声明，
+#   会把主包的依赖（这里是 glibc）都带上。这两个库实际只需要 glibc 和 zlib，
+#   而它们的 so: 依赖会被 ELF 扫描自动补齐。
+depends     = ["glibc", "zlib"]
 # `*` 不跨 `/`，所以这个模式匹配 .so.3 和 .so.3.x，但【不】匹配
 # usr/lib/libcrypto.so——最后那个是给链接器的开发文件，不该在运行时包里。
 files       = ["usr/lib/libcrypto.so.3*"]
@@ -106,4 +110,5 @@ files       = ["usr/lib/libcrypto.so.3*"]
 name        = "libssl"
 description = "OpenSSL 的 TLS 库（libssl.so.3）"
 section     = "libs"
+depends     = ["glibc", "zlib", "libcrypto"]
 files       = ["usr/lib/libssl.so.3*"]
