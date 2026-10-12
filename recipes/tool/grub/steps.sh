@@ -13,7 +13,10 @@ grub_targets() {
             # x86_64-efi = UEFI 引导（云上的另一大半）
             echo "i386:pc x86_64:efi"
             ;;
-        aarch64)
+        aarch64|arm64)
+            # ★ 两种写法都认：Linux 的 uname 是 aarch64，macOS 是 arm64。
+            #   配方在 Linux 容器里跑，所以正常路径走的是 aarch64；写别名是为了
+            #   让宿主侧单独试跑这个函数时也有意义（今天就在这儿绊了一下）。
             echo "aarch64:efi"
             ;;
         *)
