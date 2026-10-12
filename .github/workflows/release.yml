@@ -2,17 +2,20 @@
 #
 # 建一个包，打成 .apk，签名，生成仓库索引，推到 repo.os.yojigen.cn。
 #
-# ── 用我们自己的 base-devel 建，不借 Debian ──────────────────────────────
+# ── 用我们自己的 devel 镜像建，不借 Debian ───────────────────────────────
 #
-# buildenv-{aarch64,x86_64}.yml 用的是 FROM debian:stable-slim 的构建环境
-# ——那是【借来的起点】，用来做第一次自举（那时我们还没有自己的系统）。
+# bootstrap.yml 用的是 FROM debian:stable-slim 的构建环境——那是【借来的
+# 起点】，用来做第一次引导（那时我们还没有自己的系统）。
 #
 # 这个 workflow 不同：它用 yojigenos/base-devel，那是用我们自己那套建出来的
 # glibc 系统。所以它是「用我们自己的系统建我们自己的包」这条路上的一步。
 #
-# 拉的是 Docker Hub 上已发布的镜像（buildenv-*.yml 推上去的）。
+# 拉的是 Docker Hub 上已发布的镜像（由 distro 从 apk 仓库组装后推上去的）。
 # SKIRT_BUILDENV 这一行就是全部的区别——命令、顺序、配方都没变，
 # 变的只是「谁来当构建环境」。
+#
+# ★ 两个 workflow 的分工：bootstrap 建【全部】、从零开始；release 建【指定的
+#   一组】、用已经建好的环境。发布那几段的实现都在 scripts/ 里，两边只是调。
 #
 # ── 建哪些包 ──────────────────────────────────────────────────────────────
 #

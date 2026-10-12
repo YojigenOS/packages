@@ -1,0 +1,315 @@
+name: bootstrap
+
+# 从零建出全部包。
+#
+# ── 它和 release.yml 的分工 ──────────────────────────────────────────────
+#
+#     bootstrap.yml   从 Debian 底的临时环境出发，把【全部】包建一遍
+#     release.yml     用我们自己的 devel 镜像，建【指定的一组】包
+#
+# 第一次引导时没有 devel 镜像可用——那个镜像正是要由这些包组装出来的。所以
+# 必须有一条从 Debian 出发的路，这就是它。
+#
+# 引导跑通、包发布、devel 镜像组装出来之后，同一个 workflow 还有第二个用途：
+# 把 buildenv 填成 yojigenos/devel 再跑一遍，就是【自举验证】——用我们自己的
+# 系统建我们自己的系统。那一步是 docs/决策记录/0011 那条界的验收。
+#
+# ── 为什么这一版不再建镜像 ───────────────────────────────────────────────
+#
+# 上一版（buildenv-{aarch64,x86_64}.yml）会自己拼出 base-devel 镜像并推送。
+# 那件事搬到 distro 去了：镜像从 apk 仓库组装，风味定义在 distro 里。
+#
+#     packages/   配方 → .apk → apk 仓库        （生产）
+#     distro/     仓库 → 组装 → 交付物 → registry（发行）
+#
+# 那条界一划，这个仓库就【不需要知道镜像叫什么名字】了——名字只出现在
+# distro 的风味定义里一次。所以 base-devel → devel 那个改名在这边没有痕迹。
+#
+# ── 为什么每个架构是一个矩阵腿，而不是一个文件 ───────────────────────────
+#
+# 这不是「多架构镜像」，是「多平台容器」——aarch64 的产物在别的架构上一个都
+# 用不上，每个架构都要从 Debian 底出发走完整的引导，两者之间没有可共享的东西。
+#
+# 曾经拆成两个文件，因为一个文件里的两条矩阵腿踩过两个坑：
+#
+#   ① 自举验证写成了下游 job + needs: build，于是 aarch64 要等 x86_64 的构建
+#      跑完才开工——实测白等过 23 分钟。
+#   ② 默认的 fail-fast 会在一条腿失败时取消另一条，于是一轮里只要有一条挂，
+#      另一条的成功也被淹掉。
+#
+# 两个坑都不是「矩阵」本身的错，所以现在这样治：
+#
+#   ★ 自举验证的步骤留在【同一个 job】里，没有下游 job，就没有 needs 可等
+#   ★ fail-fast: false —— 一条腿挂了另一条照跑完
+#   ★ arch 是参数，可以只跑一个（调单架构问题时省一半时间）
+
+on:
+  workflow_dispatch:
+    inputs:
+      arch:
+        description: '架构'
+        type: choice
+        options: [aarch64, x86_64, both]
+        default: both
+      buildenv:
+        description: '构建环境镜像。留空 = 从 Debian 底的临时环境出发（第一次引导）；填 yojigenos/devel = 用我们自己的（自举验证）'
+        type: string
+        default: ''
+      deploy:
+        description: '把建出来的包发布到 repo.os.yojigen.cn（不勾就是干跑）'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  bootstrap:
+    strategy:
+      # ★ 一条腿失败不取消另一条。见文件头的说明。
+      fail-fast: false
+      matrix:
+        # 只跑一个架构时就只生成一条腿——这是"可以只触发一个"的实现。
+        arch: ${{ inputs.arch == 'both' && fromJSON('["aarch64", "x86_64"]') || fromJSON(format('["{0}"]', inputs.arch)) }}
+
+    # 显式 pin 版本，不用 ubuntu-latest：它是个移动别名，构建环境会静默变化，
+    # 而且只跟踪 x64 镜像。注意这些 runner 只在公开仓库可用。
+    runs-on: ${{ matrix.arch == 'aarch64' && 'ubuntu-26.04-arm' || 'ubuntu-26.04' }}
+
+    steps:
+      - name: 取 packages
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: 取 distro（公钥在那儿）
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          repository: YojigenOS/distro
+          path: .distro
+
+      - name: 用满整台 runner 的核
+        run: |
+          # skirt 默认留两个核给用户——那是给开发机的体贴，在 CI 上就是浪费。
+          echo "SKIRT_JOBS=$(nproc)" >> "$GITHUB_ENV"
+          echo "并行度: -j$(nproc)"
+
+      # 源码和编译缓存可以跨运行复用——它们不影响「这次构建到底建了什么」。
+      # 【产物 var/output/ 故意不缓存】：那正是每次要重新证明的东西。
+      #
+      # ★ 键里带架构：两个架构的 ccache 不能混。
+      - name: ccache 缓存
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: |
+            var/cache
+            .ccache
+          key: bootstrap-${{ matrix.arch }}-${{ hashFiles('recipes/**/spec.toml', 'skirt/**/*.py') }}
+          restore-keys: bootstrap-${{ matrix.arch }}-
+
+      # ── 构建环境：两条路 ────────────────────────────────────────────────
+      #
+      # buildenv 留空 → 从 Debian 底出发（第一次引导）
+      # buildenv 填了 → 用那个镜像（自举验证）
+      #
+      # 这两个分支就是「借来的起点」和「我们自己的系统」的区别，别的地方
+      # 一个字都不用改——命令、顺序、配方全都一样。
+
+      - name: 建 Debian 底的临时构建环境
+        if: inputs.buildenv == ''
+        run: |
+          # 这个镜像【不发布】。它只是 `FROM debian:stable-slim` + 一批 apt 包
+          # ——不是一个 YojigenOS 的产物，是借来的起点。发布它等于发布一份
+          # Debian 的衍生品，而且会让「我们发布了什么」这条线变模糊。
+          #
+          # 【也不钉 Debian 的 digest】。理论上"钉住才能复现"，但对这个项目
+          # 不成立：Debian 的版本只影响第一轮，而第一轮本来就不是固定点。
+          # 真正的判据是"换个 Debian 版本，产物应该一样"——钉住反而掩盖问题。
+          #
+          # 所以这里只【记录身份】：把这一轮用的 Debian 版本和 Dockerfile 的
+          # 哈希打进日志。排查"为什么 CI 上能过、本地不能"时要的正是这个。
+          docker build -t "yojigenos/buildenv:${{ matrix.arch }}" bootstrap
+
+          echo "=== 这一轮的构建环境身份 ==="
+          docker run --rm "yojigenos/buildenv:${{ matrix.arch }}" sh -c \
+            'grep -E "^(VERSION|VERSION_CODENAME)=" /etc/os-release; echo "  debian_version: $(cat /etc/debian_version)"' \
+            | sed 's/^/  /'
+          echo "  Dockerfile sha256: $(sha256sum bootstrap/Dockerfile | cut -c1-16)…"
+          echo "  镜像 ID: $(docker image inspect "yojigenos/buildenv:${{ matrix.arch }}" --format '{{.Id}}' | cut -c1-24)…"
+
+      - name: 拉我们自己的构建环境
+        if: inputs.buildenv != ''
+        run: |
+          # 刚推上去就拉回来——顺带验证了推送确实生效、registry 里那份能用。
+          docker pull "${{ inputs.buildenv }}:${{ matrix.arch }}"
+          echo "  用我们自己的系统当构建环境——命令、顺序、配方一个字都不变，"
+          echo "  变的只是「谁来当构建环境」。这就是自举。"
+
+      # ── 引导 ────────────────────────────────────────────────────────────
+
+      - name: 引导 —— 建出全部包
+        id: bootstrap
+        env:
+          # ★ 唯一的变量。留空时是上面建的那个临时环境；填了就是我们自己。
+          #
+          #   这里是 workflow 里唯一能看出"借来的起点 vs 我们自己的系统"的地方。
+          SKIRT_BUILDENV: ${{ inputs.buildenv != '' && format('{0}:{1}', inputs.buildenv, matrix.arch) || format('yojigenos/buildenv:{0}', matrix.arch) }}
+        run: |
+          ./skirt/skirt order
+          # bootstrap 失败时非零退出（这是它该做的）。但我们要先把日志传出去，
+          # 所以这里不让它中断，改成记下结论、后面再失败。
+          ./skirt/skirt bootstrap --report || echo "bootstrap_failed=1" >> "$GITHUB_OUTPUT"
+
+      # ★ 失败那一刻就把日志拿到手。
+      #
+      # 以前只能等整个 job 结束再用 gh api 取日志，而 cmd_bootstrap 只打印
+      # 失败包的【最后 8 行】——那点信息往往不够。所以把每个包的完整日志传出来。
+      #
+      # ★ 必须先把日志抄进工作区：upload-artifact 只认工作区里的路径，给 /tmp
+      # 会被拒绝——实测 aarch64 那轮【引导成功了】却因为这一步失败让整个 job
+      # 挂掉，连带下游一起被跳过。
+      - name: 收集构建日志
+        if: always()
+        run: |
+          mkdir -p var/logs
+          echo "共 $(ls var/logs/ 2>/dev/null | wc -l) 个包的日志"
+
+      - name: 上传构建日志
+        if: always()
+        continue-on-error: true      # 日志是诊断手段，不该让整个 job 失败
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: bootstrap-logs-${{ matrix.arch }}
+          path: var/logs
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: 引导失败了就停在这里
+        if: steps.bootstrap.outputs.bootstrap_failed == '1'
+        run: |
+          echo "::error::引导失败。完整日志见这个 job 的 bootstrap-logs-${{ matrix.arch }} artifact。"
+          exit 1
+
+      # ── 打包、发布 ──────────────────────────────────────────────────────
+      #
+      # 这几步和 release.yml 一样，但逻辑不在 workflow 里——pack.sh / repo.sh
+      # / deploy.sh 才是实现，这里只是按顺序调它们。所以"两处会漂"的风险不在
+      # 这里：要改发布逻辑，改脚本，两边一起变。
+
+      - name: 把签名密钥从 secret 落到文件
+        env:
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          [ -n "$SIGNING_KEY" ] || { echo "::error::SIGNING_KEY 是空的"; exit 1; }
+          KEY="$RUNNER_TEMP/signing.rsa"
+          printf '%s\n' "$SIGNING_KEY" > "$KEY"
+          chmod 600 "$KEY"
+          openssl rsa -in "$KEY" -noout -check >/dev/null 2>&1 \
+            || { echo "::error::SIGNING_KEY 不是有效的 RSA 私钥"; exit 1; }
+          MOD=$(openssl rsa -in "$KEY" -modulus -noout | sed 's/Modulus=//')
+          FOUND=0
+          for PUB in .distro/keys/*.rsa.pub; do
+            [ -f "$PUB" ] || continue
+            PMOD=$(openssl rsa -pubin -in "$PUB" -modulus -noout 2>/dev/null | sed 's/Modulus=//')
+            if [ "$MOD" = "$PMOD" ]; then
+              echo "  ✓ 和交付物里的公钥配对：$(basename "$PUB")"
+              FOUND=1
+            fi
+          done
+          [ "$FOUND" = 1 ] || {
+            echo "::error::SIGNING_KEY 和 distro/keys/ 里的任何公钥都不配对"
+            ls -1 .distro/keys/ 2>/dev/null || true
+            exit 1
+          }
+          echo "SIGNING_KEY_FILE=$KEY" >> "$GITHUB_ENV"
+
+      - name: 打包并签名
+        run: |
+          ./scripts/pack.sh --all \
+              --arch "${{ matrix.arch }}" \
+              --sign-key "$SIGNING_KEY_FILE"
+
+      - name: 生成仓库索引
+        env:
+          S3_AK: ${{ secrets.S3_AK }}
+          S3_SK: ${{ secrets.S3_SK }}
+          S3_BASE_URL: ${{ secrets.S3_BASE_URL }}
+          S3_BUCKET: ${{ secrets.S3_BUCKET }}
+        run: |
+          ./scripts/repo.sh \
+              --arch "${{ matrix.arch }}" \
+              --sign-key "$SIGNING_KEY_FILE" \
+              --desc "YojigenOS ${{ matrix.arch }} 软件仓库"
+
+      # ★ 自举的验收：把刚建出来的仓库装成一个系统，再让【系统里的 apk】
+      #   自己报个版本。apk 是 glibc 程序，它能在那个 chroot 里跑起来意味着
+      #   动态链接器、libc、libssl、libcrypto、CA 证书全都就位了——比"文件
+      #   都在"强得多。
+      - name: 自检 —— 从刚建出来的仓库装一个系统
+        run: |
+          set -euo pipefail
+          FLAVOR="${SELFCHECK_FLAVOR:-base}"
+          FLAVOR_FILE=".distro/variants/$FLAVOR.toml"
+          [ -f "$FLAVOR_FILE" ] || { echo "::error::找不到风味文件 $FLAVOR_FILE"; exit 1; }
+          FLAVOR_PKGS=$(python3 -c "
+          import tomllib, pathlib
+          v = tomllib.loads(pathlib.Path('$FLAVOR_FILE').read_text())['variant']
+          print(' '.join(v['packages']))")
+          echo "  风味 $FLAVOR: $(echo $FLAVOR_PKGS | wc -w | tr -d ' ') 个包"
+
+          ( cd var/repo && python3 -m http.server 18080 >/dev/null 2>&1 & echo $! > /tmp/http.pid )
+          sleep 2
+          curl -fsS -o /dev/null "http://localhost:18080/${{ matrix.arch }}/APKINDEX.tar.gz" || {
+            echo "::error::本地服务拿不到索引"; exit 1; }
+
+          docker run --rm --network host \
+            -v "$PWD/var/repo:/repo:ro" \
+            -v "$PWD/.distro/keys:/keys:ro" \
+            -e "FLAVOR_PKGS=$FLAVOR_PKGS" \
+            -e "ARCH=${{ matrix.arch }}" \
+            alpine:latest sh -c '
+              set -e
+              mkdir -p /newroot/etc/apk/keys
+              cp /keys/*.rsa.pub /newroot/etc/apk/keys/
+              echo "http://localhost:18080" > /newroot/etc/apk/repositories
+              # ★ 不用 --allow-untrusted —— 真的验签
+              apk add --keys-dir /newroot/etc/apk/keys \
+                  --repository http://localhost:18080 \
+                  --root /newroot --initdb $FLAVOR_PKGS
+              echo "  装了 $(apk --root /newroot info 2>/dev/null | wc -l | tr -d " ") 个包"
+              if apk --root /newroot info -e apk-tools >/dev/null 2>&1; then
+                echo "  新系统里的 apk: $(chroot /newroot /sbin/apk --version)"
+              fi
+            '
+          kill "$(cat /tmp/http.pid)" 2>/dev/null || true
+
+      - name: 发布到 repo.os.yojigen.cn
+        if: ${{ inputs.deploy }}
+        env:
+          S3_AK: ${{ secrets.S3_AK }}
+          S3_SK: ${{ secrets.S3_SK }}
+          S3_BASE_URL: ${{ secrets.S3_BASE_URL }}
+          S3_BUCKET: ${{ secrets.S3_BUCKET }}
+        run: ./scripts/deploy.sh --arch "${{ matrix.arch }}" --go
+
+      - name: 没有勾 deploy
+        if: ${{ !inputs.deploy }}
+        run: echo "  干跑：产物留在 Actions 里，没有推到 repo.os.yojigen.cn"
+
+      # 两轮之间要比对的东西：同一批配方在两个不同构建环境下产出的 .apk 哈希。
+      # 写进 job summary，跑第二轮时人肉对一眼就知道差多少。
+      #
+      # ★ 第一轮和第二轮【不会】完全一致，这是预期的：第一轮里 gcc/binutils
+      #   这些工具自己是 Debian 的工具编出来的。真正的固定点要看第二和第三轮。
+      - name: 摘要 —— 这一轮的产物哈希
+        if: always()
+        run: |
+          {
+            echo "### bootstrap [${{ matrix.arch }}]"
+            echo
+            echo "构建环境: \`${{ inputs.buildenv || 'Debian 底的临时环境' }}\`"
+            echo
+            echo '```'
+            echo "包数: $(ls var/pkgs/${{ matrix.arch }}/*.apk 2>/dev/null | wc -l | tr -d ' ')"
+            ls -1 "var/pkgs/${{ matrix.arch }}"/*.apk 2>/dev/null | xargs -r -n1 basename | head -80
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
