@@ -518,6 +518,52 @@ def run_in_container(srcrel: str, srcname: str, arch: str, spec: dict, epoch: in
         "-e", "LC_ALL=C.UTF-8",
         "-e", "LANG=C.UTF-8",
         "-e", "TZ=UTC",
+        # ★★ 让我们自己的库赢过构建环境镜像里那份。
+        #
+        #   引导时的构建环境是借来的 Debian，它的库在 /usr/lib/<三元组>/ 下，
+        #   而我们的装在 /usr/lib/。问题是【两个目录都在，谁先被找到】：
+        #
+        #     Debian 的 /etc/ld.so.conf 里根本没有 /usr/lib，只有
+        #       /lib/<三元组> 和 /usr/lib/<三元组>
+        #     → ldconfig 生成的缓存说 libssl.so.3 => /lib/<三元组>/libssl.so.3
+        #     → 我们铺进去的 /usr/lib/libssl.so.3 谁也指不到
+        #
+        #   实测的后果（openssh 的 configure 当场抓住）：
+        #
+        #     checking OpenSSL header version...  30500090 (3.5.9)  ← 我们的头
+        #     checking OpenSSL library version... 30500070 (3.5.7)  ← 别人的库
+        #     configure: error: Your OpenSSL headers do not match your library.
+        #
+        #   连我们自己的 openssl 命令都是「我们的二进制 + 别人的库」：
+        #
+        #     $ openssl version
+        #     OpenSSL 3.5.9 (Library: OpenSSL 3.5.7)
+        #     $ LD_LIBRARY_PATH=/usr/lib openssl version
+        #     OpenSSL 3.5.9 (Library: OpenSSL 3.5.9)          ← ✓
+        #
+        #   【为什么不用别的办法】三个都实测过：
+        #
+        #     LIBRARY_PATH=/usr/lib   没用。链接期本来就用的我们那份——Debian
+        #                             只装 libssl.so.3，没装 -lssl 要的
+        #                             libssl.so，所以链接器只能找到我们的。
+        #                             而二进制里只记 soname 不记路径，链接期
+        #                             赢了也不算数。
+        #     合并后跑 ldconfig       没用，而且原因很能说明问题：它【确实】
+        #                             把我们的收进去了，但排在后面——
+        #
+        #                               libssl.so.3 => /lib/aarch64-linux-gnu/…
+        #                               libssl.so.3 => /lib/libssl.so.3
+        #
+        #                             缓存里同名条目是【先到先得】的，所以生来
+        #                             就赢不了。
+        #
+        #   语义上这条也正是要说的：**构建时，我们自己建的包优先于借来的
+        #   环境**。引导本来就是一场逐步接管，这是它该有的规则。
+        #
+        #   （顺带：它在 devel 镜像那条路上是无害的——那里 /usr/lib 本来就是
+        #     唯一的地方。）
+        "-e", "LD_LIBRARY_PATH=/usr/lib",
+        "-e", "LIBRARY_PATH=/usr/lib",
         # ccache 的两个设置也显式传，不靠镜像的 ENV——理由同上面那段 PATH：
         # base-devel 是 docker import 出来的，那种镜像不带 ENV。
         #
