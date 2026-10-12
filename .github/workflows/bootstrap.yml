@@ -52,7 +52,7 @@ on:
         options: [aarch64, x86_64, both]
         default: both
       buildenv:
-        description: '构建环境镜像。留空 = 从 Debian 底的临时环境出发（第一次引导）；填 yojigenos/devel = 用我们自己的（自举验证）'
+        description: '构建环境镜像，【不含 tag】。留空 = 从 Debian 底的临时环境出发（第一次引导）；填 yojigenos/devel = 用我们自己的（自举验证）'
         type: string
         default: ''
       deploy:
@@ -138,8 +138,22 @@ jobs:
       - name: 拉我们自己的构建环境
         if: inputs.buildenv != ''
         run: |
-          # 刚推上去就拉回来——顺带验证了推送确实生效、registry 里那份能用。
-          docker pull "${{ inputs.buildenv }}:${{ matrix.arch }}"
+          set -euo pipefail
+          IMG="${{ inputs.buildenv }}"
+          # ★ skirt 用的是 "<镜像名>:<架构>"——见 skirtlib/build.py 里的
+          #   f"{BUILDENV_IMAGE}:{arch}"。所以 SKIRT_BUILDENV 只写镜像名，
+          #   不带 tag；本地得有一个 :<架构> 的 tag 给它用。
+          #
+          #   推上来的 tag 形如 edge-<arch>（distro 那边推的），所以拉回来重打
+          #   一下。这一步和 release.yml 里那段是同一个约定。
+          if docker pull "$IMG:edge-${{ matrix.arch }}"; then
+            docker tag "$IMG:edge-${{ matrix.arch }}" "$IMG:${{ matrix.arch }}"
+          else
+            docker pull "$IMG:${{ matrix.arch }}"
+          fi
+          echo "  ── 它是什么 ──"
+          docker run --rm "$IMG:${{ matrix.arch }}" /usr/bin/bash -c \
+            'echo "  bash $BASH_VERSION"; /usr/bin/gcc --version | head -1'
           echo "  用我们自己的系统当构建环境——命令、顺序、配方一个字都不变，"
           echo "  变的只是「谁来当构建环境」。这就是自举。"
 
@@ -151,7 +165,12 @@ jobs:
           # ★ 唯一的变量。留空时是上面建的那个临时环境；填了就是我们自己。
           #
           #   这里是 workflow 里唯一能看出"借来的起点 vs 我们自己的系统"的地方。
-          SKIRT_BUILDENV: ${{ inputs.buildenv != '' && format('{0}:{1}', inputs.buildenv, matrix.arch) || format('yojigenos/buildenv:{0}', matrix.arch) }}
+          #
+          #   ★ 写【不含 tag 的镜像名】。skirt 自己会补 :<架构>——写成
+          #     yojigenos/buildenv:aarch64 会变成 yojigenos/buildenv:aarch64:aarch64。
+          #     这个坑实测踩过一次，报错是 docker 找不到那个镜像，zlib 第一
+          #     个包就挂了。
+          SKIRT_BUILDENV: ${{ inputs.buildenv != '' && inputs.buildenv || 'yojigenos/buildenv' }}
         run: |
           ./skirt/skirt order
           # bootstrap 失败时非零退出（这是它该做的）。但我们要先把日志传出去，
