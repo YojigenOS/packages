@@ -1,0 +1,67 @@
+# grub —— 引导器（GRUB 2）
+#
+# 【为什么需要它】
+#
+# `minimal` 风味的清单里有它，而仓库里一直没有这个包。磁盘镜像目前靠
+# `pantsu img` 在【建盘容器里】用 Alpine 的 grub 写引导记录——所以装机不需要它。
+# 但装完的系统自己修不了引导：重装引导器、改启动项、加内核，都做不到。
+#
+# 【为什么它不是普通的 autotools 包】
+#
+# GRUB 要【为每个目标平台各建一次】：
+#
+#     x86_64  → i386-pc（BIOS；腾讯云那台用的就是它）+ x86_64-efi（UEFI）
+#     aarch64 → arm64-efi
+#
+# 每个目标是一次独立的 configure + make，模块装到 /usr/lib/grub/<目标>/ 下。
+# 所以走 custom。
+#
+# 【那个 multilib 的问题】
+#
+# i386-pc 是 32 位代码，所以一开始怀疑需要 multilib（32 位 glibc 头 + gcc -m32）。
+# 实测到一半：
+#
+#     gcc -m32 连一个空程序都链不了：cannot find Scrt1.o ✗
+#     但 ./configure --target=i386 --with-platform=pc 【过了】✓
+#
+# 原因是 GRUB 是 freestanding 的——它不链 libc，用自己的运行时。所以 configure
+# 那一关不需要 32 位 libc。make 那一关还没验证。
+#
+# ★ 那次验证是在本地用模拟跑的，被叫停了——因为【编译归 CI】：CI 上就是原生
+#   x86_64，不用模拟、又快，而且是最终判据。所以这个包的第一次构建由 CI 判。
+#   如果 CI 报缺 32 位头文件，结论就是"得先有 multilib 工具链"，那时再谈。
+
+[package]
+name        = "grub"
+version     = "2.14"
+release     = 1
+date        = 2026-10-12T13:00:00Z
+description = "GRUB 引导器（BIOS 与 UEFI）"
+section     = "system"
+url         = "https://www.gnu.org/software/grub/"
+license     = "GPL-3.0-or-later"
+
+[[source]]
+url    = "https://mirrors.nju.edu.cn/gnu/grub/grub-2.14.tar.xz"
+# 从 NJU 和清华各下一份比对过——这个值一错就谁都建不出来。
+sha256 = "bc8d3c73535b8838d8c8e2654d73edc4e6ae8c8acdb45d5df5dc9a1547446d43"
+
+[dependencies]
+# 运行时要 glibc（grub-install 那些工具是普通 ELF）；模块本身是 freestanding 的，
+# 但它们是数据文件，不产生 so: 依赖。
+runtime = ["glibc"]
+# bison/flex：GRUB 的解析器是生成的。
+# python3：构建脚本用它（gdb 脚本、模块排序）。
+# pkgconf：configure 找 freetype 之类的可选库时用；没有也没关系，但显式写出来
+#          比"碰巧构建环境里有"可靠。
+build   = ["make", "gcc", "bison", "flex", "python3", "pkgconf", "xz",
+           "coreutils", "bash", "sed", "grep", "findutils", "gawk", "tar", "gzip"]
+
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["make", "gcc", "bison", "flex", "python3", "pkgconf", "xz",
+           "coreutils", "bash", "sed", "grep", "findutils", "gawk", "tar", "gzip"]
+
+[build]
+# 每个目标平台一次 configure —— 套不进 autotools 的单次映射
+type = "custom"
