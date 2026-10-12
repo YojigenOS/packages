@@ -284,6 +284,29 @@ jobs:
             echo "$LIST" | grep -qw "$p" || echo "      + $p"
           done
 
+          # ★★ 要建的东西【同时】被声明成"已提供"时，当场警告。
+          #
+          #   这种状态意味着：skirt 认为构建容器里已经有它了，于是【不会把它
+          #   建出来的产物合并进去】。而如果那个镜像其实没有它，构建就会以
+          #   一个看不出原因的方式失败。
+          #
+          #   实测撞上的：x86_64 是 10-11 建的镜像，而 pkgconf 是后来才加进
+          #   base-devel.toml 的。于是
+          #
+          #       ── 建 pkgconf ──      建了 ✓
+          #       ── 建 shadow ──       configure.ac:245: error:
+          #                             undefined or overquoted macro: AC_MSG_WARN
+          #
+          #   shadow 明明声明了 pkgconf，pkgconf 也明明刚建出来——但 skirt 按
+          #   provides 办事，不合并它。报错和原因之间没有任何线索。
+          #
+          #   ★ 建一个包【不会】把它放进构建环境。只有镜像会。
+          for p in ${{ inputs.packages }}; do
+            if echo "$CLOSURE" | grep -qx "$p"; then
+              echo "::warning::$p 既在「要建的」里，又在「已提供」的闭包里——构建容器里不会有它刚建出来的那份（skirt 按 provides 办事）。如果那个镜像其实没有 $p，这一步会以一个看不出原因的方式失败。"
+            fi
+          done
+
       - name: 建包
         env:
           SKIRT_BUILDENV: yojigenos/base-devel
