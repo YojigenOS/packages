@@ -105,13 +105,33 @@ jobs:
       - name: 读出 devel 提供了哪些包
         run: |
           set -euo pipefail
-          python3 - .distro/variants/base-devel.toml <<'PY' >> "$GITHUB_ENV"
-          import sys, tomllib, pathlib
-          v = tomllib.loads(pathlib.Path(sys.argv[1]).read_text())["variant"]
-          print("SKIRT_PROVIDES=" + " ".join(v["packages"]))
-          print(f"# {len(v['packages'])} 个包", file=sys.stderr)
-          PY
-          echo "  devel 提供 $(printf '%s' "$SKIRT_PROVIDES" | wc -w | tr -d ' ') 个包"
+          # ★ 用 skirt provides 算【依赖闭包】，不是直接读那份列表。
+          #
+          # 差别是真出过事故的：
+          #
+          #   variants/devel.toml 的注释写着「gmp / mpfr / mpc 是 gcc 的运行时
+          #   依赖，会自动带进来，不用列」——所以那份列表是【想要什么】，
+          #   不是【真的有什么】。
+          #
+          #   直接拿它当 provides，建 gcc 时就会报：
+          #       [解析] 依赖链: gmp → mpfr → mpc → gcc
+          #       skirt: 错误 依赖 gmp 还没有构建
+          #   而 gmp 明明就在镜像里。
+          #
+          # 闭包才是镜像里真正有的东西（镜像里有 46 个，列表上只有 40 个）。
+          LIST=$(python3 -c "
+          import tomllib, pathlib
+          v = tomllib.loads(pathlib.Path('.distro/variants/base-devel.toml').read_text())['variant']
+          print(' '.join(v['packages']))")
+
+          CLOSURE=$(./skirt/skirt provides $LIST)
+          echo "SKIRT_PROVIDES=$(echo $CLOSURE | tr '\n' ' ')" >> "$GITHUB_ENV"
+
+          echo "  列表上 $(echo $LIST | wc -w) 个 ✗ 闭包 $(echo "$CLOSURE" | wc -l) 个"
+          echo "  ★ 多出来的是【会自动带进来的依赖】——镜像里有它们，列表上没写"
+          for p in $(echo "$CLOSURE"); do
+            echo "$LIST" | grep -qw "$p" || echo "      + $p"
+          done
 
       - name: 建包
         env:

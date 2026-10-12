@@ -264,6 +264,48 @@ def cmd_deps(args) -> None:
         print()
 
 
+def cmd_provides(args) -> None:
+    """输出一组目标【及其依赖闭包】的包名，一行一个。
+
+    ★ 这个命令回答的是一个具体问题：**构建环境里真的有什么？**
+
+    起因是一个真出过的事故。CI 里为了让 `skirt build` 知道"依赖不用重建"，
+    把 distro 的 variants/devel.toml 里的包名直接当 SKIRT_PROVIDES 传进来。
+    但那份列表是【想要什么】，不是【真的有什么】——它的注释里写着：
+
+        # gmp / mpfr / mpc 是 gcc 的运行时依赖，会自动带进来，不用列。
+
+    于是建 gcc 时报：
+
+        [解析] 依赖链: gmp → mpfr → mpc → gcc
+        skirt: 错误 依赖 gmp 还没有构建
+
+    而 gmp 明明就在镜像里（libgmp.so.10、gmp.h 都在）。
+
+    差别在于：**镜像里有的是那个列表的依赖闭包**，不只是列表本身。
+    所以这里算闭包——而算出来的东西【就是】镜像里有的。
+
+    ★ 为什么不用空 provides 算：那会成环（glibc → make → glibc）。
+      起点用 bootstrap/provides.txt，因为那是"从借来的环境出发"时
+      真正由宿主提供的东西——devel 镜像就是在那之上长出来的。
+    """
+    arch = resolve_arch(args.arch)
+    from .order import build_order
+
+    names = args.targets or []
+    if not names:
+        from .spec import all_recipe_names
+        names = all_recipe_names()
+
+    order, _ = build_order(arch, names)
+    # ★ 目标和闭包一起输出：镜像里有闭包，也有目标本身。
+    #   而 build_order 只给"要建的顺序"，目标自己在里面还是不在，取决于
+    #   它是不是别人的依赖——所以显式并上。
+    out = sorted(set(order) | set(names))
+    for n in out:
+        print(n)
+
+
 def cmd_list(args) -> None:
     if not RECIPES_DIR.is_dir():
         print("(还没有 recipes/ 目录)")
@@ -333,6 +375,12 @@ def main() -> None:
     p_paths.add_argument("--shell", action="store_true", help="输出可直接 eval 的 shell 赋值")
 
     p_paths.set_defaults(func=cmd_paths)
+
+    p = sub.add_parser("provides",
+                       help="输出一组目标的依赖闭包（= 构建环境里真的有什么）")
+    p.add_argument("targets", nargs="*", help="默认全部配方")
+    p.add_argument("--arch", default=None)
+    p.set_defaults(func=cmd_provides)
 
     p = sub.add_parser("list", help="列出所有包")
     p.set_defaults(func=cmd_list)
