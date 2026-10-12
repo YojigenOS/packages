@@ -135,11 +135,15 @@ jobs:
           RCLONE="$RCLONE -v $PROBEDIR:/probe"
 
           echo "── 桶根下有什么（最多两层）──"
-          OUT=$($RCLONE lsf "yojigen:$S3_BUCKET" --max-depth 2 2>&1 | grep -v 'NOTICE:')
+          # ★ 命令替换失败会因为 bash -e 直接中断这一步，而且把错误吞掉。
+          #   第一版就是这样：只看到 "Process completed with exit code 2"，
+          #   完全不知道 rclone 说了什么。加 || true 把输出留下来。
+          OUT=$($RCLONE lsf "yojigen:$S3_BUCKET" --max-depth 2 2>&1 || true)
+          OUT=$(printf '%s\n' "$OUT" | grep -v 'NOTICE: Config')
           if [ -z "$OUT" ]; then
             echo "  （空的 —— 还没发布过任何东西，这是正常的）"
           else
-            printf '%s\n' "$OUT" | head -25 | sed 's/^/  /'
+            printf '%s\n' "$OUT" | head -30 | sed 's/^/  /'
           fi
 
           echo
