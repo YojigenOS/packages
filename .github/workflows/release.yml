@@ -306,9 +306,27 @@ jobs:
           OUT="var/pkgs/$ARCH"
           mkdir -p "$OUT"
 
+          # ★ 有 seed_run 的时候【不跳过】。
+          #
+          #   播种是为了修东西——"重建 cpio 和 shadow，其余的从上一轮拿"。
+          #   而上一轮的产物里【有】那个坏掉的 cpio，跳过逻辑分不出新旧，
+          #   于是它会把最该重建的那个跳过去。实测就撞上了：
+          #
+          #       播种了 49 个包
+          #       ── 跳过 cpio（已经有了）──      ← 最该重建的就是它 ✗
+          #       ── 建 shadow ──
+          #
+          #   所以：给了 seed_run 就当作"这些是点名要重建的"，一律重建。
+          #   播种只负责把【其余的】补齐，让索引和自检能看到完整的仓库。
+          #
+          #   不给 seed_run 时保持跳过——那是"接着上一轮继续建"的场景，
+          #   跳过正是要的。
+          SKIP_OK=1
+          [ -n "${{ inputs.seed_run }}" ] && SKIP_OK=0
+
           built=0 skipped=0
           for p in ${{ inputs.packages }}; do
-            if ls "$OUT/$p-"*.apk >/dev/null 2>&1; then
+            if [ "$SKIP_OK" = 1 ] && ls "$OUT/$p-"*.apk >/dev/null 2>&1; then
               echo "── 跳过 $p（已经有了）──"
               skipped=$((skipped+1))
               continue
