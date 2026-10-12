@@ -10,43 +10,49 @@
 # 消失的选项会报出来，而不是被悄悄忽略。
 #
 # 用法：make defconfig 之后再 merge_config.sh 合并进来，最后 olddefconfig。
-
-# ── 控制台 ────────────────────────────────────────────────────────────
-# QEMU 的 virt 机器用 PL011 串口。没有它，开机后一个字都看不到——
-# 而看不到输出就没法调试。
-CONFIG_SERIAL_AMBA_PL011=y
-CONFIG_SERIAL_AMBA_PL011_CONSOLE=y
-
-# ── virtio ───────────────────────────────────────────────────────────
-# virt 机器上的磁盘、网卡、共享目录全是 virtio 设备。
-CONFIG_VIRTIO=y
-CONFIG_VIRTIO_PCI=y
-CONFIG_VIRTIO_MMIO=y
-CONFIG_VIRTIO_BLK=y
-CONFIG_VIRTIO_NET=y
-CONFIG_VIRTIO_CONSOLE=y
-CONFIG_PCI=y
-
-# ── initramfs ────────────────────────────────────────────────────────
-# 第一阶段的启动方式就是「内核 + initramfs」，所以这个必须有。
-# 加上 gzip 解压支持——cpio.gz 要能解开。
-CONFIG_BLK_DEV_INITRD=y
-CONFIG_RD_GZIP=y
-
-# ── 文件系统 ─────────────────────────────────────────────────────────
-# devtmpfs 由内核自动挂载（_MOUNT=y），这样 /init 一跑起来 /dev 就是齐的，
-# 不需要用户空间再去创建设备节点。
-CONFIG_DEVTMPFS=y
-CONFIG_DEVTMPFS_MOUNT=y
-CONFIG_TMPFS=y
-CONFIG_PROC_FS=y
-CONFIG_SYSFS=y
-# ext4 是给后面的磁盘镜像留的，现在用不上，但装了不亏。
-CONFIG_EXT4_FS=y
-
-# ── 关于证书那一套（CONFIG_SYSTEM_TRUSTED_KEYRING）────────────────────
 #
-# 第三个实测撞出来的坑，但结论和前两个（flex、bc）不一样。
+# ── 2026-10-12：这个片段现在只有两项 ────────────────────────────────────
+#
+# 原来这里还"钉住"了 17 项（PL011、virtio 六项、PCI、initrd、devtmpfs、
+# tmpfs、proc、sysfs、ext4）。它们本来就是 defconfig 的默认值，写与不写
+# 编出来的内核一模一样——清掉的理由是：一份"什么都不改"的清单会稀释这个
+# 文件的含义（它应该是"我们改了什么"）。
+#
+# 那 17 项背后的依赖并没有消失，只是换了归属地：写在【消费方】更靠得住。
+# 例如 yojigenos-init 的 /init 里写着
+#
+#     # devtmpfs 由内核自动挂载（CONFIG_DEVTMPFS_MOUNT），这里补挂其余的
+#
+# 那句话就是那个依赖的归属地——改内核配置的人和改 /init 的人看的是同一处，
+# 而不是一个在配方目录、一个在另一个包的源码里。
+#
+# 代价是知道的：如果哪天 defconfig 把 DEVTMPFS_MOUNT 去掉了，症状会是
+# "/init 起来时 /dev 是空的"，看起来像 yojigenos-init 的 bug。这是接受的取舍。
+
+# ── 不编模块 ─────────────────────────────────────────────────────────────
+#
+# 第一阶段全部内建，省掉「模块放哪、谁来加载」这一整类问题：
+# 不需要 initramfs（内核自己挂根）、没有 modprobe / .ko / modules.dep、
+# 升级内核是原子的。
+#
+# 级联：defconfig 里 1494 个模块中的 1493 个变成内建——内核就是这么变成
+# 79 MB 的。代价是换硬件要重编内核、装不了树外模块、内建驱动常驻内存。
+CONFIG_MODULES=n
+
+# ── 不收集调试信息 ───────────────────────────────────────────────────────
+#
+# ★ 影响的是【构建产物和调试能力】，不是发布出去的内核大小：bzImage 里
+#   没有 DWARF，带不带它都一样大。
+#
+#   · vmlinux（中间产物，不发布）从几百 MB 降到几十 MB，构建也快
+#   · 没有 BTF → bpftrace 这类 eBPF CO-RE 工具用不了
+#   · 不能 addr2line 定位到源码行；但 KALLSYMS + FRAME_POINTER 还在，
+#     所以 panic 仍然打得函数名和栈回溯
+CONFIG_DEBUG_INFO_NONE=y
+
+# ── 关于证书那一套（CONFIG_SYSTEM_TRUSTED_KEYRING）──────────────────────
+#
+# 这不是一项配置，是一段"为什么这里【没有】关掉它的选项"的记录。
 #
 # 症状是缺 openssl：
 #
@@ -72,16 +78,4 @@ CONFIG_EXT4_FS=y
 # 决策记录 0006 说的包签名，全都挂在 openssl 上。为了绕开它去砍内核的完整性
 # 校验（固件验签、fs-verity、dm-verity 都在那条链上）才是亏的。
 #
-# 这个片段因此不再尝试关它——留着这几行注释，是为了让下一个人不用再查一遍
-# 「为什么这里没有关掉证书的选项」。
-
-# ── 瘦身 ─────────────────────────────────────────────────────────────
-# 不编模块：第一阶段全部内建，省掉「模块放哪、谁来加载」这一整类问题。
-CONFIG_MODULES=n
-
-# 【不启用】的东西，以及为什么：
-#
-#   CONFIG_DEBUG_INFO_BTF     需要 pahole（我们没有）
-#   CONFIG_MODULE_SIG         需要 openssl（我们没有）
-#   CONFIG_DEBUG_INFO         体积会涨到几百 MB，而且现在不需要调试符号
-CONFIG_DEBUG_INFO_NONE=y
+# 这段注释留着，是为了让下一个人不用再查一遍"为什么这里没有关掉证书的选项"。
