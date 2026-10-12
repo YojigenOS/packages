@@ -32,7 +32,7 @@
 #
 # 所以 --pkgname-spec 要【带】架构前缀——它是相对于仓库根的：
 #
-#     --pkgname-spec 'aarch64/${name}-${version}.apk'
+#     --pkgname-spec '<架构>/${name}-${version}.apk'   ← 架构跟着 --arch 走
 #
 # 两边都带就变成 aarch64/aarch64/… （实测 404），两边都不带也拿不到包。
 #
@@ -161,6 +161,20 @@ fi
 
 DESC="${DESC:-YojigenOS $ARCH 软件仓库}"
 
+# ★ pkgname-spec 是【索引里存的下载路径】，相对于仓库根——所以要带
+#   当前架构的前缀，而且必须跟着 $ARCH 走。
+#
+#   这里原来写死成 aarch64（只有 aarch64 的时候写的），后果是 x86_64
+#   的索引让 apk 去 <仓库>/aarch64/ 取包，而包在 <仓库>/x86_64/：
+#
+#       ERROR: glibc-2.44-r2: HTTP 404: Not Found   （20 个包全 404）
+#
+#   而 aarch64 那条路碰巧是对的——所以这个 bug 只在换架构时现形。
+#
+#   单引号是【给容器里那个 sh 看的】：${name}/${version} 必须是字面量，
+#   由 mkndx 自己替换，不能被任何一层 shell 展开。
+PKGNAME_SPEC="'$ARCH/\${name}-\${version}.apk'"
+
 echo
 # shellcheck disable=SC2086
 docker run --rm -v "$REPO:/repo" $SIGN_MOUNT alpine:latest sh -c "
@@ -168,7 +182,7 @@ docker run --rm -v "$REPO:/repo" $SIGN_MOUNT alpine:latest sh -c "
     cd /repo
     rm -f APKINDEX.tar.gz
     apk mkndx $SIGN_ARGS \
-        --pkgname-spec 'aarch64/\${name}-\${version}.apk' \
+        --pkgname-spec $PKGNAME_SPEC \
         --description '$DESC' \
         --output APKINDEX.tar.gz *.apk
 " 2>&1 | grep -viE '^\s*warning: support for packages without datahash' | sed 's/^/  /' || true
