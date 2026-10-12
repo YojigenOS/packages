@@ -190,7 +190,20 @@ jobs:
               --arch "${{ inputs.arch }}" \
               --sign-key "$SIGNING_KEY_FILE"
 
+      # ★ 这步需要 S3 凭据——不是要发布，是要【先拉回线上已有的包】。
+      #
+      # 索引是从包文件生成的（mkndx 没有"往索引里追加"的能力，--index 也
+      # 只是复用元数据缓存）。而 CI 每次是干净的工作区，var/pkgs 里只有
+      # 这次的包。不拉的话，生成的索引只列这次的包，传上去就把之前发布的
+      # 包从索引里抹掉了。
+      #
+      # ★ 只给这一步和发布那步凭据，不给建包那步——最小暴露面。
       - name: 生成仓库索引
+        env:
+          S3_AK: ${{ secrets.S3_AK }}
+          S3_SK: ${{ secrets.S3_SK }}
+          S3_BASE_URL: ${{ secrets.S3_BASE_URL }}
+          S3_BUCKET: ${{ secrets.S3_BUCKET }}
         run: |
           ./scripts/repo.sh \
               --arch "${{ inputs.arch }}" \
