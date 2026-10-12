@@ -119,8 +119,10 @@ jobs:
       #   地方：改了一个配方，不用把它依赖的几十个包重新编一遍。
       #
       #   ★ 加 arch 到 key 里：两个架构的产物不能混用一个缓存。
-      - name: ccache 缓存
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+      # ★ 同样拆开：cache 的后置保存会在失败时被跳过，而 ccache 恰恰是
+      #   "失败的那几轮最需要它攒下来"（理由见下面「存已建好的包」那段）。
+      - name: 恢复 ccache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: ${{ env.SKIRT_CCACHE }}
           key: ccache-${{ runner.os }}-${{ inputs.arch }}-${{ github.sha }}
@@ -141,8 +143,25 @@ jobs:
       #   ★ 它和 ccache 是两个不同的东西，别混：
       #     ccache     —— 编译【中间产物】的缓存，让重建同一个包变快
       #     这个       —— 【成品 .apk】，让已经建好的包根本不用重建
-      - name: 已建好的包缓存
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+      # ★★ 用 cache/restore 而不是 cache。
+      #
+      #   `actions/cache` 把"存"放在 job 的【后置步骤】里，而那个后置步骤
+      #   **在 job 失败时会被跳过**。实测：
+      #
+      #       Post 已建好的包缓存   completed/skipped
+      #       Post ccache 缓存      completed/skipped
+      #       缓存列表里的 pkgs-*   0 条
+      #
+      #   而最近六次 release 全是 failure——所以不只是新加的缓存，**连 ccache
+      #   也从来没能积累**：x86_64 的 ccache 只有 18 MB，aarch64 有 107 MB，
+      #   差的就是所有失败轮次的成果，全丢了。
+      #
+      #   而"失败时不丢成果"正是这些东西存在的理由 ✗。
+      #
+      #   所以拆成两个显式步骤：restore 在这里，save 在【建包之后】并且带
+      #   `if: always()`——不管后面成不成，建出来的包先存住。
+      - name: 恢复已建好的包
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: var/pkgs/${{ inputs.arch }}
           key: pkgs-${{ inputs.arch }}-${{ github.run_id }}
@@ -249,6 +268,29 @@ jobs:
           echo
           echo "  这一轮建了 $built 个，跳过 $skipped 个"
           echo "  $OUT 里现在有 $(ls "$OUT"/*.apk 2>/dev/null | wc -l | tr -d ' ') 个包"
+
+      # ★ 建完就存，而且 `if: always()`。
+      #
+      #   位置在【建包之后、打包之前】是故意的：后面无论哪一步失败，这一轮
+      #   辛苦建出来的包都已经存住了。放最后就会重蹈覆辙。
+      #
+      #   key 里有 run_id，所以每次都是新 key；restore-keys 会取最近的那份。
+      #   key 已存在时 cache/save 会跳过——那就跳过，continue-on-error 兜着。
+      - name: 存已建好的包
+        if: always()
+        continue-on-error: true
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: var/pkgs/${{ inputs.arch }}
+          key: pkgs-${{ inputs.arch }}-${{ github.run_id }}
+
+      - name: 存 ccache
+        if: always()
+        continue-on-error: true
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ${{ env.SKIRT_CCACHE }}
+          key: ccache-${{ runner.os }}-${{ inputs.arch }}-${{ github.sha }}
 
       - name: 收集日志
         if: always()
