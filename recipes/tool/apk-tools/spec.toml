@@ -57,11 +57,17 @@ url    = "https://gitlab.alpinelinux.org/alpine/apk-tools/-/archive/v3.0.8/apk-t
 sha256 = "e81c64a6e7c3806d45d4622c253e757aee970be84048554fa0eed79310e9453e"
 
 [dependencies]
-runtime = ["glibc", "openssl", "zlib", "ca-certificates"]
+# ★ openssl 拆出了 libcrypto / libssl 两个运行时子包。
+#
+#   这里写子包而不是 openssl——主包现在只剩命令行和开发文件（15 MB），而 apk
+#   一个都用不到。它 NEED 的只有 libssl.so.3 和 libcrypto.so.3（通过 libapk）。
+#
+#   实测差别：写 openssl → base 多带 24 MB；写这两个 → 多带 6.6 MB。
+runtime = ["glibc", "libssl", "libcrypto", "zlib", "ca-certificates"]
 build   = ["meson", "ninja", "openssl", "zlib", "linux-headers", "gcc"]
 
 [dependencies.x86_64]
-runtime = ["glibc", "openssl", "zlib", "ca-certificates"]
+runtime = ["glibc", "libssl", "libcrypto", "zlib", "ca-certificates"]
 build   = ["meson", "ninja", "openssl", "zlib", "linux-headers", "gcc"]
 
 [build]

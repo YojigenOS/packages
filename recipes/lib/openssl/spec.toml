@@ -60,3 +60,50 @@ build   = ["make", "gcc", "perl"]
 [build]
 # custom：openssl 有自己的 Configure（大写 C），不是 autotools
 type = "custom"
+
+# ── 运行时库的子包 ────────────────────────────────────────────────────────
+#
+# openssl 主包 23.8 MB，而里面【运行时】需要的只有两个 .so，6.6 MB：
+#
+#     libcrypto.so.3    5,707 KB
+#     libssl.so.3       1,040 KB
+#
+# 其余 17 MB 是开发文件和命令行工具：
+#
+#     libcrypto.a      11,593 KB   ← 静态库
+#     libssl.a          2,085 KB   ← 静态库
+#     /usr/bin/openssl  1,122 KB   ← 命令行
+#     头文件              ~800 KB
+#
+# ── 为什么现在拆 ──────────────────────────────────────────────────────────
+#
+# 起因是 apk-tools：它的 runtime 依赖里有 openssl，而它 NEED 的只有那两个 .so。
+#
+#     libapk.so.3.0.0 NEED: libssl.so.3 · libcrypto.so.3 · libz.so.1 · libc.so.6
+#
+# 不拆的话，base 为了一个包管理器要多带 24 MB——而其中 17 MB 是它永远用不到
+# 的静态库和头文件。拆了之后多带 6.6 MB。
+#
+# ★ Alpine 也是这么拆的：libcrypto3 · libssl3 · openssl（命令行单独一个包）。
+#
+# ── 命名 ──────────────────────────────────────────────────────────────────
+#
+# 用库的通用名（libcrypto / libssl），不带母包前缀——和 gcc 拆出的 libgcc /
+# libstdc++ 一致。主包保留命令行和开发文件。
+#
+# ★ Alpine 的包名带主版本号（libcrypto3 / libssl3），那是为了多版本共存。
+#   我们只会有一个 openssl，所以不带。
+
+[[subpackage]]
+name        = "libcrypto"
+description = "OpenSSL 的加密库（libcrypto.so.3）"
+section     = "libs"
+# `*` 不跨 `/`，所以这个模式匹配 .so.3 和 .so.3.x，但【不】匹配
+# usr/lib/libcrypto.so——最后那个是给链接器的开发文件，不该在运行时包里。
+files       = ["usr/lib/libcrypto.so.3*"]
+
+[[subpackage]]
+name        = "libssl"
+description = "OpenSSL 的 TLS 库（libssl.so.3）"
+section     = "libs"
+files       = ["usr/lib/libssl.so.3*"]

@@ -55,13 +55,23 @@ sha256 = "8944ec6b572b577daee4fc681a425881f841ec2660e4cb5f0eee727f84620697"
 unpack = false
 
 [dependencies]
-# 只要 python3 来跑生成脚本。★ 没有 openssl 依赖：生成的是 PEM 文本，
-# 不需要解析 X.509，DER 转 PEM 就是 base64（标准库）。
-runtime = ["python3"]
+# ★ runtime 是【空的】——这是个纯数据包。
+#
+#   产物只有两个文件（216 KB）：一份 PEM 文本和一个指向它的符号链接。运行时
+#   谁都不需要——OpenSSL 读它，而读一个文本文件不需要任何依赖。
+#
+#   第一版我写了 runtime = ["python3"]，那是错的：python3 只在【构建时】跑
+#   make-ca-bundle.py 用。留着它的后果是每个装 ca-certificates 的系统都拖进
+#   61 MB 的 Python——为了一个 216 KB 的证书列表。
+#
+#   对照 Alpine 的 ca-certificates-bundle：它的 depends 是空的。
+runtime = []
+# python3 跑生成脚本。★ 不需要 openssl：生成的是 PEM 文本，DER 转 PEM 就是
+# base64（标准库），不用解析 X.509。
 build   = ["python3"]
 
 [dependencies.x86_64]
-runtime = ["python3"]
+runtime = []
 build   = ["python3"]
 
 [build]
