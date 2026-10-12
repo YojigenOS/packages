@@ -56,3 +56,31 @@ class TestShellVariableBoundaries(unittest.TestCase):
             bad,
             "shell 变量名和中文之间必须用花括号划清边界，否则 shell 会把中文"
             "的第一个字节当成变量名的一部分：\n         " + "\n         ".join(bad))
+
+class TestPackKeepsUniqueDirs(unittest.TestCase):
+    """每个包一个唯一的 pack 目录。
+
+    ★ 这是踩出来的。原来所有包共用一个 $WORK/pack，里面的 inner.sh 和 epoch
+      每个包重写一次，而挂载点始终是同一个宿主路径。在 macOS 上会读到【上一个
+      包】的内容：
+
+          /pack/inner.sh: line 13: syntax error: unterminated quoted string
+
+      而那个文件在宿主上是正确的——它只是比上一个包的短，恰好断在第 13 行。
+
+      症状很好认：失败的是【随机的包】（每跑一次换一批），而单独打某个包总是
+      成功。因为单独跑时那个路径上没有"上一次"。
+    """
+
+    def test_packdir_is_per_package(self):
+        pack = Path(__file__).resolve().parents[2] / "scripts" / "pack.sh"
+        text = pack.read_text()
+
+        self.assertIn('PACKDIR="$WORK/pack/$(basename "$d")"', text,
+                      "pack.sh 里每个包的 pack 目录必须是唯一的")
+        # 挂载和 epoch 读取都要用那个唯一目录，不能退回共用路径
+        self.assertIn('-v "$PACKDIR:/pack:ro"', text)
+        self.assertIn('"$PACKDIR/epoch"', text)
+        self.assertNotIn('-v "$WORK/pack:/pack:ro"', text,
+                         "不能挂共用的 pack 目录——那会读到上一个包的内容")
+

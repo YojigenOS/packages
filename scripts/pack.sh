@@ -91,10 +91,28 @@ for d in $DIRS; do
     d="${d%/}"
     [ -f "$d/meta.json" ] || { echo "  跳过 $(basename "$d")（没有 meta.json）"; N_SKIP=$((N_SKIP+1)); continue; }
 
+    # ★ 每个包一个【唯一的】pack 目录。
+    #
+    # 原来是所有包共用一个 $WORK/pack，里面的 inner.sh 和 epoch 每个包重写
+    # 一次、挂载点却始终是同一个宿主路径。实测在 macOS 上会读到【上一个包】
+    # 的内容：
+    #
+    #     /pack/inner.sh: line 13: syntax error: unterminated quoted string
+    #
+    # 而那个文件在宿主上是对的（字段数不同的包写到第 13 行就断了）。所以是
+    # bind mount 对同一路径的快速重写没跟上。
+    #
+    # 独立的症状：失败的是【随机的包】——每跑一次换一批，而单独打某个包
+    # 总是成功。因为单独跑时那个路径上没有"上一次"。
+    #
+    # ★ 用包名而不是 tmpdir：出问题时路径里能看出是哪个包。
+    PACKDIR="$WORK/pack/$(basename "$d")"
+    mkdir -p "$PACKDIR"
+
     # meta.json → 内层脚本。生成脚本而不是拼命令行，是为了绕开引号：
     # 描述里有中文、空格、逗号，直接塞进 sh -c 会被吃掉。
     # 第三个参数是【容器里】的输出目录（挂载点是 /out），不是宿主路径。
-    python3 - "$d" "$WORK/pack/inner.sh" /out "${SIGN_KEY:+yes}" <<'PY'
+    python3 - "$d" "$PACKDIR/inner.sh" /out "${SIGN_KEY:+yes}" <<'PY'
 import json, pathlib, shlex, sys
 d, out_script, out_dir = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2]), sys.argv[3]
 signed = len(sys.argv) > 4 and sys.argv[4] == "yes"
@@ -122,6 +140,37 @@ def _epoch(iso: str) -> str:
 
 (pathlib.Path(out_script).parent / "epoch").write_text(_epoch(m.get("built_at", "")))
 
+# ── ★ 扫 ELF，把动态库依赖补上 ────────────────────────────────────────────
+#
+# mkpkg 不扫描 ELF（实测它建出来的包 provides 和 depends 都是空的；Alpine 的
+# so: 是 abuild + scanelf 生成的）。所以在这之前，动态库依赖一直靠人在
+# spec.toml 里手写——而手写就会漏。已经漏过的：
+#
+#     gawk       NEED libmpfr.so.6 + libgmp.so.10，只声明了 glibc
+#     apk-tools  NEED libssl.so.3（通过 libapk），得靠人想起来写 openssl
+#
+# docs/记录/未声明依赖的审计.md 是【离线的一次性分析】：发现了就手改进配方，
+# 下次可能又漂。这里把同一件事接进打包流程。
+#
+# ★ 两端都要：depends 里的 so: 靠 provides 里的 so: 解析。只做一端的话，
+#   装了包会发现"没有谁提供 libz.so.1"。
+import importlib.util as _ilu
+_spec = _ilu.spec_from_file_location("elfdeps", "scripts/elf-deps.py")
+_elfdeps = _ilu.module_from_spec(_spec)
+_spec.loader.exec_module(_elfdeps)
+
+_so_needed, _so_provided = _elfdeps.scan(d / "payload")
+# 去重：手写的是包名（glibc、openssl），自动的是 soname（so:libc.so.6）。
+# 两者可以同时存在——apk 会两个都满足，多一个约束不改变结果。
+_so_deps = [f"so:{n}" for n in _so_needed]
+_depends = list(m.get("depends") or []) + [x for x in _so_deps if x not in (m.get("depends") or [])]
+_so_provides = [f"so:{k}={v}" if v else f"so:{k}" for k, v in sorted(_so_provided.items())]
+_provides = list(m.get("provides") or []) + [x for x in _so_provides if x not in (m.get("provides") or [])]
+
+_extra = len(_so_deps) + len(_so_provides)
+if _extra:
+    print(f"  [ELF] {name}: +{len(_so_deps)} 个 so: 依赖 ✗ +{len(_so_provides)} 个 so: 提供", file=sys.stderr)
+
 fields = [
     ("name",        name),
     ("version",     version),
@@ -130,13 +179,14 @@ fields = [
     ("license",     m.get("license", "")),
     ("arch",        m.get("arch", "")),
     ("origin",      m.get("built_from", "")),
-    ("depends",     " ".join(m.get("depends") or [])),
+    ("depends",     " ".join(_depends)),
 ]
 
-# provides / provider-priority：这个包提供什么虚名（比如 /bin/sh）。
+# provides / provider-priority：这个包提供什么虚名（比如 /bin/sh），以及
+# 上面扫出来的 so: 名字。
 # 空值不要传——mkpkg 对空字符串会报错，所以下面统一过滤。
-if m.get("provides"):
-    fields.append(("provides", " ".join(m["provides"])))
+if _provides:
+    fields.append(("provides", " ".join(_provides)))
 if m.get("provider_priority") is not None:
     fields.append(("provider-priority", str(m["provider_priority"])))
 
@@ -165,8 +215,8 @@ print(f\"{m['name']}-{m['version']}-r{m['release']}.apk\")")
     SIGN_MOUNT=""
     [ -n "$SIGN_KEY" ] && SIGN_MOUNT="-v $SIGN_KEY:/key.rsa:ro"
     # shellcheck disable=SC2086
-    docker run --rm -e "SOURCE_DATE_EPOCH=$(cat "$WORK/pack/epoch" 2>/dev/null || echo 0)" \
-         -v "$PWD/$d:/in:ro" -v "$OUT:/out" -v "$WORK/pack:/pack:ro" $SIGN_MOUNT \
+    docker run --rm -e "SOURCE_DATE_EPOCH=$(cat "$PACKDIR/epoch" 2>/dev/null || echo 0)" \
+         -v "$PWD/$d:/in:ro" -v "$OUT:/out" -v "$PACKDIR:/pack:ro" $SIGN_MOUNT \
          alpine:latest sh /pack/inner.sh > "$WORK/log" 2>&1 || true
     # ★ 两道检查，缺一不可：
     #   退出码是 0 不等于【产出了东西】。上面那次就是这样——docker 成功了，
@@ -182,7 +232,7 @@ print(f\"{m['name']}-{m['version']}-r{m['release']}.apk\")")
             sed 's/^/      /' "$WORK/log" | head -8
         else
             echo "      （docker 没有任何输出——它可能没跑起来）"
-            echo "      退出码: $?   挂载: $d → /in，$WORK/pack → /pack，$OUT → /out"
+            echo "      退出码: $?   挂载: $d → /in，$PACKDIR → /pack，$OUT → /out"
         fi
         N_FAIL=$((N_FAIL+1))
     fi
