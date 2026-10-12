@@ -1,0 +1,183 @@
+# debug —— 临时调试工作流
+#
+# ★★ 这是【临时】的。用完了删掉。
+#
+# ## 它为什么存在
+#
+# bootstrap.yml 一次建 58 个包，跑 50 分钟，而它【在第一个失败处就停】。于是
+# 排查一个包的问题要 50 分钟，而且一次只能看到一个失败。
+#
+# 但被排查的往往只是其中一步：比如"合并了我们的 openssl 之后，-lssl 到底链到
+# 哪个库"。这个问题不需要重建前面 40 个包——只需要构建环境镜像（2 分钟）加上
+# 那几个包本身（几分钟）。
+#
+# 所以这个工作流把 bootstrap 拆开，让你只跑关心的那一段。
+#
+# ## 用法
+#
+#     prebuild  先在 Debian 环境里建这些包（空格分隔），之后它们被当作"已提供"
+#     target    接着建这些包——prebuild 的产物会被合并进容器的 /
+#     script    最后跑的一段诊断 shell，在同一个容器语义下
+#
+# 空着就跳过对应的步骤。三者可以只用其中一个。
+#
+# ## 为什么不用本地 docker
+#
+# 本地是 macOS（arm64），只能跑 aarch64，而且 x86_64 那条腿根本没法验。CI 上
+# 两个架构都是原生的，还快。
+
+name: debug
+
+on:
+  workflow_dispatch:
+    inputs:
+      arch:
+        description: 架构
+        type: choice
+        options: [aarch64, x86_64]
+        default: aarch64
+      prebuild:
+        description: 先建的包（空格分隔，产物会被当作"已提供"）
+        type: string
+        default: ""
+      target:
+        description: 接着建的包（prebuild 的产物会合并进容器）
+        type: string
+        default: ""
+      script:
+        description: 最后跑的诊断脚本
+        type: string
+        default: ""
+      buildenv:
+        description: 构建环境镜像名（裸名，不带 tag）
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  debug:
+    name: debug (${{ inputs.arch }})
+    runs-on: ${{ inputs.arch == 'aarch64' && 'ubuntu-26.04-arm' || 'ubuntu-26.04' }}
+    timeout-minutes: 90
+    env:
+      ARCH: ${{ inputs.arch }}
+      PREBUILD: ${{ inputs.prebuild }}
+      TARGET: ${{ inputs.target }}
+      # ★ 裸镜像名，不带 tag——skirt 自己会补 :<arch>（build.py）。
+      SKIRT_BUILDENV: ${{ inputs.buildenv != '' && inputs.buildenv || 'yojigenos/buildenv' }}
+
+    steps:
+      - name: 取 packages
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: 建构建环境镜像
+        run: |
+          set -euo pipefail
+          docker build -t "yojigenos/buildenv:${ARCH}" bootstrap
+          docker run --rm "yojigenos/buildenv:${ARCH}" sh -c \
+            'grep -E "^VERSION=" /etc/os-release; echo "  debian_version: $(cat /etc/debian_version)"' \
+            | sed 's/^/  /'
+
+      # ── 第一步：先在 Debian 环境里建出 prebuild ────────────────────────────
+      #
+      # 这一步【不加 SKIRT_PROVIDES】——用的就是 bootstrap 的基线
+      # （bootstrap/provides.txt：gcc make binutils gettext glibc）。
+      # 和 bootstrap.yml 第一段完全一致的语义。
+      - name: 预建 ${{ inputs.prebuild }}
+        if: inputs.prebuild != ''
+        run: |
+          set -euo pipefail
+          echo "::group::预建 $PREBUILD"
+          ./skirt/skirt build $PREBUILD 2>&1 | tail -40
+          echo "::endgroup::"
+          echo "产物: $(ls -1 var/pkgs/${ARCH}/*.apk 2>/dev/null | wc -l | tr -d ' ') 个 apk"
+
+      # ── 第二步：建 target，把 prebuild 当作已提供 ──────────────────────────
+      #
+      # SKIRT_PROVIDES 里加上 prebuild 的名字 = "这些已经有了，别再建，但把它们
+      # 的 payload 合并进容器"。这正是要复现的那个状态：我们的包铺在 Debian 之上。
+      - name: 建 ${{ inputs.target }}
+        if: inputs.target != ''
+        run: |
+          set -euo pipefail
+          # ★ 基线用 bootstrap/provides.txt，【不用】base-devel.toml 的闭包。
+          #
+          #   这里要复现的是【引导】那个状态：构建环境是 Debian，只提供基线里
+          #   那 5 个包，其余全靠 prebuild 现场建。用 base-devel 的闭包会把
+          #   构建环境已经有的东西也算成"已提供"，那就不是引导了。
+          #
+          #   （base-devel.toml 在 distro 仓库里，这个仓库看不到它——这也是
+          #     一个不该在这儿依赖它的理由。）
+          PROV="$(grep -vE '^\s*#|^\s*$' bootstrap/provides.txt | tr '\n' ' ') $PREBUILD"
+          echo "当作已提供: $PROV"
+          echo "::group::建 $TARGET"
+          SKIRT_PROVIDES="$PROV" ./skirt/skirt build $TARGET 2>&1 | tail -60
+          echo "::endgroup::"
+
+      # ── 第三步：诊断 ──────────────────────────────────────────────────────
+      #
+      # 用和 skirt 一样的方式把包铺进容器，然后跑给定的脚本。这样看到的就是
+      # 构建时真正看到的环境。
+      - name: 诊断
+        if: inputs.script != ''
+        run: |
+          set -euo pipefail
+          cat > /tmp/diag.sh <<'DIAG'
+          ${{ inputs.script }}
+          DIAG
+          echo "::group::诊断脚本"
+          cat /tmp/diag.sh
+          echo "::endgroup::"
+
+          # 把 prebuild + target 的产物都铺进容器，再跑脚本
+          MERGE=$(ls -d var/output/${ARCH}/*/payload 2>/dev/null | tr '\n' ' ')
+          echo "要合并的 payload: $(echo $MERGE | wc -w | tr -d ' ') 个"
+
+          docker run --rm -i \
+            -v "$PWD/var/output/${ARCH}:/out:ro" \
+            -v /tmp/diag.sh:/diag.sh:ro \
+            "yojigenos/buildenv:${ARCH}" \
+            sh -c '
+              set -e
+              for p in $(ls -d /out/*/payload 2>/dev/null); do
+                tar -C "$p" -cf - \
+                    --exclude=./bin --exclude=./sbin --exclude=./lib \
+                    --exclude=./lib64 --exclude=./usr/lib64 . 2>/dev/null \
+                  | tar -C / -xf - 2>/dev/null || true
+              done
+              echo "── 合并完成 ──"
+              sh /diag.sh
+            ' 2>&1 | tee /tmp/diag.out
+          echo "::endgroup::"
+
+      # ── 传日志和产物 ──────────────────────────────────────────────────────
+      #
+      # ★ 连 var/pkgs 一起传。bootstrap.yml 只传日志，所以上一轮建出来的 .apk
+      #   拿不到，任何"接着上一轮继续"的调试都做不了。
+      - name: 收集
+        if: always()
+        run: |
+          mkdir -p var/logs
+          echo "日志 $(ls var/logs 2>/dev/null | wc -l) 个，apk $(ls var/pkgs/${ARCH}/*.apk 2>/dev/null | wc -l) 个"
+
+      - name: 传日志
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: debug-logs-${{ inputs.arch }}
+          path: var/logs
+          if-no-files-found: ignore
+          retention-days: 3
+
+      - name: 传 apk
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: debug-pkgs-${{ inputs.arch }}
+          path: var/pkgs/${{ inputs.arch }}
+          if-no-files-found: ignore
+          retention-days: 3
