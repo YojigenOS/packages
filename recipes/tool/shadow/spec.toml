@@ -1,0 +1,125 @@
+# shadow —— 账号与口令工具（useradd / passwd / su / login…）
+#
+# 它管的是 /etc/passwd、/etc/shadow、/etc/group 那一套的编辑。没有它，装完系统
+# 之后没法加用户、改口令。
+
+[package]
+name        = "shadow"
+version     = "4.20.3"
+release     = 1
+# ★ 晚于它的依赖（glibc 是 2026-10-12T19:00:00Z，libxcrypt 更早）。
+date        = 2026-10-12T23:00:00Z
+description = "账号与口令工具（useradd / passwd / su / login…）"
+url         = "https://github.com/shadow-maint/shadow"
+license     = "BSD-3-Clause"
+
+# ── 源：用 commit，不用 release 附件 ──────────────────────────────────────
+#
+# 按 docs/约定/配方约定.md 的优先级：上游自己的站点 > GitHub 的 commit 归档 >
+# release 附件。shadow 在 GitHub 上，所以走第二条。
+#
+# ★ 它满足 commit 路线的硬性要求：git 树里跑 autoreconf 能成。它自己的
+#   autogen.sh 就是 `autoreconf -v -f --install`，我们做的是同一件事。
+#
+#   （对照 libffi——那个的 git 树 autoreconf 会倒在 LT_SYS_SYMBOL_USCORE，
+#     所以只能用发行包。判据是「跑不跑得成」，不是「想不想」。）
+#
+# 4.20.3 的 tag 是 annotated，commit 是解引用出来的。
+[[source]]
+git     = "https://github.com/shadow-maint/shadow"
+commit  = "7188fbf46f397ab40d2e77d6f0bb8ebbe479cc0c"
+
+[dependencies]
+# libxcrypt 提供 crypt()。glibc 2.44 自己【不带】libcrypt 了（上游早就把
+# crypt 拆出去了），所以这是个真依赖，不是可选。
+runtime = ["glibc", "libxcrypt"]
+# ★ autoreconf 要用 autoconf / automake / libtool，必须【声明】——不声明就会
+#   悄悄用构建环境镜像里的那一份，那是隐式依赖（配方约定里那条，测试守着）。
+# ★ pkgconf 是必须的，而它不在 devel 镜像里——所以这一条不是"声明一下"
+#   而已，是真的会触发构建。
+#
+#   它的 configure.ac 第 244 行是 PKG_CHECK_MODULES([CMOCKA], [cmocka], …)。
+#   那个宏来自 pkg-config 的 pkg.m4（pkgconf 提供 /usr/share/aclocal/pkg.m4）。
+#   没有它，宏不展开，它参数里的 AC_MSG_WARN 就成了字面量，autoconf 报的是：
+#
+#       configure.ac:245: error: undefined or overquoted macro: AC_MSG_WARN
+#
+#   ——一句话指不到真正缺的东西。和 libffi 的 LT_SYS_SYMBOL_USCORE 是同一类。
+build   = ["gcc", "make", "autoconf", "automake", "libtool", "libxcrypt", "gettext", "pkgconf"]
+
+[dependencies.x86_64]
+runtime = ["glibc", "libxcrypt"]
+build   = ["gcc", "make", "autoconf", "automake", "libtool", "libxcrypt", "gettext", "pkgconf"]
+
+[build]
+type       = "autotools"
+autoreconf = true
+# ★ 上游 4.20.3 在 --without-nscd 下编不过：桩函数的参数类型写成了 int，
+#   而调用方传字符串。详见补丁头部。
+patches    = ["nscd-param-type.patch"]
+
+configure = [
+  "--prefix=/usr",
+  # ★ -sysconfdir 必须显式给。
+  #
+  #   autoconf 的 sysconfdir 默认是 ${prefix}/etc，而 prefix 是 /usr——于是
+  #   login.defs / limits / login.access 会装到 /usr/etc 去。实测第一次建出来
+  #   就是这样，而系统读的是 /etc。
+  "--sysconfdir=/etc",
+  # ★ -bindir 也必须显式给。
+  #
+  #   shadow 有个 bin_PROGRAMS（login、su、getsubids），默认落在 $(bindir)，
+  #   而它成了 /bin。我们做 usr-merge：/bin 是指向 usr/bin 的符号链接，payload
+  #   里带一个真目录 /bin 会在拼 rootfs 时撞车——就是配方约定里记的那类失败：
+  #
+  #       cp: cannot overwrite non-directory '/rootfs/./bin'
+  #           with directory '.../shadow-4.20.3-1/payload/./bin'
+  #
+  #   （util-linux 是同一个情况，它也是这么覆盖的。传统上 su/login 放 /bin 是
+  #     为了 /usr 挂载前可用，但 usr-merge 之后 /bin 就是 /usr/bin，没区别。）
+  "--bindir=/usr/bin",
+  # shadow 默认把 useradd / passwd 这些装进 bin。它们要改 /etc 下的账号文件，
+  # 按惯例该在 sbin——util-linux 的 sulogin 也在那儿。
+  "--sbindir=/usr/sbin",
+  "--libdir=/usr/lib",
+
+  # ── 树里没有的东西，逐条写明是哪个 ──────────────────────────────────
+  #
+  # 配方约定里那条：关掉它们不是嫌它们没用，是它们还没进来。写清楚是哪个，
+  # 下一个人才知道接进来的时候该删哪一行。
+  "--without-libpam",      # 没有 PAM。口令校验会走它自己的 /etc/shadow 直读
+  "--without-audit",       # 没有 libaudit
+  "--without-selinux",     # 没有 SELinux
+  "--without-acl",         # 没有 libacl；装了的话 passwd 会保留 ACL
+  "--without-tcb",         # TCB 是另一种口令数据库布局，不用
+  "--without-libbsd",      # 没有 libbsd
+  "--without-nscd",        # 没有 nscd
+  "--without-sssd",        # 没有 sssd
+  "--without-skey",        # S/Key 是一次性口令的老方案，不用
+  "--without-btrfs",       # 没有 btrfs 支持（shadow 用它做 subvolume 检查）
+  "--without-fcaps",       # 没有 libcap；装了会给工具加文件能力而不是 setuid
+  "--disable-logind",      # 没有 systemd-logind
+  "--disable-man",         # 没有 xsltproc / docbook；手册不生成（这本来就是默认）
+
+  # ★ vendordir 那条【不能写 --disable-vendordir】——写了反而是打开它。
+  #
+  #   它的判据和别的不一样：
+  #
+  #       AC_ARG_ENABLE([vendordir], [...], [], [])        ← 默认动作是空的
+  #       if test "x$enable_vendordir" != x; then          ← 判的是"非空"
+  #               AC_DEFINE([HAVE_VENDORDIR], [1], ...)
+  #       fi
+  #
+  #   而 --disable-vendordir 把 enable_vendordir 设成字面量 "no"，"xno" != "x"
+  #   是真，于是 HAVE_VENDORDIR 被定义，chsh.c 就去 #include <libeconf.h>——
+  #   而那个头文件不在。报错是：
+  #
+  #       chsh.c:46:10: fatal error: libeconf.h: No such file or directory
+  #
+  #   它没有"关掉"的写法，只能不传。
+  #
+  #   （对照 logind / man / shadowgrp：它们的判据都是 `= "Xyes"`，关得掉。）
+
+  # groupadd 之类的口令文件里，组名最长 32 字符——Linux 的惯例值。
+  "--with-group-name-max-length=32",
+]

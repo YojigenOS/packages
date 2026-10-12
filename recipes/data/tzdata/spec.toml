@@ -1,0 +1,50 @@
+# tzdata —— 时区数据库
+#
+# 产物是 zic 编译出来的 TZif 文件，装在 /usr/share/zoneinfo/ 下面。
+# 没有它，`TZ=Asia/Shanghai date` 不起作用，`date` 只会认 UTC。
+
+[package]
+name        = "tzdata"
+version     = "2026e"
+release     = 1
+# ★ 晚于 glibc（它的 date 是 2026-10-12T19:00:00Z）——构建时要它的 zic。
+#   见 docs/约定/配方约定.md「时间戳」一节。
+date        = 2026-10-12T22:00:00Z
+description = "时区数据库（zic 编译出的 TZif 文件）"
+url         = "https://www.iana.org/time-zones"
+# 实测 tzdata 2026e 的 LICENSE 开头：「Unless specified below, all files in
+# the tz code and data (including this LICENSE file) are in the public domain.」
+# （里面还提到 date.c / newstrftime.3 / strftime.c 是 BSD——那三个在 tzcode
+# 里，不在我们这个数据包里。）
+license     = "public-domain"
+
+[[source]]
+url = "https://data.iana.org/time-zones/releases/tzdata$VERSION.tar.gz"
+# ★ 没有备用源，实测四个候选都 404：ftp.iana.org、mirrors.kernel.org、
+#   ftp.osuosl.org 都不镜像这个路径。IANA 只有 data.iana.org 这一处。
+#
+#   （这正是 docs/待办.md §6.1「源码镜像」记的那件事：上游消失配方就永久死了。
+#     等我们自己的源码镜像建起来，这个包是第一批受益者。）
+sha256 = "b26882805f26aac59d5b222978e6580484b834ccdc98be89df2f05a6dc53a652"
+
+[dependencies]
+# ★ runtime 是【空的】——纯数据包。
+#
+#   产物是 598 个 TZif 文件加三张对照表，一个字节的可执行代码都没有。运行时
+#   谁都不需要它——glibc 读那些文件，而读文件不需要依赖。对照 Alpine 的
+#   tzdata：它的 depends 也是空的。
+runtime = []
+# ★ 构建时要 glibc 的 /usr/sbin/zic。
+#
+#   tzdata 的 tarball 里【只有数据】，没有 zic 的源码——zic 和 zdump 在另一个
+#   包（tzcode）里。所以不能自己编一个，只能借 glibc 的。
+build   = ["glibc"]
+
+[dependencies.x86_64]
+runtime = []
+build   = ["glibc"]
+
+[build]
+# 它不是 autotools / meson / cmake 任何一种——是个平铺的 Makefile 项目，
+# 而且那个 Makefile 的 install 目标在这个包里跑不通（见 steps.sh 的说明）。
+type = "custom"

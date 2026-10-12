@@ -1,0 +1,26 @@
+lib/nscd.h: nscd_flush_cache(): Fix type of parameter
+
+上游在 4.20.3 之后修的。没有 --with-nscd 时那个桩函数的参数类型写成了
+int，而调用方传的是字符串字面量：
+
+    lib/commonio.c:426:51: error: passing argument 1 of 'nscd_flush_cache'
+        makes integer from pointer without a cast [-Wint-conversion]
+
+新版 gcc 把 -Wint-conversion 当错误，于是构建停在 lib/ 里。
+
+来自上游 commit b8d3549a49acfe967f45aebaf06d474c82c46d22
+（"lib/nscd.h: nscd_flush_cache(): Fix type of parameter"，2026-09-30，
+修的是 deef7d84c3e4 引入的回归）。
+
+★ 移到 4.20.3 之后的版本时删掉这个补丁。
+--- a/lib/nscd.h
++++ b/lib/nscd.h
+@@ -8,7 +8,7 @@
+ extern int nscd_flush_cache (const char *service);
+ #else
+ static inline int
+-nscd_flush_cache(MAYBE_UNUSED int _1)
++nscd_flush_cache(MAYBE_UNUSED const char *_1)
+ {
+ 	return 0;
+ }
