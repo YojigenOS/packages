@@ -125,17 +125,29 @@ jobs:
           done
           RCLONE="$RCLONE rclone/rclone"
 
-          echo "── 桶根下的目录（最多两层）──"
-          $RCLONE lsf "yojigen:$S3_BUCKET" --max-depth 2 2>&1 | head -25 | sed 's/^/  /' \
-            || echo "  ✗ 列不出来"
+          # ★ 容器里的 rclone 看不到宿主上的文件，所以要挂一个目录进去。
+          #   （第一版就是漏了这一步，报 "directory not found"。）
+          PROBEDIR="$RUNNER_TEMP/probe"
+          mkdir -p "$PROBEDIR"
+          echo "probe $(date -u +%FT%TZ)" > "$PROBEDIR/probe.txt"
+
+          # 让 $RCLONE 带上这个挂载
+          RCLONE="$RCLONE -v $PROBEDIR:/probe"
+
+          echo "── 桶根下有什么（最多两层）──"
+          OUT=$($RCLONE lsf "yojigen:$S3_BUCKET" --max-depth 2 2>&1 | grep -v 'NOTICE:')
+          if [ -z "$OUT" ]; then
+            echo "  （空的 —— 还没发布过任何东西，这是正常的）"
+          else
+            printf '%s\n' "$OUT" | head -25 | sed 's/^/  /'
+          fi
 
           echo
-          echo "── 试着写一个探针文件再删掉 ──"
-          echo "probe $(date -u +%FT%TZ)" > /tmp/probe.txt
-          if $RCLONE copy /tmp/probe.txt "yojigen:$S3_BUCKET/" 2>&1 | tail -3 | sed 's/^/  /'; then
+          echo "── ★ 写一个探针文件再删掉（验证写权限）──"
+          if $RCLONE copy /probe/probe.txt "yojigen:$S3_BUCKET/" 2>&1 | grep -vE 'NOTICE:' | tail -3 | sed 's/^/  /'; then
             echo "  ✓ 写入成功"
-            $RCLONE delete "yojigen:$S3_BUCKET/probe.txt" 2>&1 | sed 's/^/  /' || true
-            echo "  ✓ 已删除探针文件"
+            $RCLONE delete "yojigen:$S3_BUCKET/probe.txt" 2>&1 | grep -vE 'NOTICE:' | sed 's/^/  /' || true
+            echo "  ✓ 已删除（不留下垃圾）"
           else
             echo "  ✗ 写入失败"
           fi
