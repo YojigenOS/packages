@@ -103,10 +103,29 @@ def make_build_script(spec: dict, arch: str = "") -> str:
         #   不传 --host 时 configure 会跑 config.guess，而它不认识 YojigenOS，
         #   于是 bash --version 显示 aarch64-unknown-linux-gnu。
         #
+        #   ★★ 必须【连 --build 一起传】，而且传同一个三元组。
+        #
+        #   只传 --host 的话，configure 拿 config.guess 得到的 build 和它一比，
+        #   发现不一样，就认为【在交叉编译】——于是去找带前缀的工具：
+        #
+        #       aarch64-yojigen-linux-gnu-ar: command not found
+        #       configure: error: could not determine aarch64-yojigen-linux-gnu-ar interface
+        #
+        #   实测（binutils 2.47，Debian 环境）：
+        #
+        #       --host=X 单独          →  AR = X-ar          ✗ 那个工具不存在
+        #       --build=X --host=X     →  AR = ar            ✓
+        #
+        #   build == host 时 configure 走的是【本地构建】那条路，用不带前缀的
+        #   工具名，同时把产物记录成我们的三元组——这正是我们要的：换个名字的
+        #   本地构建，不是交叉编译。
+        #
         #   ★ 留了覆盖的口子：配方自己写了 --host= 就不加。交叉编译之类的
         #     场合需要它。
         if not any(o.startswith("--host=") for o in opts_list):
-            opts_list.append(f"--host={target_triple(arch)}")
+            triple = target_triple(arch)
+            opts_list.append(f"--build={triple}")
+            opts_list.append(f"--host={triple}")
         opts = " ".join(opts_list)
         if oot:
             body = ('  mkdir -p "$BUILDDIR"\n'

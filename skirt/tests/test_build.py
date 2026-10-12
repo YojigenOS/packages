@@ -287,3 +287,43 @@ class TestMetadataOnlyPackages(unittest.TestCase):
         self.assertLess(i_default, i_branch,
                         "unpack 的默认值要在 source 分支【之前】——否则纯元数据包会炸")
 
+class TestAutotoolsPassesBuildAlongsideHost(unittest.TestCase):
+    """给 autotools 包加 --host 时，必须【连 --build 一起传】，而且同一个三元组。
+
+    ★ 这是 CI 上踩的：只传 --host=aarch64-yojigen-linux-gnu 时，configure 拿
+      config.guess 得到的 build 和它一比发现不一样，就认为在【交叉编译】——
+      于是去找带前缀的工具：
+
+          aarch64-yojigen-linux-gnu-ar: command not found
+          configure: error: could not determine aarch64-yojigen-linux-gnu-ar interface
+
+      binutils 第一个炸，gcc 也会。实测（binutils 2.47，Debian 环境）：
+
+          --host=X 单独          →  AR = X-ar     ✗ 那个工具不存在
+          --build=X --host=X     →  AR = ar       ✓
+
+      build == host 时 configure 走【本地构建】那条路，用不带前缀的工具名，
+      同时把产物记录成我们的三元组——这正是我们要的：换个名字的本地构建。
+
+    ★ 这个错在 devel 镜像里【看不出来】：那里没有 binutils 源码，而且 gcc 是
+      我们自己建的、已经带了别的三元组。只有从 Debian 引导那一轮才会撞上。
+    """
+
+    def test_host_is_always_accompanied_by_build(self):
+        src = (pathlib.Path(__file__).resolve().parents[1]
+               / "skirtlib" / "build.py").read_text()
+        self.assertIn('opts_list.append(f"--build={triple}")', src,
+                      "--host 必须配一个同值的 --build")
+        self.assertIn('opts_list.append(f"--host={triple}")', src)
+        # --build 要排在 --host 前面（读起来是"给谁建、建在哪"的顺序）
+        self.assertLess(src.index('--build={triple}'), src.index('--host={triple}'))
+
+    def test_gcc_steps_also_passes_build(self):
+        """gcc 是 custom——驱动的注入到不了它，得在 steps.sh 里自己写。"""
+        sh = (pathlib.Path(__file__).resolve().parents[2]
+              / "recipes" / "devel" / "gcc" / "steps.sh").read_text()
+        self.assertIn('--build="$PKGTRIPLE"', sh,
+                      "gcc 的 configure 也要有 --build，否则它也会去找带前缀的 ar")
+        self.assertIn('--host="$PKGTRIPLE"', sh)
+        self.assertIn('--target="$PKGTRIPLE"', sh)
+

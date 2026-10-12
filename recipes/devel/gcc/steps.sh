@@ -76,6 +76,7 @@ build() {
   "$SRCDIR/configure" \
     --prefix=/usr \
     --libdir=/usr/lib \
+    --build="$PKGTRIPLE" \
     --host="$PKGTRIPLE" \
     --target="$PKGTRIPLE" \
     --enable-languages=c,c++ \
