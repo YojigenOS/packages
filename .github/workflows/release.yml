@@ -26,6 +26,27 @@
 #   linux、cmake）是【建 base-devel 镜像】需要的，不是这里需要的。
 #   「要建哪些包」的答案是「看要交付什么」，不是「全建一遍」。
 #
+# ── 可以分批跑，一轮失败不用从头再来 ──────────────────────────────────────
+#
+# 建一批包可能要几十分钟，而【循环在第一个失败处就停】。所以做了两件事让它可续：
+#
+#   1. var/pkgs/<arch> 进 actions/cache —— 下一轮把上一轮的 .apk 捞回来
+#   2. 建包循环跳过已经有 .apk 的 —— 不重做建过的
+#
+# 于是要建一大批的时候可以拆成几次派发，每次挑一段。比如：
+#
+#     gh workflow run release.yml -f arch=x86_64 -f deploy=true \
+#        -f check_flavor= -f packages="m4 autoconf automake libtool ..."
+#
+# ★ 分批的时候 check_flavor 要【留空】。
+#
+#   因为索引是从 var/pkgs 生成的，而分批时它还不全——自检去装一个风味会报
+#   「no such package」，而那不是构建失败，是"还没建完"。留空就只检查
+#   「这一轮让我建的包都产出了」。
+#
+#   全部建齐之后再跑一次（那时所有包都会被跳过，几秒钟），带上
+#   check_flavor=base-devel 做完整验收。
+#
 # ── 签名为什么必须在这里 ──────────────────────────────────────────────────
 #
 # 密钥在 organization secret（SIGNING_KEY）里。本地只有副本，而"能签名的地方"
@@ -106,6 +127,28 @@ jobs:
           restore-keys: |
             ccache-${{ runner.os }}-${{ inputs.arch }}-
 
+      # ★ 把【已经建出来的包】也缓存起来，这样一轮失败不用从头再来。
+      #
+      #   没有它的时候：一次要建 49 个包、一个失败就整轮停，而下一轮从零开始。
+      #   有了它：下一轮把上一轮的 .apk 捞回来，只建缺的那些。
+      #
+      #   key 里放 run_id【是故意的】——每次都要存一份新的，而
+      #   restore-keys 会取到最近的那一份。用固定 key 的话 actions/cache
+      #   永远命中第一次存的，后面建的包一个都进不去。
+      #
+      #   体积：一个架构 353 MB（本地 aarch64 实测）。仓库上限 10 GB，够用。
+      #
+      #   ★ 它和 ccache 是两个不同的东西，别混：
+      #     ccache     —— 编译【中间产物】的缓存，让重建同一个包变快
+      #     这个       —— 【成品 .apk】，让已经建好的包根本不用重建
+      - name: 已建好的包缓存
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: var/pkgs/${{ inputs.arch }}
+          key: pkgs-${{ inputs.arch }}-${{ github.run_id }}
+          restore-keys: |
+            pkgs-${{ inputs.arch }}-
+
       # ── 构建环境：我们自己的 ────────────────────────────────────────────
       #
       # ★ 不是 `docker build bootstrap`（那是 Debian 底的）。
@@ -175,12 +218,37 @@ jobs:
           SKIRT_BUILDENV: yojigenos/base-devel
         run: |
           set -euo pipefail
-          # 每个目标都建一遍。依赖由上面的 SKIRT_PROVIDES 声明为"已提供"，
-          # 所以只有目标本身会被建。
+          # 依赖由上面的 SKIRT_PROVIDES 声明为"已提供"，所以只有目标本身会被建。
+          #
+          # ★ 已经有 .apk 的跳过。这是「一轮失败不用从头再来」的另一半——
+          #   缓存负责把上一轮的包捞回来，这里负责不重做它们。
+          #
+          #   判据用【产物名】而不是配方名，因为子包和配方不是一对一：
+          #   libgcc / libstdc++ 是 gcc 的子包，glibc-dev 是 glibc 的。列表里
+          #   母包排在子包前面（glibc → glibc-dev），所以母包缺的时候会先把它
+          #   建出来、顺手产出全部子包，后面几个就都跳过了。
+          #
+          #   半个产出的情况也能自愈：如果 glibc 的 .apk 在、glibc-dev 的不在，
+          #   那么轮到 glibc-dev 时会真的去建 glibc（skirt 把子包名映射回母配方），
+          #   代价是白建一次，结果是齐的。
+          ARCH="${{ inputs.arch }}"
+          OUT="var/pkgs/$ARCH"
+          mkdir -p "$OUT"
+
+          built=0 skipped=0
           for p in ${{ inputs.packages }}; do
+            if ls "$OUT/$p-"*.apk >/dev/null 2>&1; then
+              echo "── 跳过 $p（已经有了）──"
+              skipped=$((skipped+1))
+              continue
+            fi
             echo "── 建 $p ──"
             ./skirt/skirt build "$p"
+            built=$((built+1))
           done
+          echo
+          echo "  这一轮建了 $built 个，跳过 $skipped 个"
+          echo "  $OUT 里现在有 $(ls "$OUT"/*.apk 2>/dev/null | wc -l | tr -d ' ') 个包"
 
       - name: 收集日志
         if: always()
