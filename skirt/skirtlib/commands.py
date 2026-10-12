@@ -124,6 +124,18 @@ def cmd_build(args) -> None:
     # 它构建的是「系统的形状」而不是软件，所以给它一个空的源码树。
     print()
     (BUILD_DIR / "src").mkdir(parents=True, exist_ok=True)
+    # ★ 先给默认值，再进分支。
+    #
+    #   原来是只在 `if spec.get("source")` 里面赋值，于是【纯元数据包】
+    #   （filesystem、pip 这类没有 [[source]] 的）走 else 分支，到了下面
+    #   run_in_container(..., unpack=unpack) 就报：
+    #
+    #       UnboundLocalError: cannot access local variable 'unpack'
+    #
+    #   ★ 这个错只在 CI 上暴露——本地建 pip 的时候 unpack 那个功能还没加，
+    #     等加完就没再建过 pip。所以修法不是"在 else 里补一句"，而是把默认
+    #     值放在分支外面：以后再加分支也不会忘。
+    unpack = True
     if spec.get("source"):
         archive = fetch(spec, arch)
         # ★ 不在宿主上解压。宿主是 macOS，APFS 默认大小写不敏感，而内核源码

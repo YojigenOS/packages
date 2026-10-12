@@ -23,6 +23,7 @@ import re
 import os
 import sys
 import tempfile
+import pathlib
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -264,3 +265,25 @@ class TestCollectPreservesModes(unittest.TestCase):
             self.assertEqual(oct(got_tmp), oct(0o1777),
                              "/tmp 的 1777 丢了——构建会以莫名其妙的 Permission denied 失败")
             self.assertEqual(oct(got_root), oct(0o700), "/root 的 0700 丢了")
+
+class TestMetadataOnlyPackages(unittest.TestCase):
+    """没有 [[source]] 的包也要能走完整条路。
+
+    ★ 这是 CI 上踩的：`unpack` 只在 `if spec.get("source")` 分支里赋值，于是
+      filesystem / pip 这类纯元数据包走 else，到
+      run_in_container(..., unpack=unpack) 就报
+
+          UnboundLocalError: cannot access local variable 'unpack'
+
+      本地没发现，因为建 pip 的时候 unpack 那个功能还没加，加完就没再建过它。
+    """
+
+    def test_unpack_defined_outside_the_source_branch(self):
+        src = (pathlib.Path(__file__).resolve().parents[1]
+               / "skirtlib" / "commands.py").read_text()
+        # 默认值必须在 `if spec.get("source")` 之前出现
+        i_default = src.index("unpack = True")
+        i_branch = src.index('if spec.get("source"):')
+        self.assertLess(i_default, i_branch,
+                        "unpack 的默认值要在 source 分支【之前】——否则纯元数据包会炸")
+
