@@ -116,7 +116,14 @@ jobs:
           export RCLONE_CONFIG_YOJIGEN_FORCE_PATH_STYLE=true
           export RCLONE_CONFIG_YOJIGEN_REGION=us-east-1
 
-          RCLONE="docker run --rm"
+          # ★ 容器里的 rclone 看不到宿主上的文件，所以挂一个目录进去。
+          #   （第一版漏了这一步；第二版把 -v 追加到了镜像名【后面】——
+          #     docker 的 -v 必须在镜像名之前，否则全被当成 rclone 的参数。）
+          PROBEDIR="$RUNNER_TEMP/probe"
+          mkdir -p "$PROBEDIR"
+          echo "probe $(date -u +%FT%TZ)" > "$PROBEDIR/probe.txt"
+
+          RCLONE="docker run --rm -v $PROBEDIR:/probe"
           for v in RCLONE_CONFIG_YOJIGEN_TYPE RCLONE_CONFIG_YOJIGEN_PROVIDER \
                    RCLONE_CONFIG_YOJIGEN_ENDPOINT RCLONE_CONFIG_YOJIGEN_ACCESS_KEY_ID \
                    RCLONE_CONFIG_YOJIGEN_SECRET_ACCESS_KEY RCLONE_CONFIG_YOJIGEN_FORCE_PATH_STYLE \
@@ -124,15 +131,6 @@ jobs:
             RCLONE="$RCLONE -e $v"
           done
           RCLONE="$RCLONE rclone/rclone"
-
-          # ★ 容器里的 rclone 看不到宿主上的文件，所以要挂一个目录进去。
-          #   （第一版就是漏了这一步，报 "directory not found"。）
-          PROBEDIR="$RUNNER_TEMP/probe"
-          mkdir -p "$PROBEDIR"
-          echo "probe $(date -u +%FT%TZ)" > "$PROBEDIR/probe.txt"
-
-          # 让 $RCLONE 带上这个挂载
-          RCLONE="$RCLONE -v $PROBEDIR:/probe"
 
           echo "── 桶根下有什么（最多两层）──"
           # ★ 命令替换失败会因为 bash -e 直接中断这一步，而且把错误吞掉。
