@@ -10,12 +10,23 @@
 # 可用的环境变量（由驱动注入）：$PKGDEST $PKGDIR $SRCDIR $WORK
 
 build() {
-    # 静态库 + 命令行工具
-    make
-
-    # ★ 共享库要单独构建。少了这一步，链接 libbz2 的东西会静默地静态链接
-    #   （libbz2.a 在、libbz2.so 不在，ld 就退回去用 .a）。
+    # ★ 顺序不能反：共享库【必须第一个建】。
+    #
+    #   Makefile-libbz2_so 指望那些 .o 是 -fPIC 编出来的，却和主 Makefile
+    #   共用同一批 .o 文件名。先跑 `make`（不带 -fPIC）的话，它会把旧 .o
+    #   当成"已最新"直接拿去链 .so，于是：
+    #
+    #       ld: blocksort.o: relocation R_X86_64_PC32 against symbol
+    #           `stderr@@GLIBC_2.2.5' can not be used when making a shared
+    #           object; recompile with -fPIC
+    #
+    #   ——又是只有 x86_64 会挂（aarch64 的代码本来就位置无关，碰巧能过）。
+    #   先建 .so 就对了：PIC 的 .o 拿去做静态库和可执行文件都没问题，
+    #   反过来不成立。
     make -f Makefile-libbz2_so
+
+    # 静态库 + 命令行工具（复用上面那批 PIC 的 .o）
+    make
 }
 
 package() {
