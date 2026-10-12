@@ -185,8 +185,22 @@ jobs:
       - name: 打包并签名
         run: |
           set -euo pipefail
-          # shellcheck disable=SC2086
-          ./scripts/pack.sh ${{ inputs.packages }} \
+          # ★ 用 --all 而不是把 inputs.packages 再列一遍。
+          #
+          # 因为【建包用配方名，打包要用产物名】，两者不一样：
+          #
+          #     skirt build glibc-locales  →  改为构建 glibc，产出 glibc、
+          #                                   glibc-dev、glibc-locales 三个目录
+          #     pack.sh glibc-locales      →  打那个子包（pack.sh 按产物目录找）
+          #
+          # 一个输入没法同时当这两者用——上面列 glibc-locales 会连带建出
+          # glibc-dev，但打包那步只打你列的。而 CI 的工作区是干净的，
+          # var/output 里【只有这一步之前建出来的东西】，所以 --all 恰好就是
+          # 「这次建的」。
+          #
+          # 这也让「建了什么就打什么」成为默认：不会因为忘了在输入里补一个
+          # 子包名，而产出一个装着主包、缺了子包的仓库。
+          ./scripts/pack.sh --all \
               --arch "${{ inputs.arch }}" \
               --sign-key "$SIGNING_KEY_FILE"
 

@@ -4,14 +4,14 @@
 # 这里只接管安装。
 
 package() {
-  # ★ 用 $SRCDIR 不是 $BUILDDIR。
+  # ★ 用 $SRCDIR 不是 ${BUILDDIR}。
   #
   # dash 是【在树内】构建的（spec.toml 的 [build] 没写 out_of_tree），所以
   # BUILDDIR 是空的——那是 out_of_tree 才有的变量。第一次就栽在这儿：
   #
   #     /build/steps.sh: line 7: cd: null directory
   #
-  # glibc 的 steps.sh 里用的是 $BUILDDIR，因为它开了 out_of_tree。照抄会错。
+  # glibc 的 steps.sh 里用的是 ${BUILDDIR}，因为它开了 out_of_tree。照抄会错。
   cd "$SRCDIR"
 
   make DESTDIR="$PKGDEST" install

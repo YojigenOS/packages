@@ -26,15 +26,27 @@ from .collect import collect
 def _recipe_spec(name: str) -> dict:
     """给 build / deps 用：只接受配方名。
 
-    子包没有自己的配方，它的文件是母配方一次构建出来的——收到子包名时
-    说清楚该怎么办，而不是丢一句「找不到配方」让人去猜。
+    子包没有自己的配方，它的文件是母配方一次构建出来的。收到子包名时
+    【自动换成母配方】，并说清楚换了什么。
+
+    ★ 为什么是"换"而不是"报错"。
+
+    风味定义（variants/*.toml）列的是【要装什么】，所以里面全是子包名：
+    glibc-locales、dash-binsh、glibc-dev…… 而 CI 想「按风味的列表建包」
+    时，那份列表没法直接用——每个子包都会被拒，而使用者未必知道哪个名字
+    是子包、它的母包叫什么。实测就栽在这儿：
+
+        ── 建 glibc-locales ──
+        skirt: 错误 glibc-locales 是 glibc 的子包，不能单独构建。
+
+    ★ 而关键在于：子包【只能】通过母包产出。所以「构建 dash-binsh」的
+      唯一合理解释就是「构建出 dash-binsh」——而那需要构建 dash。
+      这里不隐瞒这件事，而是把它说出来。
     """
     recipe = recipe_of(name)
     if recipe is not None and recipe != name:
-        die(
-            f"{name} 是 {recipe} 的子包，不能单独构建。\n"
-            f"       它由 {recipe} 一次产出的：skirt/skirt build {recipe}"
-        )
+        log("子包", f"{name} 由 {recipe} 产出 —— 按 {recipe} 处理")
+        return load_spec(recipe)
     return load_spec(name)      # 不认识的会在这里报「找不到配方」
 
 
