@@ -137,7 +137,7 @@ def make_build_script(spec: dict) -> str:
     )
 
 
-def run_in_container(srcrel: str, arch: str, spec: dict, epoch: int) -> None:
+def run_in_container(srcrel: str, srcname: str, arch: str, spec: dict, epoch: int) -> None:
     pkg = spec["package"]
     (BUILD_DIR / "sysroot").mkdir(parents=True, exist_ok=True)
     CCACHE_DIR.mkdir(parents=True, exist_ok=True)
@@ -337,7 +337,22 @@ def run_in_container(srcrel: str, arch: str, spec: dict, epoch: int) -> None:
         # 这也正是决策记录 0002 的意图：「整个构建过程发生在容器内的 Linux 原生
         # 文件系统里，只把源码送进去、把产物取出来」。源码以前是在宿主上就解开
         # 了，等于「送进去」之前已经被破坏过一次。
-        '[ -f /in/src.tar ] && tar -xf /in/src.tar -C "$WORK/src"\n'
+        # ★ 源码包可能是 tar，也可能是 zip（Python 的 wheel 就是 zip）。
+        #
+        #   容器里两个环境（Debian 的 buildenv、我们自己的 devel）都有 python3，
+        #   所以用它的 zipfile 模块解——不额外依赖 unzip。
+        #
+        #   tarfile 认不出 zip：实测它把 gz/bz2/xz/zst/tar 五种方法都试过，
+        #   最后报 "file could not be opened successfully"。
+        #
+        # ★ 写成单行 if/else。第一版用了多行 + 行尾反斜杠续行，结果
+        #   `python3 -m zipfile … \` 后面接 `else` 会把两行接成一行，
+        #   变成 `python3 … else tar …` —— 语法错误。续行符只在【确实要
+        #   续行】时用，命令之间的分界靠 `;`。
+        '[ -f /in/src.tar ] && { '
+        'if python3 -c "import zipfile,sys; sys.exit(0 if zipfile.is_zipfile(\'/in/src.tar\') else 1)" 2>/dev/null; '
+        'then python3 -m zipfile -e /in/src.tar "$WORK/src"; '
+        'else tar -xf /in/src.tar -C "$WORK/src"; fi; }\n'
         '[ -f /in/steps.sh ] && cp /in/steps.sh "$WORK/steps.sh"\n'
         '[ -d /in/pkg ] && cp -a /in/pkg "$WORK/pkg"\n'
         'cp /in/run.sh "$WORK/run.sh"\n'
@@ -349,6 +364,16 @@ def run_in_container(srcrel: str, arch: str, spec: dict, epoch: int) -> None:
         'setpriv --reuid="$HOSTUID" --regid="$HOSTGID" --clear-groups \\\n'
         '  env HOME="$WORK" \\\n'
         f'      PKGDEST="$WORK/dest" SRCDIR="$WORK/src/{srcrel}" \\\n'
+        # ★ SRCARCHIVE：原始归档的路径。
+        #
+        # 为什么需要它：不是所有源码都适合「解开再用」。Python 的 wheel 就是
+        # 例子——它的安装规则（.data/ 按 sysconfig 铺开、从 entry_points 生成
+        # 启动脚本、写 RECORD）是 pip 的职责，而 pip 要的是【那个 .whl 文件】，
+        # 不是解开的一棵树。
+        #
+        # 名字里的 src.tar 是历史遗留：它现在可能是 tar，也可能是 zip（wheel）。
+        # 判断方式在下面那段解压逻辑里，用 zipfile.is_zipfile 读魔数。
+        f'      SRCARCHIVE="/in/{srcname}" \\\n'
         '  bash "$WORK/run.sh"\n'
         "\n"
         + ccache_stats

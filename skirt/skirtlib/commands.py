@@ -137,8 +137,27 @@ def cmd_build(args) -> None:
         #   解压由容器做，那里是 Linux 原生文件系统。
         srcrel = srcrel_of(archive)
         shutil.copy2(archive, BUILD_DIR / "src.tar")
+        # ★ 再放一份【保持原文件名】的，硬链接到 src.tar（不占额外空间）。
+        #
+        # 为什么需要：有些工具【按文件名判断格式】，而且要求名字符合规范。
+        #
+        #   · pip 看到 .tar 就走 tar 分支解它，于是报
+        #       tarfile.ReadError: file could not be opened successfully
+        #   · 而 wheel 的文件名还必须在规范的位置上——
+        #       meson-1.12.1-py3-none-any.whl
+        #       名字-版本-python标签-abi标签-平台标签
+        #     叫 src.whl 会被拒：
+        #       ERROR: Invalid wheel filename (wrong number of parts): 'src'
+        #
+        # src.tar 这个名字是历史遗留（那时源码只有 tar）。现在它可能是 zip、
+        # 可能是 wheel，名字就成了误导。
+        named = BUILD_DIR / archive.name
+        if not named.exists():
+            named.hardlink_to(BUILD_DIR / "src.tar")
+        srcname = archive.name
     else:
         srcrel = "."
+        srcname = "src.tar"
         log("源码", "无（纯元数据包）")
 
     if steps.is_file():
@@ -154,7 +173,7 @@ def cmd_build(args) -> None:
     (BUILD_DIR / "run.sh").write_text(make_build_script(spec), encoding="utf-8")
 
     print()
-    run_in_container(srcrel, arch, spec, source_date_epoch(spec, arch, host_provides))
+    run_in_container(srcrel, srcname, arch, spec, source_date_epoch(spec, arch, host_provides))
 
     results = collect(spec, arch)
     print()

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import tarfile
+import zipfile
 import urllib.request
 from pathlib import Path
 
@@ -204,6 +205,26 @@ def fetch(spec: dict) -> Path:
         + "\n       ".join(errors))
 
 
+def _member_names(archive: Path) -> list[str]:
+    """读归档里的成员名 —— tar 和 zip 都行。
+
+    ★ 为什么需要 zip：Python 的 wheel 就是一个 zip。
+
+    meson 只以 wheel 的形式发布（PyPI 上的 meson-1.12.1-py3-none-any.whl），
+    而 tarfile 完全不认它——实测它把 gz/bz2/xz/zst/tar 五种方法都试了一遍，
+    最后报 "file could not be opened successfully"。所以只支持 tar 的话，
+    任何 Python 包都建不了。
+
+    判断方式用【内容】而不是扩展名：`.whl` 是约定，不是格式。zipfile.is_zipfile
+    读的是魔数。
+    """
+    if zipfile.is_zipfile(archive):
+        with zipfile.ZipFile(archive) as zf:
+            return zf.namelist()
+    with tarfile.open(archive) as tf:
+        return tf.getnames()
+
+
 def srcrel_of(archive: Path) -> str:
     """源码根目录的相对名（'.' 表示解压出来就是根）。
 
@@ -226,8 +247,7 @@ def srcrel_of(archive: Path) -> str:
     解压本身挪进容器（见 build.py 里 wrapper 的注释），那里是 Linux 原生
     文件系统，大小写敏感。
     """
-    with tarfile.open(archive) as tf:
-        names = tf.getnames()
+    names = _member_names(archive)
     tops = {n.split("/")[0] for n in names if n and not n.startswith("/")}
     if len(tops) == 1:
         top = tops.pop()

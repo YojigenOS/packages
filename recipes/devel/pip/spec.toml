@@ -1,0 +1,51 @@
+# pip —— Python 的包安装器
+#
+# ── 为什么需要它 ──────────────────────────────────────────────────────────
+#
+# Python 生态的包用 wheel 分发，而【装 wheel 不是解 zip】：
+#
+#     · 主体进 site-packages/
+#     · wheel 里的 .data/ 要按 sysconfig 的路径铺开（脚本进 bin/、数据进
+#       share/、头文件进 include/…）
+#     · 还要生成 entry_points 对应的启动脚本、写 dist-info/RECORD
+#
+# 自己实现这些就等于重写 pip 的一部分——而项目里那条约定是「只借格式和
+# 工具，不借包」（决策记录 0006）。所以这里【用 Python 自带的工具】。
+#
+# ── 为什么它没有 [[source]] ───────────────────────────────────────────────
+#
+# 因为要装的东西【已经在 python3 里了】：ensurepip 是标准库的一部分，
+# 它自带一份 pip 的 wheel：
+#
+#     /usr/lib/python3.14/ensurepip/_bundled/pip-26.2.1-py3-none-any.whl
+#
+# 所以这个包不下载任何东西，只是把那份 wheel 装到该在的位置。它不是
+# 「纯元数据包」（filesystem 那种），而是「装一件已经在本机的东西」。
+#
+# ★ 代价：这个包的版本【跟着 python3 走】。python3 升级之后 ensurepip 里
+#   那份 pip 也会变，而这个包不会自动跟着——所以下面是实测出来的版本号，
+#   将来重建时要对一下。这不是缺陷，是"借来的工具"这件事的必然。
+
+[package]
+name        = "pip"
+version     = "26.2.1"
+release     = 1
+date        = 2026-10-12T15:30:00Z
+description = "Python 包安装器（来自 python3 自带的 ensurepip）"
+section     = "devel"
+url         = "https://pip.pypa.io/"
+license     = "MIT"
+
+# 无 [[source]]：东西在 python3 里，不需要下载。
+
+[dependencies]
+runtime = ["python3"]
+# ★ 构建只要 python3 —— 没有编译，ensurepip 装的是现成的 wheel。
+build   = ["python3"]
+
+[dependencies.x86_64]
+runtime = ["python3"]
+build   = ["python3"]
+
+[build]
+type = "custom"

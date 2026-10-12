@@ -1,0 +1,58 @@
+# ninja —— 小巧的构建系统
+#
+# meson 的后端。meson 自己生成 build.ninja，然后交给 ninja 执行。
+# 所以这个包是【meson 的前置】。
+#
+# ── 为什么不用 samurai ────────────────────────────────────────────────────
+#
+# samurai 是一个 C 写的 ninja 克隆（Alpine 整个发行版用它）。它确实更省：
+#
+#     samurai   67 KB  只依赖 libc
+#     ninja    331 KB  依赖 libstdc++.so.6 · libgcc_s.so.1
+#
+# 而且它自报版本 1.9，满足 meson 要的 >= 1.6。
+#
+# ★ 但还是用官方版：它是 meson 默认要的那个，兼容性有保证。samurai 以后可以
+#   单独做成一个包，让人自己选。这和「用 glibc 不用 musl」是同一类取舍——
+#   省下来的那点体积不值得换一个非官方实现。
+#
+# ── self-bootstrap ────────────────────────────────────────────────────────
+#
+# ninja 自带 configure.py，它的 --bootstrap 说明写着
+# "bootstrap a ninja binary from nothing"：用 python3 + C++ 编译器直接
+# 编译出 ninja，不需要已有的 ninja。实测可行（8.7 MB 的二进制）。
+#
+# 所以它【不依赖 meson 也不依赖 ninja 自己】——构建链在这里就到底了。
+
+[package]
+name        = "ninja"
+version     = "1.13.1"
+release     = 1
+date        = 2026-10-12T15:40:00Z
+description = "小巧的构建系统（meson 的后端）"
+section     = "devel"
+url         = "https://ninja-build.org/"
+license     = "Apache-2.0"
+
+[[source]]
+url    = "https://github.com/ninja-build/ninja/archive/refs/tags/v1.13.1.tar.gz"
+sha256 = "f0055ad0369bf2e372955ba55128d000cfcc21777057806015b45e4accbebf23"
+
+[dependencies]
+# ★ 运行时其实还要 libstdc++.so.6 和 libgcc_s.so.1（它是 C++ 写的）。
+#   但那两个库现在【还没有自己的包】——它们在 gcc 包里（256 MB）。
+#   等 gcc 拆出 libstdc++ 子包之后再加进来。在那之前，任何带 gcc 的
+#   环境（比如 devel）里它都能跑。
+#
+# ★ 这也是「依赖声明靠人写」的一个例子：如果没有 so: 的自动生成，
+#   这里漏掉什么都不会有人发现，直到运行时炸。
+runtime = ["glibc"]
+# g++ 在 gcc 包里。
+build   = ["python3", "gcc"]
+
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["python3", "gcc"]
+
+[build]
+type = "custom"

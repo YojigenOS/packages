@@ -1,0 +1,51 @@
+# meson —— 构建系统
+#
+# apk-tools 用它构建（上游只有 meson 这一条路）。
+#
+# ── 为什么 source 是 wheel 而不是 tarball ─────────────────────────────────
+#
+# meson 在 PyPI 上同时发布 sdist（.tar.gz）和 wheel（.whl）。这里用 wheel：
+#
+#   sdist  tar.gz  2,524,665 字节  ← 要从源码构建，需要 setuptools，构建时要联网
+#   wheel  .whl    1,108,668 字节  ← ★ 装好的东西，直接铺开就行
+#
+# ★ 用 wheel 就不需要【构建时联网拿构建依赖】，也不需要 setuptools。
+#   而版本和内容由 sha256 钉住——比"每次去 PyPI 解析依赖"可复现得多。
+#
+# ── 它的依赖 ──────────────────────────────────────────────────────────────
+#
+# PyPI 上 meson 的 requires_dist 全是 extras（ninja / tqdm / mypy），
+# 基础依赖是空的。所以 `pip install --no-deps` 完全安全。
+#
+# 运行时它要 ninja —— 那是真的依赖，写在下面。
+#
+# ── 这个包顺便验证了 skirt 的一个新能力 ──────────────────────────────────
+#
+# wheel 是 zip，而 skirt 原来只会用 tarfile 解源码。实测 tarfile 对它
+# 五种压缩方法全试一遍之后报 "file could not be opened successfully"。
+# 所以这次给 source 处理加了 zip 支持（见 skirtlib/source.py 的 _member_names）。
+
+[package]
+name        = "meson"
+version     = "1.12.1"
+release     = 1
+date        = 2026-10-12T16:00:00Z
+description = "构建系统（apk-tools 用它构建）"
+section     = "devel"
+url         = "https://mesonbuild.com/"
+license     = "Apache-2.0"
+
+[[source]]
+url    = "https://files.pythonhosted.org/packages/57/99/36cd25f9598eef70db97577440a70a360af505f6f01c2338a18d1556079c/meson-1.12.1-py3-none-any.whl"
+sha256 = "930bc7542cbd9f57009e182fd014eba48cf1a0180a7b9006d2d32d8f168d8b02"
+
+[dependencies]
+runtime = ["python3", "ninja"]
+build   = ["python3", "pip"]
+
+[dependencies.x86_64]
+runtime = ["python3", "ninja"]
+build   = ["python3", "pip"]
+
+[build]
+type = "custom"
