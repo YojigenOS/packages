@@ -133,6 +133,13 @@ fields = [
     ("depends",     " ".join(m.get("depends") or [])),
 ]
 
+# provides / provider-priority：这个包提供什么虚名（比如 /bin/sh）。
+# 空值不要传——mkpkg 对空字符串会报错，所以下面统一过滤。
+if m.get("provides"):
+    fields.append(("provides", " ".join(m["provides"])))
+if m.get("provider_priority") is not None:
+    fields.append(("provider-priority", str(m["provider_priority"])))
+
 # ★ 签名必须在这里做——包建出来就是签好的。
 #   不然后面 mkndx 建索引时会逐个验证，全部报 UNTRUSTED signature，
 #   然后拒绝建索引（"14 errors, not creating index"）。

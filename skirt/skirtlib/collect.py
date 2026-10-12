@@ -180,6 +180,26 @@ def collect(spec: dict, arch: str) -> list[tuple[Path, int]]:
             # 子包依赖主包：它的文件是主包的一部分，单独装没有意义。
             sub_depends = [pkg["name"]] + [d for d in runtime if d != pkg["name"]]
 
+        # ── provides / provider-priority ────────────────────────────────
+        #
+        # 「这个包提供什么【路径或虚名】」。apk 用它解析对虚包的依赖。
+        #
+        # 为什么需要它：/bin/sh 这种东西，哪个包提供【不该写死在某个包里】。
+        # 我们原来让 filesystem 提供 /bin/sh → bash。那意味着所有系统都只能
+        # 是 bash，换不了。而 Alpine 的做法是：
+        #
+        #     dash-binsh     provides="/bin/sh"  provider-priority=60
+        #     bash-binsh     provides="/bin/sh"  provider-priority=…
+        #     busybox-binsh  provides="/bin/sh"  provider-priority=…
+        #
+        # 装哪个由【风味】决定，不装就没有。
+        #
+        # ★ provider-priority 是【数字大的优先】（实测：90 赢了 60 和 30）。
+        #   名字里带横线——mkpkg 收 provider-priority，不收 provider_priority。
+        src = sub if sub else pkg
+        provides = src.get("provides") or []
+        priority = src.get("provider-priority", src.get("provider_priority"))
+
         out = OUTPUT_DIR / arch / package_rel(name, pkg["version"], pkg["release"])
         _write_package(out, destdir, {e["path"].rstrip("/") for e in entries})
 
@@ -198,6 +218,10 @@ def collect(spec: dict, arch: str) -> list[tuple[Path, int]]:
             "built_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
             "files": entries,
         }
+        if provides:
+            meta["provides"] = list(provides)
+        if priority is not None:
+            meta["provider_priority"] = priority
         (out / "meta.json").write_text(
             json.dumps(meta, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         results.append((out, len(entries)))

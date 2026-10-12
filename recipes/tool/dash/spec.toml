@@ -1,0 +1,64 @@
+# dash —— Debian Almquist Shell
+#
+# 从 NetBSD 的 ash 来的，只实现 POSIX 定义的那套 shell 语言，别的没有。
+# 195 KB，起得比 bash 快好几倍。
+#
+# ── 为什么要有它 ──────────────────────────────────────────────────────────
+#
+# 为的是 /bin/sh 指向谁这件事。原来 filesystem 直接建 /bin/sh → bash，
+# 那意味着【所有系统都只能是 bash】——换不了。
+#
+# 而 /bin/sh 指向 bash 有个副作用：写 #!/bin/sh 的脚本会偷偷用上 bash 扩展，
+# 在别的系统上（Debian 的 /bin/sh 是 dash）当场炸。那是个可移植性陷阱，而
+# 制造陷阱的正是我们这一侧。
+#
+# Debian 1999 年把 /bin/sh 从 bash 换成 dash，主要理由就是这个——不是性能，
+# 是【纪律】：只要 /bin/sh 是 bash，大家就会用扩展。
+#
+# 所以这里不硬编码，而是让「谁提供 /bin/sh」变成可选的：
+#
+#     dash-binsh   provides="/bin/sh"   ← 这个包（下面是子包）
+#     bash-binsh   provides="/bin/sh"   ← 将来要的话照这个写
+#
+# 装哪个由【风味】决定。apk 支持 provides，多个提供者时按 provider-priority
+# 选，也可以明确指定。
+#
+# ── 关于 /bin/sh 的位置 ───────────────────────────────────────────────────
+#
+# usr-merge 之后 /bin 是个指向 usr/bin 的符号链接，所以 /bin/sh 就是
+# usr/bin/sh。子包收的是 usr/bin/sh 这个路径。
+
+[package]
+name        = "dash"
+version     = "0.5.13.5"
+release     = 1
+date        = 2026-10-12T13:20:00Z
+description = "POSIX shell（/bin/sh 指向它）"
+section     = "base"
+url         = "http://gondor.apana.org.au/~herbert/dash/"
+license     = "BSD-3-Clause AND GPL-2.0-or-later"
+
+[[source]]
+url    = "http://gondor.apana.org.au/~herbert/dash/files/dash-$VERSION.tar.gz"
+sha256 = "40090101a2a491f13e901d3d48e90414f26634628b9bfff35ff540363c227a7d"
+
+[dependencies]
+runtime = ["glibc"]
+# 上游 tarball 里带着 configure（是 autotools 的发行包，不是 git 树），
+# 所以不需要 autoconf/automake。也没有 NLS，不需要 gettext。
+build   = ["make", "gcc"]
+
+[build]
+type      = "autotools"
+configure = ["--prefix=/usr", "--sysconfdir=/etc"]
+
+[[subpackage]]
+name        = "dash-binsh"
+description = "让 /bin/sh 指向 dash"
+section     = "base"
+files       = ["usr/bin/sh"]
+# ★ apk 用 provides 解析对虚包的依赖。这个字符串是那个"路径即虚包"的名字。
+provides    = ["/bin/sh"]
+# ★ 数字【大】的优先（实测：90 赢了 60 和 30）。
+#   将来加 bash-binsh 时给它一个更小的数，dash 就还是默认。
+provider-priority = 100

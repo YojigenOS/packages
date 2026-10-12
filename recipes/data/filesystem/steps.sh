@@ -54,10 +54,31 @@ package() {
   # 见 docs/决策记录/0001。
   ln -s lib "$d/usr/lib64"
 
-  # /bin/sh —— 大量的构建脚本和 configure 都要求它存在。
-  # 指向 bash（用 bash 的 POSIX 模式），Arch/Fedora 也是这个做法。
-  # 将来若要更严格的 POSIX shell，可以另建 dash 包并改指向。
-  ln -s bash "$d/usr/bin/sh"
+  # ── /bin/sh：不在这里建 ────────────────────────────────────────────────
+  #
+  # 这段原来写的是：
+  #
+  #     ln -s bash "$d/usr/bin/sh"
+  #
+  # 加上一句注释说「将来若要更严格的 POSIX shell，可以另建 dash 包并改指向」。
+  # 现在照做了，但做法【不是"改指向"】，而是把它整个搬出去。
+  #
+  # ★ 为什么搬出去：/bin/sh 指向谁是【一个策略选择】，不该写死在 filesystem
+  #   里。写死意味着这个系统的 sh 永远是 bash，换不了；而且它会让人写出
+  #   偷偷用了 bash 扩展、却在别的系统上炸的 #!/bin/sh 脚本——陷阱是我们
+  #   这一侧造的。
+  #
+  # ★ 现在由 dash-binsh 提供（provides="/bin/sh"，provider_priority=100）。
+  #   装哪个 binsh 包由【风味】决定：
+  #
+  #     dash-binsh   →  /bin/sh 是 POSIX shell，脚本真的可移植
+  #     bash-binsh   →  /bin/sh 是 bash（将来要的话照 dash 那个写一个）
+  #
+  # ★ apk 的 provides 机制负责解析：谁声明了 provides="/bin/sh"，谁就能满足
+  #   对 /bin/sh 的依赖。多个提供者时按 provider_priority 选（数字大的优先），
+  #   也可以明确指定装哪一个。
+  #
+  # 所以这里【什么都不做】——filesystem 只搭目录骨架和 /etc 基础文件。
 
   # ------------------------------------------------------------- /etc 基础文件
   cp -a "$PKGDIR/files/etc/." "$d/etc/"
