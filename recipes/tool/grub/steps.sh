@@ -33,22 +33,29 @@ grub_moddir() {
 }
 
 build() {
-    # ── 摘掉构建环境 CFLAGS 里的 -fcf-protection ─────────────────────────
+    # ── 把我们构建环境的 CFLAGS 整条挡在门外 ─────────────────────────────
     #
-    # 它是 x86_64 的 CET 加固特性；而 i386-pc 的模块是【32 位目标】，cc1 直接
-    # 拒绝（实测，就是它挡住了第一次构建）：
-
+    # 这一条踩了两次，两次报错都不是"缺依赖"，而是同一个病因：
+    # 构建环境的 CFLAGS 是【宿主】的口味，而 GRUB 的模块是 freestanding 的
+    # 目标代码——它自己那套标志才是对的。而且我们的 CFLAGS 排在后面，会
+    # 覆盖掉 GRUB 自己的选择。
+    #
+    # 第一次：-fcf-protection（x86_64 的 CET 加固）。32 位目标直接拒绝：
+    #
     #     cc1: error: '-fcf-protection' is not compatible with this target
-    #     make[3]: *** [Makefile:48701: trig_module-trigtables.o] Error 1
     #
-    # ★ 这不是"缺 multilib"。32 位的模块编译一路都是好的——GRUB 是
-    #   freestanding 的（不链 libc），所以根本不需要 32 位 glibc。真正的问题
-    #   是【我们构建环境的 CFLAGS 里有一条只对 x86_64 成立的标志】。
+    # 第二次（只摘掉上面那一条之后）：-fstack-protector-strong 活了下来，
+    # 而它排在 GRUB 的 -fno-stack-protector 后面，于是把后者覆盖了：
     #
-    #   所以只摘这一条，其余加固标志（-fstack-protector-strong、FORTIFY）留着
-    #   ——grub-install 那些工具是要发出去的。
-    CFLAGS=$(echo "${CFLAGS:-}" | sed 's/-fcf-protection[^ ]*//g')
-    export CFLAGS
+    #     ... -fno-stack-protector -Wtrampolines ... -fstack-protector-strong ...
+    #     undefined reference to `__stack_chk_fail'
+    #
+    # 那个符号在 -nostdlib 的链接里根本不存在。所以不是"再摘一条"，而是
+    # 【整条 CFLAGS 都不该进来】。
+    #
+    # ★ LDFLAGS 留着：它不参与目标链接的符号解析（-z relro -z now 在两种
+    #   链接里都成立），而 grub-install 那些要发出去的工具还需要它。
+    unset CFLAGS
 
     mkdir -p "$WORK/build"
     for t in $(grub_targets); do
