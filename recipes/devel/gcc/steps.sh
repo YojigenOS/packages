@@ -53,9 +53,31 @@ build() {
   #
   # 这两个是兜底：构建环境里的 CFLAGS 管大多数包，但有些包的构建系统会
   # 忽略环境 CFLAGS，编译器自己的默认值能兜住它们。
+  # ★ --host 和 --target 都要传，这是【最关键】的一个包。
+  #
+  #   gcc 的三元组不只出现在 --version 里，它还在【路径】里：
+  #
+  #       /usr/lib/gcc/<三元组>/
+  #       /usr/libexec/gcc/<三元组>/
+  #       /usr/bin/<三元组>-gcc
+  #       /usr/include/c++/<版本>/<三元组>/
+  #
+  #   不传的话 config.guess 给出 aarch64-unknown-linux-gnu，那些路径就带着
+  #   "unknown"。实测它出现在 11 个路径和 37 个文件的内容里。
+  #
+  #   ★ 值从 $PKGTRIPLE 来（驱动注入），不在这里拼——规则的定义在
+  #     skirtlib/common.py 的 target_triple，只有那一处。
+  #
+  #   ★ 为什么 --host 和 --target 都传：gcc 是交叉编译器，它会区分
+  #     「跑在哪」（host）和「给谁生成代码」（target）。本机构建时两者相同，
+  #     但省略任一个都会让那一段退回 config.guess。
+  #
+  #   autotools 类型的包不用管这个——驱动层会无条件加 --host（37 个包共用）。
   "$SRCDIR/configure" \
     --prefix=/usr \
     --libdir=/usr/lib \
+    --host="$PKGTRIPLE" \
+    --target="$PKGTRIPLE" \
     --enable-languages=c,c++ \
     --enable-shared \
     --enable-threads=posix \

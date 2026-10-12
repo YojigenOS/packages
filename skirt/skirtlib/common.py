@@ -64,6 +64,45 @@ ARCH_ALIASES = {
 
 # --------------------------------------------------------------- 基础工具
 
+
+def target_triple(arch: str) -> str:
+    """目标三元组（GNU 的 cpu-vendor-os-libc 四段式）。
+
+    ★ 为什么需要它 ────────────────────────────────────────────────────────
+
+    config.guess 不认识 YojigenOS，就把 vendor 段填成 "unknown"：
+
+        bash --version      → GNU bash, version 5.3.0(1)-release
+                              (aarch64-unknown-linux-gnu)
+        gcc -dumpmachine    → aarch64-unknown-linux-gnu
+        gcc 的路径          → /usr/lib/gcc/aarch64-unknown-linux-gnu/
+
+    ★ 其他发行版怎么做的（实测）：
+
+        Debian    bash=aarch64-unknown-linux-gnu  gcc=aarch64-linux-gnu   ← 不一致
+        Alpine    bash=aarch64-alpine-linux-musl  gcc=aarch64-alpine-linux-musl
+        Fedora    bash=aarch64-redhat-linux-gnu   gcc=aarch64-redhat-linux
+        Gentoo    bash=aarch64-unknown-linux-gnu  gcc=aarch64-unknown-linux-gnu
+
+      所以"要不要用自己的名字"是发行版的选择（Gentoo 就保留了 unknown），
+      但【bash 和 gcc 说同一个】是通例——四个里三个符合。理由很实在：
+      gcc -dumpmachine 的输出会被构建系统读，它和 shell 说的不一样会让
+      按三元组判断平台的脚本困惑。
+
+    ★ 为什么是 yojigen 而不是 yojigenos ─────────────────────────────────
+
+      · 三元组会出现在【路径和文件名】里：
+            /usr/bin/aarch64-yojigen-linux-gnu-gcc
+            /usr/lib/gcc/aarch64-yojigen-linux-gnu/
+        短一点有实际价值。
+      · vendor 段的惯例就是短组织名：redhat / alpine / suse / apple / pc。
+      · 和 os-release 的 ID=yojigenos 不冲突——Fedora 也是 ID=fedora 而
+        三元组用 redhat。
+
+    ★ 实测 config.sub 原样接受它（aarch64 和 x86_64 都接受），不会被归一化。
+    """
+    return f"{arch}-yojigen-linux-gnu"
+
 def log(stage: str, msg: str) -> None:
     print(f"\033[1m[{stage}]\033[0m {msg}", flush=True)
 

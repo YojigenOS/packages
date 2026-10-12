@@ -7,7 +7,7 @@ import os
 import subprocess
 
 from .common import (BUILDENV_IMAGE, BUILD_DIR, CCACHE_DIR, CCACHE_MAXSIZE,
-                     CCACHE_MOUNT, build_jobs, die, log)
+                     CCACHE_MOUNT, build_jobs, die, log, target_triple)
 
 from .spec import expand
 
@@ -94,7 +94,20 @@ def make_build_script(spec: dict, arch: str = "") -> str:
     LIBDIR = "--libdir=/usr/lib"
 
     if kind == "autotools":
-        opts = " ".join(b.get("configure", ["--prefix=/usr", LIBDIR]))
+        opts_list = list(b.get("configure", ["--prefix=/usr", LIBDIR]))
+        # ★ --host 无条件加，写在这里而不是每个配方里。
+        #
+        #   37 个 autotools 配方各写一遍就等于写 37 遍，而写 37 遍就会有人忘。
+        #   这和上面 LIBDIR 的理由是同一个（见决策记录 0001 的那段说明）。
+        #
+        #   不传 --host 时 configure 会跑 config.guess，而它不认识 YojigenOS，
+        #   于是 bash --version 显示 aarch64-unknown-linux-gnu。
+        #
+        #   ★ 留了覆盖的口子：配方自己写了 --host= 就不加。交叉编译之类的
+        #     场合需要它。
+        if not any(o.startswith("--host=") for o in opts_list):
+            opts_list.append(f"--host={target_triple(arch)}")
+        opts = " ".join(opts_list)
         if oot:
             body = ('  mkdir -p "$BUILDDIR"\n'
                     '  cd "$BUILDDIR"\n'
@@ -440,6 +453,11 @@ def run_in_container(srcrel: str, srcname: str, arch: str, spec: dict, epoch: in
         "-e", f"HOSTUID={os.getuid()}",
         "-e", f"HOSTGID={os.getgid()}",
         "-e", f"PKGARCH={arch}",
+        # ★ 目标三元组也注入。规则的定义在 common.target_triple，
+        #   这里只是把它送进容器——steps.sh 不该自己拼字符串，那会把规则
+        #   散到第二个地方。gcc 的 steps.sh 需要它（它是 custom 类型，
+        #   驱动层加不了 --host）。
+        "-e", f"PKGTRIPLE={target_triple(arch)}",
         "-e", f"PKGNAME={pkg['name']}",
         "-e", f"PKGVER={pkg['version']}",
         "-e", f"MAKEFLAGS=-j{jobs}",

@@ -3,8 +3,15 @@
 [package]
 name        = "bash"
 version     = "5.3"
-release     = 1
-date        = 2026-10-10T06:39:12Z
+# ★ release 2：三元组从 aarch64-unknown-linux-gnu 改成 aarch64-yojigen-linux-gnu。
+#
+#   改的是【二进制里的字符串】——bash --version 和 $MACHTYPE 都会变。所以
+#   内容变了，版本号就必须跟着走，否则 apk 认为它和已装的那个是同一个包。
+#
+#   这是第一个用上新三元组的包。其余 autotools 包会在下次重建时跟上——驱动层
+#   已经会无条件加 --host 了（37 个包共用那一处）。
+release     = 2
+date        = 2026-10-12T18:00:00Z
 description = "Bourne Again Shell，命令行解释器"
 section     = "base"
 url         = "https://www.gnu.org/software/bash/"
