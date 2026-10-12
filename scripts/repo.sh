@@ -96,7 +96,21 @@ if [ -n "${S3_BASE_URL:-}" ] && [ -n "${S3_BUCKET:-}" ] && [ -n "${S3_AK:-}" ]; 
     echo
     echo "  拉回线上已有的包…"
     # shellcheck disable=SC2086
+    #
+    # ★ --user：rclone 必须以【宿主的 uid/gid】跑。
+    #
+    # 否则它拉下来的文件属主是 root，而调用方（CI 的 runner 用户）不是
+    # root——下一步的 `cp "$PKGS"/*.apk "$REPO/"` 要覆盖这些文件，
+    # 会直接 Permission denied：
+    #
+    #     cp: cannot create regular file '.../filesystem-1.0-r1.apk': Permission denied
+    #
+    # ★ 这个坑只在【线上已经有同名包】时才会踩到：
+    #   第一次发某个包时 var/repo 里没有它，cp 是新建，root 属主无所谓；
+    #   第二次发同一个包（或者线上有、本地也要有）才需要覆盖，那时才炸。
+    #   实测就是：发 sed 那次过了，发 base 这次挂在 filesystem/glibc/sed。
     docker run --rm -v "$REPO:/repo" \
+        --user "$(id -u):$(id -g)" \
         -e RCLONE_CONFIG_YOJIGEN_TYPE=s3 \
         -e RCLONE_CONFIG_YOJIGEN_PROVIDER=Other \
         -e RCLONE_CONFIG_YOJIGEN_ENDPOINT="$S3_BASE_URL" \
