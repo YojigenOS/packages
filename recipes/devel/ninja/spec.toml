@@ -39,19 +39,26 @@ url    = "https://github.com/ninja-build/ninja/archive/refs/tags/v1.13.1.tar.gz"
 sha256 = "f0055ad0369bf2e372955ba55128d000cfcc21777057806015b45e4accbebf23"
 
 [dependencies]
-# ★ 运行时其实还要 libstdc++.so.6 和 libgcc_s.so.1（它是 C++ 写的）。
-#   但那两个库现在【还没有自己的包】——它们在 gcc 包里（256 MB）。
-#   等 gcc 拆出 libstdc++ 子包之后再加进来。在那之前，任何带 gcc 的
-#   环境（比如 devel）里它都能跑。
+# ★ 它是 C++ 写的，NEED libstdc++.so.6 和 libgcc_s.so.1。
 #
-# ★ 这也是「依赖声明靠人写」的一个例子：如果没有 so: 的自动生成，
-#   这里漏掉什么都不会有人发现，直到运行时炸。
-runtime = ["glibc"]
+#   那两个库在 gcc 包里（256 MB），所以 gcc 拆出了两个运行时子包：
+#
+#       libgcc      133 KB
+#       libstdc++   2.8 MB
+#
+#   一共 2.9 MB，而不是 256 MB 的 89 分之一都不到。
+#
+# ★ 这几个依赖【本该】由 so: 自动推导出来：ninja 的 ELF 里明明白白写着
+#   NEEDED libstdc++.so.6。但 mkpkg 不扫描 ELF（实测它建出来的包 provides
+#   和 depends 都是空的；Alpine 的 so: 是 abuild + scanelf 生成的）。
+#   所以在那件事做出来之前只能手写，而手写就会漏——gawk 缺 libmpfr 就是
+#   这么来的。见 docs/记录/未声明依赖的审计.md。
+runtime = ["glibc", "libstdc++", "libgcc"]
 # g++ 在 gcc 包里。
 build   = ["python3", "gcc"]
 
 [dependencies.x86_64]
-runtime = ["glibc"]
+runtime = ["glibc", "libstdc++", "libgcc"]
 build   = ["python3", "gcc"]
 
 [build]

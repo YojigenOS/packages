@@ -53,3 +53,48 @@ build   = ["make", "gmp", "mpfr", "mpc"]
 # 需要在构建中途插一步。声明式表达不了，全部放进 steps.sh。
 # 构建方式仍是 autotools（且必须是离开源码树的），见 steps.sh。
 type = "custom"
+
+# ── 运行时库的子包 ────────────────────────────────────────────────────────
+#
+# gcc 这个主包是 256 MB（头文件、静态库、编译器本体）。而它里面真正
+# 【运行时】需要的只有两个文件，加起来 2.8 MB：
+#
+#     /usr/lib/libgcc_s.so.1        133,712 字节
+#     /usr/lib/libstdc++.so.6.0.36  2,829,848 字节
+#
+# 差 89 倍。所以任何需要 C++ 运行时的东西（比如 ninja），都不该为了这两个
+# 文件把 256 MB 拖进来。
+#
+# ★ 这三个子包一次解决三件事：
+#
+#   ① base 缺 libgcc_s。对比 debian:stable-slim 时发现的——我们的 base
+#      里没有任何 C++ 程序能跑。
+#   ② 官方 ninja 是 C++ 写的，它 NEED libstdc++.so.6 和 libgcc_s.so.1。
+#      没有 libstdc++ 子包，ninja 的依赖只能写 "gcc"，而那是 256 MB。
+#   ③ 顺带：任何用 C++ 写的包都会遇到同样的问题。
+#
+# ── 关于通配 ──────────────────────────────────────────────────────────────
+#
+# `*` 不跨 `/`（见 collect.py 的 _glob），所以 `usr/lib/libstdc++.so.6*`
+# 匹配 `.so.6` 和 `.so.6.0.36`，但【不】匹配 `usr/lib/libstdc++.so`——
+# 最后那个是给链接器用的开发文件，不该在运行时包里。
+#
+# ★ 不写死版本号（.6.0.36）：那会随 gcc 升级而变，而写死的后果是升级之后
+#   子包突然收不到文件，产出一个"能装但跑不起来"的包。
+#
+# ★ 子包匹配是【第一个匹配的获胜】，所以顺序有意义——这里三个的模式互不
+#   重叠，但将来加东西时要留意。
+
+[[subpackage]]
+name        = "libgcc"
+description = "GCC 的运行时库（libgcc_s.so.1）"
+section     = "libs"
+# .so.1 是运行时；.so 是给链接器的符号链接（132 字节），也一并收着——
+# 有些构建会直接 -lgcc_s。
+files       = ["usr/lib/libgcc_s.so.1", "usr/lib/libgcc_s.so"]
+
+[[subpackage]]
+name        = "libstdc++"
+description = "GCC 的 C++ 标准库（libstdc++.so.6）"
+section     = "libs"
+files       = ["usr/lib/libstdc++.so.6*"]
