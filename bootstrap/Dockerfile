@@ -53,6 +53,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libtool \
         m4 \
         gettext \
+        # ★ autopoint 是【独立的包】——Debian 的 gettext 里没有它，但
+        #   autoreconf 要靠它生成 build-aux/config.rpath。
+        #
+        #   实测踩过：xz 用 git 源（没有预生成的 configure），配方写了
+        #   autoreconf = true。autoreconf -fi 在找不到 autopoint 时【静默跳过】
+        #   那一步，然后 automake 才报：
+        #
+        #       configure.ac:876: error: required file 'build-aux/config.rpath' not found
+        #
+        #   那句报错完全指不到真正的原因。上游 xz 的 autogen.sh 里是显式写的
+        #   `autopoint -f`，注释还说那六行"almost identical to autoreconf -fi
+        #   but faster"——差别就在这一步没被跳过。
+        autopoint \
         bison \
         flex \
         gawk \

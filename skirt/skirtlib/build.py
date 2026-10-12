@@ -64,8 +64,27 @@ def make_build_script(spec: dict, arch: str = "") -> str:
     #
     # 放在补丁之后、configure 之前：有些补丁就是改 configure.ac 的。
     if b.get("autoreconf"):
-        header += ('echo "[autoreconf] 生成 configure 和 Makefile.in"\n'
-                   'autoreconf -fi\n')
+        # ★ 先查 autopoint。
+        #
+        #   autoreconf 需要 autopoint 时会【静默跳过】它——找不到也不报错——
+        #   然后 automake 才失败，报的是缺 build-aux/config.rpath。那句话
+        #   完全指不到真正的原因（实测为此查了一阵）。
+        #
+        #   而 Debian 的 autopoint 是独立的包：装了 gettext 也没有它。
+        #
+        #   所以这里把静默变成响亮：项目要 gettext 而环境里没有 autopoint 时，
+        #   当场说清楚缺什么、为什么、怎么补。
+        header += (
+            'if grep -qs "AM_GNU_GETTEXT" configure.ac \\\n'
+            '   && ! command -v autopoint >/dev/null 2>&1; then\n'
+            '  echo "[autoreconf] configure.ac 用了 AM_GNU_GETTEXT，但环境里没有 autopoint。" >&2\n'
+            '  echo "  autoreconf 会静默跳过那一步，然后 automake 报缺 build-aux/config.rpath——" >&2\n'
+            '  echo "  那个报错指不到这里。装上 autopoint（Debian 里它是独立的包，gettext 不含它）。" >&2\n'
+            '  exit 1\n'
+            'fi\n'
+            'echo "[autoreconf] 生成 configure 和 Makefile.in"\n'
+            'autoreconf -fi\n')
+
 
     # 补丁：源码树就位之后、configure 之前应用。
     # 路径相对配方目录，配方目录通过 $PKGDIR 已送进容器。
