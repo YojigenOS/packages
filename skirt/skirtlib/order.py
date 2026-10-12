@@ -25,7 +25,7 @@
 
 from __future__ import annotations
 
-import graphlib
+from collections import deque
 
 from .common import RECIPES_DIR
 from .deps import load_host_provides
@@ -67,6 +67,83 @@ def build_graph(arch: str, host_provides: set[str],
     return graph, broken
 
 
+def _topo_sort(graph: dict[str, set[str]],
+               names: list[str]) -> tuple[list[str], list[str]]:
+    """确定的拓扑排序。返回 (顺序, 排不进去的节点)。
+
+    ★ 为什么不用 graphlib.TopologicalSorter。
+
+      它内部用 set 存前驱和后继，于是**迭代顺序取决于 Python 的字符串 hash
+      随机化**——每个进程都不一样。实测同一份输入连跑三次给出三种顺序：
+
+          $ ./skirt/skirt order | md5     # 三次三个值
+
+      而 `skirt order` 这个子命令存在的意义正是「让重建顺序可复现」（见
+      docs/待办.md 里「重建顺序只存在于我执行过的那条命令里」那条）。一个
+      每次都不一样的"可复现顺序"是自相矛盾的。
+
+      【判据】别凭直觉，做对照：固定 PYTHONHASHSEED 之后跑两次完全一致，
+      换一个 seed 就不一样了。所以就是它，不是文件系统顺序之类的东西。
+
+      这里是 Kahn 算法。入队顺序由两样东西决定：
+
+        names        —— 调用方给的列表，all_recipe_names() 已经排过序
+        succ[n]      —— 按 names 的顺序 append 出来的，所以也是升序
+
+      两者都不碰 hash，所以输出是输入的纯函数。
+
+    ★ 为什么不用 sorted() 在最后补一刀。
+
+      那只能让【同一个顺序】看起来稳定，改不了"哪一步先走"取决于 set 迭代
+      这件事。要确定就得从遍历本身确定。
+    """
+    indeg = {n: 0 for n in names}
+    succ: dict[str, list[str]] = {n: [] for n in names}
+
+    # names 已排序，所以 succ[p] 里装的是升序的 n——这一步是确定的。
+    # （graph[n] 是 set，迭代顺序随机；但每个 p 至多出现一次，所以随机的只是
+    #   "此刻往哪个 p 的列表里加"，而每个列表最终的内容和顺序都由 n 的升序决定。）
+    for n in names:
+        for p in graph.get(n, ()):
+            if p not in indeg:
+                continue
+            indeg[n] += 1
+            succ[p].append(n)
+
+    ready = deque(n for n in names if indeg[n] == 0)
+    out: list[str] = []
+    while ready:
+        n = ready.popleft()
+        out.append(n)
+        for s in succ[n]:
+            indeg[s] -= 1
+            if indeg[s] == 0:
+                ready.append(s)
+
+    done = set(out)
+    return out, [n for n in names if n not in done]
+
+
+def _find_cycle(graph: dict[str, set[str]], stuck: list[str]) -> list[str]:
+    """从 stuck 里挑一条具体的环出来，为了把报错说清楚。
+
+    排不进去的节点每个都还有前驱，而那些前驱也一定排不进去（排进去的话它的
+    后继就会被减到 0）。所以沿着前驱走一定留在 stuck 里，也一定会绕回来。
+    """
+    stuck_set = set(stuck)
+    seen: dict[str, int] = {}
+    path: list[str] = []
+    n = stuck[0]
+    while n not in seen:
+        seen[n] = len(path)
+        path.append(n)
+        nxt = [p for p in graph.get(n, ()) if p in stuck_set]
+        if not nxt:                     # 走不到这儿；真到了就退回一个能看懂的
+            return stuck
+        n = nxt[0]
+    return path[seen[n]:] + [n]
+
+
 def build_order(arch: str = "aarch64",
                 targets: list[str] | None = None) -> tuple[list[str], list[tuple[str, str]]]:
     """能实际跑通的构建顺序。
@@ -100,10 +177,9 @@ def build_order(arch: str = "aarch64",
 
     graph, broken = build_graph(arch, host_provides, names)
 
-    try:
-        order = list(graphlib.TopologicalSorter(graph).static_order())
-    except graphlib.CycleError as e:
-        cycle = e.args[1] if len(e.args) > 1 else []
+    order, stuck = _topo_sort(graph, names)
+    if stuck:
+        cycle = _find_cycle(graph, stuck)
         die(
             "依赖成环，排不出构建顺序：\n"
             f"  {' → '.join(cycle)}\n"
@@ -114,7 +190,6 @@ def build_order(arch: str = "aarch64",
             "\n"
             f"当前的基线（bootstrap/provides.txt）: {sorted(host_provides) or '（空）'}"
         )
-        raise  # die 不会返回；这里只是让类型检查满意
 
     return order, broken
 
