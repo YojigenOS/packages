@@ -69,11 +69,55 @@ COUNT=$(ls "$PKGS"/*.apk 2>/dev/null | wc -l | tr -d ' ')
 
 echo
 echo "  收拢 $COUNT 个包 → var/repo/$ARCH/"
-
 mkdir -p "$REPO"
+
+# ── 先把【线上已有的包】拉回来 ────────────────────────────────────────────
+#
+# ★ 为什么必须做。
+#
+# CI 每次都是干净的工作区，var/pkgs 里只有【这次打的包】。直接 mkndx 的话，
+# 生成的索引只列这次的包——传上去就会把之前发布的包从索引里抹掉。
+#
+# 包文件还在线上，但 apk 只能看到索引里列的包，所以它们等于消失了。
+#
+# ★ 而且 apk 没有别的办法：mkndx 的 --index 只是"复用元数据缓存来加速"，
+#   实测它连已有索引里的条目都认不出来（建一个 2 项的索引，用 --index 读它，
+#   报的是 "0 packages"）。它也没有"往索引里追加"的子命令。
+#
+# 所以只能把包文件凑齐——索引是从包文件生成的，就绕不开这一步。
+#
+# ★ 只拉 .apk，不拉索引：索引要重新生成（它得包含这次的包）。
+#
+# ★ 默认就做，不设开关。原来没有这一步，是因为"CI 是干净的"这件事被忽略了；
+#   做成可选的话，忘了加开关就又是一次事故。
+#   没有凭据（本地开发）时自动跳过。
+SYNCED=0
+if [ -n "${S3_BASE_URL:-}" ] && [ -n "${S3_BUCKET:-}" ] && [ -n "${S3_AK:-}" ]; then
+    echo
+    echo "  拉回线上已有的包…"
+    # shellcheck disable=SC2086
+    docker run --rm -v "$REPO:/repo" \
+        -e RCLONE_CONFIG_YOJIGEN_TYPE=s3 \
+        -e RCLONE_CONFIG_YOJIGEN_PROVIDER=Other \
+        -e RCLONE_CONFIG_YOJIGEN_ENDPOINT="$S3_BASE_URL" \
+        -e RCLONE_CONFIG_YOJIGEN_ACCESS_KEY_ID="$S3_AK" \
+        -e RCLONE_CONFIG_YOJIGEN_SECRET_ACCESS_KEY="$S3_SK" \
+        -e RCLONE_CONFIG_YOJIGEN_FORCE_PATH_STYLE=true \
+        -e RCLONE_CONFIG_YOJIGEN_REGION=us-east-1 \
+        rclone/rclone copy "yojigen:$S3_BUCKET/$ARCH" /repo \
+        --include "*.apk" --no-traverse 2>&1 | grep -viE "NOTICE:|^$" | sed 's/^/    /' || true
+    SYNCED=1
+    echo "    线上一共 $(ls "$REPO"/*.apk 2>/dev/null | wc -l | tr -d ' ') 个包（含已有的）"
+else
+    echo "  （没有 S3 凭据，跳过拉取线上——本地开发时正常）"
+fi
+
 # ★ 用 cp 而不是 mv —— var/pkgs 是"打包的产物"，var/repo 是"要发布的东西"，
 #   两者是不同的东西，repo 可以从 pkgs 重新生成。
 cp "$PKGS"/*.apk "$REPO/"
+
+ALL=$(ls "$REPO"/*.apk 2>/dev/null | wc -l | tr -d ' ')
+[ "$SYNCED" = 1 ] && echo "  建索引时会包含 $ALL 个包（线上的 + 这次的）"
 
 # 签名参数：没给密钥就不签（本地开发够用，装的时候 --allow-untrusted）
 if [ -n "$SIGN_KEY" ]; then
