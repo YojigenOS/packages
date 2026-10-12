@@ -104,52 +104,53 @@ jobs:
         run: |
           set -uo pipefail
           for v in S3_AK S3_SK S3_BASE_URL S3_BUCKET; do
-            [ -n "$(eval echo "\${$v:-}")" ] || { echo "  ✗ $v 是空的"; }
+            [ -n "$(eval echo "\${$v:-}")" ] || echo "  ✗ $v 是空的"
           done
 
-          # 环境变量已在上面 export，所以 -e VAR 就能继承进去
-          export RCLONE_CONFIG_YOJIGEN_TYPE=s3
-          export RCLONE_CONFIG_YOJIGEN_PROVIDER=Other
-          export RCLONE_CONFIG_YOJIGEN_ENDPOINT="$S3_BASE_URL"
-          export RCLONE_CONFIG_YOJIGEN_ACCESS_KEY_ID="$S3_AK"
-          export RCLONE_CONFIG_YOJIGEN_SECRET_ACCESS_KEY="$S3_SK"
-          export RCLONE_CONFIG_YOJIGEN_FORCE_PATH_STYLE=true
-          export RCLONE_CONFIG_YOJIGEN_REGION=us-east-1
-
-          # ★ 容器里的 rclone 看不到宿主上的文件，所以挂一个目录进去。
-          #   （第一版漏了这一步；第二版把 -v 追加到了镜像名【后面】——
-          #     docker 的 -v 必须在镜像名之前，否则全被当成 rclone 的参数。）
+          # 探针文件要挂在容器里——容器看不到宿主上的路径。
           PROBEDIR="$RUNNER_TEMP/probe"
           mkdir -p "$PROBEDIR"
           echo "probe $(date -u +%FT%TZ)" > "$PROBEDIR/probe.txt"
 
-          RCLONE="docker run --rm -v $PROBEDIR:/probe"
-          for v in RCLONE_CONFIG_YOJIGEN_TYPE RCLONE_CONFIG_YOJIGEN_PROVIDER \
-                   RCLONE_CONFIG_YOJIGEN_ENDPOINT RCLONE_CONFIG_YOJIGEN_ACCESS_KEY_ID \
-                   RCLONE_CONFIG_YOJIGEN_SECRET_ACCESS_KEY RCLONE_CONFIG_YOJIGEN_FORCE_PATH_STYLE \
-                   RCLONE_CONFIG_YOJIGEN_REGION; do
-            RCLONE="$RCLONE -e $v"
-          done
-          RCLONE="$RCLONE rclone/rclone"
-
-          echo "── 桶根下有什么（最多两层）──"
-          # ★ 命令替换失败会因为 bash -e 直接中断这一步，而且把错误吞掉。
-          #   第一版就是这样：只看到 "Process completed with exit code 2"，
-          #   完全不知道 rclone 说了什么。加 || true 把输出留下来。
-          OUT=$($RCLONE lsf "yojigen:$S3_BUCKET" --max-depth 2 2>&1 || true)
-          OUT=$(printf '%s\n' "$OUT" | grep -v 'NOTICE: Config')
-          if [ -z "$OUT" ]; then
-            echo "  （空的 —— 还没发布过任何东西，这是正常的）"
-          else
-            printf '%s\n' "$OUT" | head -30 | sed 's/^/  /'
-          fi
+          # ★ 一次显式的 docker run，不拼命令字符串。
+          #   前两版拼字符串踩了两个坑：-v 追加到了镜像名之后（被当成 rclone 的
+          #   参数），以及输出被一堆管道过滤掉了，最后只看到 docker 的拉取信息。
+          #
+          #   RCLONE_CONFIG_YOJIGEN_* 直接从环境继承（-e VAR 不带值就是继承）。
+          echo "════ 桶根下有什么（最多两层）════"
+          docker run --rm \
+            -v "$PROBEDIR:/probe" \
+            -e RCLONE_CONFIG_YOJIGEN_TYPE=s3 \
+            -e RCLONE_CONFIG_YOJIGEN_PROVIDER=Other \
+            -e RCLONE_CONFIG_YOJIGEN_ENDPOINT="$S3_BASE_URL" \
+            -e RCLONE_CONFIG_YOJIGEN_ACCESS_KEY_ID="$S3_AK" \
+            -e RCLONE_CONFIG_YOJIGEN_SECRET_ACCESS_KEY="$S3_SK" \
+            -e RCLONE_CONFIG_YOJIGEN_FORCE_PATH_STYLE=true \
+            -e RCLONE_CONFIG_YOJIGEN_REGION=us-east-1 \
+            rclone/rclone lsf "yojigen:$S3_BUCKET" --max-depth 2 -vv 2>&1 | tail -30
 
           echo
-          echo "── ★ 写一个探针文件再删掉（验证写权限）──"
-          if $RCLONE copy /probe/probe.txt "yojigen:$S3_BUCKET/" 2>&1 | grep -vE 'NOTICE:' | tail -3 | sed 's/^/  /'; then
-            echo "  ✓ 写入成功"
-            $RCLONE delete "yojigen:$S3_BUCKET/probe.txt" 2>&1 | grep -vE 'NOTICE:' | sed 's/^/  /' || true
-            echo "  ✓ 已删除（不留下垃圾）"
-          else
-            echo "  ✗ 写入失败"
-          fi
+          echo "════ ★ 写一个探针文件再删掉（验证写权限）════"
+          docker run --rm \
+            -v "$PROBEDIR:/probe" \
+            -e RCLONE_CONFIG_YOJIGEN_TYPE=s3 \
+            -e RCLONE_CONFIG_YOJIGEN_PROVIDER=Other \
+            -e RCLONE_CONFIG_YOJIGEN_ENDPOINT="$S3_BASE_URL" \
+            -e RCLONE_CONFIG_YOJIGEN_ACCESS_KEY_ID="$S3_AK" \
+            -e RCLONE_CONFIG_YOJIGEN_SECRET_ACCESS_KEY="$S3_SK" \
+            -e RCLONE_CONFIG_YOJIGEN_FORCE_PATH_STYLE=true \
+            -e RCLONE_CONFIG_YOJIGEN_REGION=us-east-1 \
+            rclone/rclone copy /probe/probe.txt "yojigen:$S3_BUCKET/" -v 2>&1 | tail -12
+          echo "  （上面若出现 Transferred: 1 / 1 就是写成功了）"
+
+          docker run --rm \
+            -v "$PROBEDIR:/probe" \
+            -e RCLONE_CONFIG_YOJIGEN_TYPE=s3 \
+            -e RCLONE_CONFIG_YOJIGEN_PROVIDER=Other \
+            -e RCLONE_CONFIG_YOJIGEN_ENDPOINT="$S3_BASE_URL" \
+            -e RCLONE_CONFIG_YOJIGEN_ACCESS_KEY_ID="$S3_AK" \
+            -e RCLONE_CONFIG_YOJIGEN_SECRET_ACCESS_KEY="$S3_SK" \
+            -e RCLONE_CONFIG_YOJIGEN_FORCE_PATH_STYLE=true \
+            -e RCLONE_CONFIG_YOJIGEN_REGION=us-east-1 \
+            rclone/rclone delete "yojigen:$S3_BUCKET/probe.txt" 2>&1 | tail -5
+          echo "  ✓ 探针文件已删（不留垃圾）"
