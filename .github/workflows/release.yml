@@ -90,10 +90,23 @@ jobs:
           SKIRT_BUILDENV: yojigenos/base-devel
         run: |
           set -euo pipefail
-          for p in ${{ inputs.packages }}; do
-            echo "── 建 $p ──"
-            ./skirt/skirt build "$p"
-          done
+          # ★ 用 bootstrap 而不是 build。
+          #
+          # `skirt build <包>` 只建那一个——它检查 var/output/ 里有没有依赖的
+          # 产物，没有就拒绝并提示"先执行 skirt build <依赖>"。
+          #
+          # 而这里 var/output/ 是空的（CI 每次都是干净的），所以 build 会报：
+          #     skirt: 错误 依赖 gettext 还没有构建
+          #
+          # `bootstrap <目标>` 建【这些包及其依赖闭包】，顺序是算出来的：
+          #     skirt order hello  →  gettext, hello
+          #
+          # 这正是"建一个包"该有的含义。
+          echo "── 依赖闭包和顺序 ──"
+          ./skirt/skirt order ${{ inputs.packages }}
+
+          echo
+          ./skirt/skirt bootstrap ${{ inputs.packages }} --report
 
       - name: 收集日志
         if: always()
