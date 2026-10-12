@@ -1,0 +1,141 @@
+# 探测存储端点的连通性
+#
+# 只做一件事：从 GitHub 的 runner 上，看能不能连到 repo.os.yojigen.cn
+# 和它的直连地址。几秒钟，不建包、不签名。
+#
+# ── 为什么需要这个 ────────────────────────────────────────────────────────
+#
+# 开发机在国内，跨境线路经常不通——DNS 污染、连接超时，这个项目里已经遇到
+# 过好几次。所以「我连不上」根本不能说明「CI 连不上」：两者在不同的网络上。
+#
+# 判断存储能不能用的唯一可信位置是【真正要发布的那台机器】。
+#
+# ── 它不打印任何凭据 ──────────────────────────────────────────────────────
+#
+# S3_BASE_URL 本身不是凭据（它是端点地址），但 GitHub 会把 secret 的内容
+# 打码。所以这里不打印地址本身，只报告【能不能连上】和 HTTP 状态码。
+
+name: probe storage
+
+on:
+  workflow_dispatch:
+    inputs:
+      arch:
+        description: '用哪台 runner 探（网络位置不同）'
+        required: true
+        type: choice
+        options: [aarch64, x86_64]
+        default: aarch64
+
+jobs:
+  probe:
+    runs-on: ${{ inputs.arch == 'aarch64' && 'ubuntu-26.04-arm' || 'ubuntu-26.04' }}
+    timeout-minutes: 10
+
+    steps:
+      - name: 取 packages（要 scripts/deploy.sh）
+        uses: actions/checkout@v7
+
+      - name: 报告 runner 在哪
+        run: |
+          echo "  runner:  $(uname -m)  $(. /etc/os-release && echo "$PRETTY_NAME")"
+          echo "  出口 IP: $(curl -sS --max-time 15 https://api.ipify.org || echo '拿不到')"
+
+      # ── ① 公开端点 ──────────────────────────────────────────────────────
+      #
+      # 这是客户端 apk 会用的地址。它通不通决定了【能不能装】。
+      - name: 公开端点 repo.os.yojigen.cn
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          echo "── https://repo.os.yojigen.cn/ ──"
+          curl -sS --max-time 25 -o /dev/null \
+            -w '  HTTP %{http_code} · 连接 %{time_connect}s · 总 %{time_total}s\n' \
+            https://repo.os.yojigen.cn/ 2>&1 || echo "  ✗ 连不上"
+
+          echo "── /aarch64/APKINDEX.tar.gz ──"
+          curl -sS --max-time 25 -o /dev/null \
+            -w '  HTTP %{http_code} · %{size_download} 字节\n' \
+            https://repo.os.yojigen.cn/aarch64/APKINDEX.tar.gz 2>&1 || echo "  ✗ 连不上（还没发布过东西时 404 是正常的）"
+
+      # ── ② 存储端点 ──────────────────────────────────────────────────────
+      #
+      # S3_BASE_URL 可能是公开端点（走 nginx），也可能是直连地址。
+      # 两种情况都要能写——但先看它是什么【形态】。
+      - name: 存储端点（用 secret 里的地址）
+        continue-on-error: true
+        env:
+          S3_BASE_URL: ${{ secrets.S3_BASE_URL }}
+        run: |
+          set -uo pipefail
+          [ -n "$S3_BASE_URL" ] || { echo "  ✗ S3_BASE_URL 是空的"; exit 0; }
+
+          # 只报告形态，不报告内容（GitHub 会把 secret 打码）
+          case "$S3_BASE_URL" in
+            https://*) echo "  形态: https ✗ （走 TLS）" ;;
+            http://*)  echo "  形态: http  ✗ （明文）" ;;
+            *)         echo "  形态: 不含协议头 —— rclone 可能会拼错" ;;
+          esac
+
+          # 去掉协议头后看主机名是不是解析得到
+          HOSTPART=$(printf '%s' "$S3_BASE_URL" | sed 's|^https\?://||; s|/.*$||')
+          if getent hosts "$HOSTPART" >/dev/null 2>&1; then
+            echo "  ✓ DNS 解析得到"
+          else
+            echo "  ✗ DNS 解析不到"
+          fi
+
+          echo "── 探一下这个端点 ──"
+          curl -sS --max-time 25 -o /dev/null \
+            -w '  HTTP %{http_code} · 连接 %{time_connect}s\n' \
+            "$S3_BASE_URL" 2>&1 || echo "  ✗ 连不上（403 也算通——那是没带凭据时的正常响应）"
+
+      # ── ③ 真的列一次桶 ──────────────────────────────────────────────────
+      #
+      # 这才是决定性的：能连上不等于能列桶。凭据、桶名、路径式寻址
+      # 三样都对才行。
+      - name: 用凭据列一次桶
+        continue-on-error: true
+        env:
+          S3_AK: ${{ secrets.S3_AK }}
+          S3_SK: ${{ secrets.S3_SK }}
+          S3_BASE_URL: ${{ secrets.S3_BASE_URL }}
+          S3_BUCKET: ${{ secrets.S3_BUCKET }}
+        run: |
+          set -uo pipefail
+          for v in S3_AK S3_SK S3_BASE_URL S3_BUCKET; do
+            [ -n "$(eval echo "\${$v:-}")" ] || { echo "  ✗ $v 是空的"; }
+          done
+
+          # 环境变量已在上面 export，所以 -e VAR 就能继承进去
+          export RCLONE_CONFIG_YOJIGEN_TYPE=s3
+          export RCLONE_CONFIG_YOJIGEN_PROVIDER=Other
+          export RCLONE_CONFIG_YOJIGEN_ENDPOINT="$S3_BASE_URL"
+          export RCLONE_CONFIG_YOJIGEN_ACCESS_KEY_ID="$S3_AK"
+          export RCLONE_CONFIG_YOJIGEN_SECRET_ACCESS_KEY="$S3_SK"
+          export RCLONE_CONFIG_YOJIGEN_FORCE_PATH_STYLE=true
+          export RCLONE_CONFIG_YOJIGEN_REGION=us-east-1
+
+          RCLONE="docker run --rm"
+          for v in RCLONE_CONFIG_YOJIGEN_TYPE RCLONE_CONFIG_YOJIGEN_PROVIDER \
+                   RCLONE_CONFIG_YOJIGEN_ENDPOINT RCLONE_CONFIG_YOJIGEN_ACCESS_KEY_ID \
+                   RCLONE_CONFIG_YOJIGEN_SECRET_ACCESS_KEY RCLONE_CONFIG_YOJIGEN_FORCE_PATH_STYLE \
+                   RCLONE_CONFIG_YOJIGEN_REGION; do
+            RCLONE="$RCLONE -e $v"
+          done
+          RCLONE="$RCLONE rclone/rclone"
+
+          echo "── 桶根下的目录（最多两层）──"
+          $RCLONE lsf "yojigen:$S3_BUCKET" --max-depth 2 2>&1 | head -25 | sed 's/^/  /' \
+            || echo "  ✗ 列不出来"
+
+          echo
+          echo "── 试着写一个探针文件再删掉 ──"
+          echo "probe $(date -u +%FT%TZ)" > /tmp/probe.txt
+          if $RCLONE copy /tmp/probe.txt "yojigen:$S3_BUCKET/" 2>&1 | tail -3 | sed 's/^/  /'; then
+            echo "  ✓ 写入成功"
+            $RCLONE delete "yojigen:$S3_BUCKET/probe.txt" 2>&1 | sed 's/^/  /' || true
+            echo "  ✓ 已删除探针文件"
+          else
+            echo "  ✗ 写入失败"
+          fi
