@@ -52,7 +52,21 @@ on:
 jobs:
   release:
     runs-on: ${{ inputs.arch == 'aarch64' && 'ubuntu-26.04-arm' || 'ubuntu-26.04' }}
-    timeout-minutes: 60
+
+    # ★ 60 分钟不够。实测建 46 个包（含 gcc）在 60 分钟时被砍掉——那还是
+    #   【冷构建】。ccache 缓存热起来之后会快很多，但第一次仍然要很久，
+    #   而缓存失效/换架构时又会回到冷状态。所以按冷构建留余量。
+    #
+    #   历史数据：17 个包热缓存 1 分 32 秒，冷构建 12 分 49 秒。
+    timeout-minutes: 180
+
+    env:
+      # ★ ccache 缓存放【工作区内】，这样 actions/cache 能直接缓存它。
+      #
+      #   skirt 默认把 ccache 放仓库的父目录（ROOT.parent / "ccache"），
+      #   那是为了本地开发时多个仓库共用一个缓存。但在 CI 里父目录是
+      #   workspace 之外，缓存起来别扭。SKIRT_CCACHE 就是为这种情况留的。
+      SKIRT_CCACHE: ${{ github.workspace }}/.ccache
 
     steps:
       - name: 取 packages
@@ -68,6 +82,22 @@ jobs:
 
       - name: 用满整台 runner 的核
         run: echo "SKIRT_JOBS=$(nproc)" >> "$GITHUB_ENV"
+
+      # ★ ccache 缓存。加它之前每次都是冷构建——而 gcc 是这里最大的一个包，
+      #   冷构建它一个就要二十分钟以上。
+      #
+      #   key 里带 github.sha 是为了每次提交都存一份新的（缓存不可变），
+      #   restore-keys 让新提交能从上一个提交的缓存开始——那才是它有用的
+      #   地方：改了一个配方，不用把它依赖的几十个包重新编一遍。
+      #
+      #   ★ 加 arch 到 key 里：两个架构的产物不能混用一个缓存。
+      - name: ccache 缓存
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.SKIRT_CCACHE }}
+          key: ccache-${{ runner.os }}-${{ inputs.arch }}-${{ github.sha }}
+          restore-keys: |
+            ccache-${{ runner.os }}-${{ inputs.arch }}-
 
       # ── 构建环境：我们自己的 ────────────────────────────────────────────
       #

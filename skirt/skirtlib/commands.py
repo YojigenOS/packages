@@ -125,7 +125,7 @@ def cmd_build(args) -> None:
     print()
     (BUILD_DIR / "src").mkdir(parents=True, exist_ok=True)
     if spec.get("source"):
-        archive = fetch(spec)
+        archive = fetch(spec, arch)
         # ★ 不在宿主上解压。宿主是 macOS，APFS 默认大小写不敏感，而内核源码
         #   里有 13 组只差大小写的文件（xt_MARK.h / xt_mark.h 之类）——在宿主
         #   上解开就会互相覆盖，实测 13 组全变成 0 组，然后构建在 47 分钟后
@@ -181,7 +181,7 @@ def cmd_build(args) -> None:
 
     # 生成的构建脚本先落成文件再送进容器。这样 steps.sh 里的 heredoc、
     # 引号、变量展开都不必经过任何转义——脚本就是脚本。
-    (BUILD_DIR / "run.sh").write_text(make_build_script(spec), encoding="utf-8")
+    (BUILD_DIR / "run.sh").write_text(make_build_script(spec, arch), encoding="utf-8")
 
     print()
     run_in_container(srcrel, srcname, arch, spec,

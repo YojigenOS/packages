@@ -19,7 +19,7 @@ DOCKER_PLATFORM = {
 
 # ------------------------------------------------------------ 生成构建脚本
 
-def make_build_script(spec: dict) -> str:
+def make_build_script(spec: dict, arch: str = "") -> str:
     """把 [build] 表翻译成 shell。steps.sh 可通过重定义函数覆盖。"""
     b = spec.get("build", {})
     kind = b.get("type", "custom")
@@ -70,7 +70,7 @@ def make_build_script(spec: dict) -> str:
     # 补丁：源码树就位之后、configure 之前应用。
     # 路径相对配方目录，配方目录通过 $PKGDIR 已送进容器。
     for entry in b.get("patches", []):
-        p = expand(spec, entry)
+        p = expand(spec, entry, arch)
         # --fuzz=0：必须精确匹配。patch 默认容忍 2 行模糊匹配，那样一个已经
         # 不适用的补丁会被「差不多」地贴上去，产出无声的错误代码——等到运行
         # 时才以看不懂的方式炸掉。宁可在构建时响亮地失败。

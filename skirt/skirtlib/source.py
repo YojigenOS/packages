@@ -153,7 +153,7 @@ def _download(url: str, dest: Path) -> None:
             ) from first
 
 
-def _candidates(spec: dict, src: dict) -> list[str]:
+def _candidates(spec: dict, src: dict, arch: str = "") -> list[str]:
     """按顺序返回该试的 URL：`url` 优先，然后是 `urls` 里的备选。
 
     为什么要多个源：上游会宕、会被墙、会慢。实测 `ftp.gnu.org` 在这台机器上
@@ -164,9 +164,9 @@ def _candidates(spec: dict, src: dict) -> list[str]:
     """
     out: list[str] = []
     if src.get("url"):
-        out.append(expand(spec, src["url"]))
+        out.append(expand(spec, src["url"], arch))
     for u in src.get("urls", []):
-        e = expand(spec, u)
+        e = expand(spec, u, arch)
         if e not in out:
             out.append(e)
 
@@ -175,7 +175,7 @@ def _candidates(spec: dict, src: dict) -> list[str]:
     return out
 
 
-def fetch(spec: dict) -> Path:
+def fetch(spec: dict, arch: str = "") -> Path:
     pkg = spec["package"]
     sources = spec.get("source") or []
     if not sources:
@@ -187,7 +187,7 @@ def fetch(spec: dict) -> Path:
     if src.get("git"):
         return fetch_git(spec, src)
 
-    urls = _candidates(spec, src)
+    urls = _candidates(spec, src, arch)
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     # 文件名取第一个 URL 的。镜像站对同一个文件用的名字是一样的——GNU 的
     # 镜像就是这样，所以这不成问题。

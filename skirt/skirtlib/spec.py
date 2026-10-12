@@ -73,17 +73,33 @@ def load_spec(name: str) -> dict:
     return spec
 
 
-def expand(spec: dict, value):
-    """展开 $NAME / $VERSION 占位符。"""
+def expand(spec: dict, value, arch: str | None = None):
+    """展开 $NAME / $VERSION / $ARCH 占位符。
+
+    ★ $ARCH 是后加的，起因是一个具体的需求：有些 configure 选项必须跟着目标
+      架构走，而 spec.toml 里没办法表达它。
+
+        apk-tools 的 -Darch=aarch64    ← 它决定 apk 去仓库的哪个子目录取包
+        bash 的 --host=aarch64-yojigenos-linux-gnu
+                                      ← 它决定 bash --version 显示什么
+
+      第一版是把 aarch64 写死在 spec.toml 里。那在只建 aarch64 时看不出来，
+      但 x86_64 的配方会静静地建出一个认错架构的 apk——而它报的错和"仓库里
+      没有这个包"长得一样，很难查。
+
+    ★ arch 是可选参数而不是从 spec 里取：load_spec 不知道目标架构，那是调用
+      者的事。传 None 时 $ARCH 展开成空字符串——和"没定义这个变量"一致。
+    """
     pkg = spec["package"]
     if isinstance(value, str):
         return (value
                 .replace("$NAME", pkg["name"])
-                .replace("$VERSION", pkg["version"]))
+                .replace("$VERSION", pkg["version"])
+                .replace("$ARCH", arch or ""))
     if isinstance(value, list):
-        return [expand(spec, v) for v in value]
+        return [expand(spec, v, arch) for v in value]
     if isinstance(value, dict):
-        return {k: expand(spec, v) for k, v in value.items()}
+        return {k: expand(spec, v, arch) for k, v in value.items()}
     return value
 
 
