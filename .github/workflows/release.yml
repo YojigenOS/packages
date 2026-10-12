@@ -76,6 +76,16 @@ on:
         description: '自检装哪个风味（留空则只检查包有没有建出来）'
         required: false
         default: 'base'
+      seed_run:
+        description: '从哪一次运行的 repo-<arch> 产物播种（run id；留空不播种）'
+        required: false
+        default: ''
+
+# ★ 仓库的默认 token 权限是 `read`，而那个只给 contents + packages。
+#   下载 artifact 要 `actions: read`——不给的话"从上一轮播种"那一步会 403。
+permissions:
+  contents: read
+  actions: read
 
 jobs:
   release:
@@ -167,6 +177,48 @@ jobs:
           key: pkgs-${{ inputs.arch }}-${{ github.run_id }}
           restore-keys: |
             pkgs-${{ inputs.arch }}-
+
+      # ── 从上一轮的产物播种 ──────────────────────────────────────────────
+      #
+      # ★★ 为什么需要它。
+      #
+      #   建一批包要几十分钟，中间可能倒在【任何一个】环节——构建、打包、自检、
+      #   发布。而失败之后重来一轮的代价是全部重做，即使坏掉的只有一个包。
+      #
+      #   实测就撞上了：x86_64 那轮 49 个包【全建出来了】，倒在自检（tar 和
+      #   cpio 抢 rmt），于是什么都没发出去。重跑一轮又是 109 分钟。
+      #
+      #   而那次运行的最后一步 `留存仓库副本` 已经把打包好的东西传成 artifact
+      #   了（285 MB，49 个 .apk）。**那批工作没有丢，只是没有回来的路。**
+      #
+      #   这一步就是那条路：把上一轮的 .apk 捞进 var/pkgs，于是
+      #
+      #       packages="cpio shadow"  seed_run=<上次的 run id>
+      #
+      #   只重建坏掉的那两个，索引仍然从【全部】包生成，自检装完整风味，
+      #   然后发布。几分钟而不是两小时。
+      #
+      #   这也是修「某个包有问题」的正常姿势：重建它，而不是重建世界。
+      - name: 从上一轮播种
+        if: inputs.seed_run != ''
+        run: |
+          set -euo pipefail
+          ARCH="${{ inputs.arch }}"
+          echo "  从 run ${{ inputs.seed_run }} 的 repo-$ARCH 产物播种"
+          gh run download "${{ inputs.seed_run }}" \
+             --repo "${{ github.repository }}" \
+             -n "repo-$ARCH" -D /tmp/seed
+          mkdir -p "var/pkgs/$ARCH"
+          n=0
+          for f in /tmp/seed/*.apk; do
+            [ -e "$f" ] || continue
+            cp -f "$f" "var/pkgs/$ARCH/"
+            n=$((n+1))
+          done
+          echo "  播种了 $n 个包"
+          echo "  var/pkgs/$ARCH 里现在有 $(ls "var/pkgs/$ARCH"/*.apk 2>/dev/null | wc -l | tr -d ' ') 个"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # ── 构建环境：我们自己的 ────────────────────────────────────────────
       #
