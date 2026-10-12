@@ -84,29 +84,46 @@ jobs:
           docker run --rm "yojigenos/base-devel:${{ inputs.arch }}" \
             /usr/bin/bash -c 'echo "  bash $BASH_VERSION"; /usr/bin/gcc --version | head -1'
 
-      # ── 建包 ────────────────────────────────────────────────────────────
+      # ── 建包：用现有的 devel，不从零 ──────────────────────────────────
+      #
+      # ★ 两种构建，区别在「provides 从哪来」：
+      #
+      #     bootstrap（从零）    构建环境 = 借来的 Debian
+      #                          provides = bootstrap/provides.txt（4 项 + 断环）
+      #
+      #     普通构建（用 devel） ★ 就是这里 ★
+      #                          构建环境 = yojigenos/base-devel
+      #                          provides = ★ 那个环境里有什么 ★
+      #
+      # 后者是这里的场景：devel 是我们自己那 39 个包拼出来的，依赖【已经在了】，
+      # 所以不该重建它们——只建你要的那一个。
+      #
+      # 【provides 为什么从 distro 读，而不是在这里写一份】
+      #
+      # 因为"devel 里有什么"的定义在 distro/variants/base-devel.toml 里。
+      # 在这里抄一份就是"同一个东西两个出处"——项目里已经为这个吃过亏。
+      - name: 读出 devel 提供了哪些包
+        run: |
+          set -euo pipefail
+          python3 - .distro/variants/base-devel.toml <<'PY' >> "$GITHUB_ENV"
+          import sys, tomllib, pathlib
+          v = tomllib.loads(pathlib.Path(sys.argv[1]).read_text())["variant"]
+          print("SKIRT_PROVIDES=" + " ".join(v["packages"]))
+          print(f"# {len(v['packages'])} 个包", file=sys.stderr)
+          PY
+          echo "  devel 提供 $(printf '%s' "$SKIRT_PROVIDES" | wc -w | tr -d ' ') 个包"
+
       - name: 建包
         env:
           SKIRT_BUILDENV: yojigenos/base-devel
         run: |
           set -euo pipefail
-          # ★ 用 bootstrap 而不是 build。
-          #
-          # `skirt build <包>` 只建那一个——它检查 var/output/ 里有没有依赖的
-          # 产物，没有就拒绝并提示"先执行 skirt build <依赖>"。
-          #
-          # 而这里 var/output/ 是空的（CI 每次都是干净的），所以 build 会报：
-          #     skirt: 错误 依赖 gettext 还没有构建
-          #
-          # `bootstrap <目标>` 建【这些包及其依赖闭包】，顺序是算出来的：
-          #     skirt order hello  →  gettext, hello
-          #
-          # 这正是"建一个包"该有的含义。
-          echo "── 依赖闭包和顺序 ──"
-          ./skirt/skirt order ${{ inputs.packages }}
-
-          echo
-          ./skirt/skirt bootstrap ${{ inputs.packages }} --report
+          # 每个目标都建一遍。依赖由上面的 SKIRT_PROVIDES 声明为"已提供"，
+          # 所以只有目标本身会被建。
+          for p in ${{ inputs.packages }}; do
+            echo "── 建 $p ──"
+            ./skirt/skirt build "$p"
+          done
 
       - name: 收集日志
         if: always()

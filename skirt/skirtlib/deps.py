@@ -13,7 +13,34 @@ from .spec import direct_deps, latest_date, load_spec, package_rel, recipe_of
 # ---------------------------------------------------------------- 依赖解析
 
 def load_host_provides() -> set[str]:
-    """读取 bootstrap/provides.txt —— 宿主已经提供的包。"""
+    """构建环境已经提供了哪些包。
+
+    两个来源，按优先级：
+
+    ★ SKIRT_PROVIDES —— 环境变量的内容，逗号或空白分隔。
+
+      用在「构建环境是我们自己的 devel」时：那个环境里有的是
+      variants/base-devel.toml 里那 39 个包，而不是 bootstrap/provides.txt
+      里那四项。那四项是给【借来的 Debian 起点】写的。
+
+      为什么不写死一个文件：因为 devel 的定义在 distro 仓库里（风味定义），
+      而这里是 packages。抄一份过来就是"同一个东西两个出处"——项目里已经
+      为这个吃过亏。所以让它从外面传进来。
+
+    bootstrap/provides.txt —— 默认。借来的起点提供什么。
+
+    ★ 两者的语义差别是实的：
+        Debian 起点  它提供的东西有限，必须显式列出（还要处理环）
+        我们自己的 devel  里面每个包都是我们建的，列出来就是它的包集合
+    """
+    env = os.environ.get("SKIRT_PROVIDES", "").strip()
+    if env:
+        out = set()
+        for chunk in env.replace(",", " ").split():
+            if chunk:
+                out.add(chunk)
+        return out
+
     if not HOST_PROVIDES_FILE.is_file():
         return set()
     out = set()

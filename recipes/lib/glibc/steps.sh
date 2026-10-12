@@ -15,8 +15,21 @@
 # 摆好链接后，上面三者合并到 /usr/lib；而 /lib/ld-linux-aarch64.so.1
 # 这个被写进每个 ELF 的 interpreter 路径，仍然能通过链接解析到。
 #
-# 技术债：这些链接本该属于一个 base-files / filesystem 包。等做 rootfs
-# 拼装时会需要那个包（目录骨架、/etc 基础文件都得有人负责），届时挪过去。
+# ★ 那四个链接的归属：filesystem 包。
+#
+# 这段注释原来写的是「技术债：这些链接本该属于一个 base-files / filesystem 包，
+# 届时挪过去」。那个包已经做出来了（recipes/data/filesystem），它也提供同样的
+# 四个链接。
+#
+# 而两个包都提供同一组路径，用 apk 装的时候会直接报错：
+#
+#     ERROR: glibc-2.44-r1: trying to overwrite bin owned by filesystem-1.0-r1.
+#     （lib / lib64 / sbin 同样）
+#
+# 直接叠 payload 时看不出来——后铺的覆盖先铺的，内容又一样。用包管理器装才暴露。
+#
+# 所以：这里建它们是【收集时的手段】——把上游的 /lib、/lib64、/usr/lib 三个
+# 布局掰成统一的 /usr/lib——收完之后删掉，不把它们当 glibc 的文件。
 
 package() {
   cd "$BUILDDIR"
@@ -49,4 +62,8 @@ package() {
   # 那个工具就在 /usr/bin 里。
   make DESTDIR="$PKGDEST" localedata/install-locale-files \
        SUPPORTED-LOCALES="C.UTF-8/UTF-8 zh_CN.UTF-8/UTF-8 zh_TW.UTF-8/UTF-8 en_US.UTF-8/UTF-8"
+
+  # 收完了——那四个链接的使命结束，删掉。它们归 filesystem。
+  # 不删的话 apk 会报 "trying to overwrite bin owned by filesystem"。
+  rm -f "$PKGDEST/bin" "$PKGDEST/lib" "$PKGDEST/lib64" "$PKGDEST/sbin"
 }

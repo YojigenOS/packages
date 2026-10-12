@@ -353,6 +353,22 @@ def run_in_container(srcrel: str, arch: str, spec: dict, epoch: int) -> None:
         "\n"
         + ccache_stats
         + strip_block
+        # ── 删掉生成物性质的路径 ──────────────────────────────────────────
+        #
+        # usr/share/info/dir 是 install-info 生成的【目录索引】，不是任何包该
+        # 提供的东西。每个装了 info 文档的包都会重新生成一份，内容各不相同——
+        # 实测 29 个包的 payload 里都有它。而用 apk 装的时候它们互相冲突：
+        #
+        #     ERROR: hello-2.12.3-r1: trying to overwrite usr/share/info/dir
+        #            owned by glibc-2.44-r1.
+        #
+        # 直接叠 payload 时看不出来（后铺的覆盖先铺的），用包管理器装才暴露。
+        # Debian 和 Alpine 也把它当生成物、不进包。
+        #
+        # ★ 所以放在【驱动层】而不是某个配方里：这是一类路径的通例，不是 hello
+        #   或 glibc 的特例。写在配方里就得写 29 遍，而写 29 遍就会有人忘。
+        + "\n# 删掉生成物性质的路径（见 build.py 里的说明）\n"
+        + 'rm -f "$WORK/dest/usr/share/info/dir"\n'
         + "# 产物拷回宿主\n"
         "mkdir -p /in/dest\n"
         # 拷出来之前先数一遍。
