@@ -72,7 +72,14 @@ fi
 #             ★ 所以钩子自己兜一次：**它该保证自己的前提，而不是信任上游那一步
 #               在每一层搬运之后还成立**。（cpio 那条注释说的是同一件事：
 #               "静默漏掉一个东西，表现是发布时报一个指不到这里的错"。）
+#               ★ 同理还有 /root 自己：StrictModes 会一路查到它。
+#                 它应该是 0700 root —— 别的地方设过，但**不保证搬到最后还在**。
 install -d -m 711 -o root -g root /var/empty
+#               ★★ 属主也要对。只 chmod 是不够的——实测撞上：
+#                      /root:  runner:runner 700
+#                  模式 700 对，属主不是 root，StrictModes 照样拒绝。
+#                  （建根那一步是在【构建用户】身份下跑的，/root 会被它建出来。）
+install -d -m 700 -o root -g root /root 2>/dev/null || chmod 0700 /root 2>/dev/null || true
 mkdir -p /run/sshd
 
 # sshd 自己会 daemon 化并 fork，所以这里不加 &。
