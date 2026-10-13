@@ -38,10 +38,27 @@ package() {
     done
 
     # 我们要的东西必须在。
-    for f in "$PKGDEST/usr/sbin/resize2fs" "$PKGDEST/usr/sbin/e2fsck"; do
-        if [ ! -e "$f" ]; then
-            echo "  ✗ $f 不在——首启扩盘和开机 fsck 都指着它" >&2
+    #
+    # ★ 不假设路径。`--prefix=/usr` 不决定 sbindir——e2fsprogs 有单独的
+    #   --sbindir，装到 /sbin 还是 /usr/sbin 取决于它自己的默认值。
+    #   我第一版写死了 "$PKGDEST/usr/sbin/resize2fs"，于是这个检查在
+    #   【文件其实好好的】情况下报"不在"——而它报得对：错的是我的假设。
+    #
+    #   所以：两个位置都找，找到了就把真实位置打出来。日志里有这个信息，
+    #   下一次别人问"到底装哪了"就不用再翻上游的 configure。
+    for f in resize2fs e2fsck; do
+        found=""
+        for d in usr/sbin sbin usr/bin bin; do
+            if [ -e "$PKGDEST/$d/$f" ]; then
+                found="$d/$f"
+                break
+            fi
+        done
+        if [ -z "$found" ]; then
+            echo "  ✗ 找不到 $f——首启扩盘（resize2fs）和开机 fsck（e2fsck）都指着它" >&2
+            echo "    在 \$PKGDEST 下扫了一遍：$(find "$PKGDEST" -name "$f" 2>/dev/null | head -3)" >&2
             exit 1
         fi
+        echo "  · $found"
     done
 }
