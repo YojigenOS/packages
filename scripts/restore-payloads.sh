@@ -63,10 +63,21 @@ MAP=$(./skirt/skirt list 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' \
 
 echo "  要还原 $n 个包（${ARCH}）"
 
+# ★ 容器以 root 跑（apk 要 root），所以写出来的文件也归 root。
+#
+#   而 skirt 那边以【宿主用户】跑，于是删不掉上一轮的产物：
+#
+#       skirt: 错误 清理失败: var/output/x86_64/filesystem-1.0-2
+#              [Errno 13] Permission denied: '.../payload'
+#
+#   实测撞上了。所以跑完把属主改回宿主。用宿主自己的 uid/gid，不能写死——
+#   CI 上是 runner(1001)，本机是别人。
 docker run --rm \
     -v "$PWD/$PKGS:/pkgs:ro" \
     -v "$PWD/var/output/$ARCH:/out" \
     -e "MAP=$MAP" \
+    -e "HOST_UID=$(id -u)" \
+    -e "HOST_GID=$(id -g)" \
     alpine:latest sh -c '
     set -e
     apk add --no-cache apk-tools >/dev/null 2>&1
@@ -102,6 +113,11 @@ docker run --rm \
             echo "    ✗ 解不开 $(basename "$f")"
         fi
     done
+    # 属主还给宿主，否则 skirt 删不掉自己上一轮的产物（见上面那段注释）。
+    if [ -n "${HOST_UID:-}" ]; then
+        chown -R "$HOST_UID:$HOST_GID" /out 2>/dev/null || true
+    fi
+
     echo "  还原 $ok 个，已有 $skip 个，失败 $fail 个"
     [ "$fail" = 0 ]
 '
