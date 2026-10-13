@@ -159,7 +159,7 @@ else
     echo "     签名：scripts/keys.sh gen 然后 $0 --sign-key ~/.yojigenos/keys/yojigenos-2026-1.rsa"
 fi
 
-DESC="${DESC:-YojigenOS $ARCH 软件仓库}"
+DESC="${DESC:-Yojigen OS $ARCH 软件仓库}"
 
 # ★ pkgname-spec 是【索引里存的下载路径】，相对于仓库根——所以要带
 #   当前架构的前缀，而且必须跟着 $ARCH 走。

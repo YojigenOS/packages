@@ -65,7 +65,7 @@ package() {
     # 端口和 root 登录都用默认：22、prohibit-password（即只认公钥）。
     cat >> "$PKGDEST/etc/ssh/sshd_config" <<'EOF'
 
-# ── YojigenOS 补充 ──────────────────────────────────────────────────────
+# ── Yojigen OS 补充 ──────────────────────────────────────────────────────
 # 没有这一行，scp 和 sftp 都不能用：新版 scp 走的就是 SFTP 子系统。
 Subsystem sftp /usr/libexec/sftp-server
 EOF

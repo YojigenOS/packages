@@ -222,7 +222,7 @@ def main(argv: list[str]) -> int:
 
     with open(dest, "w", encoding="utf-8") as fh:
         fh.write(
-            "# 由 YojigenOS 的 ca-certificates 配方从 Mozilla 的 certdata.txt 生成。\n"
+            "# 由 Yojigen OS 的 ca-certificates 配方从 Mozilla 的 certdata.txt 生成。\n"
             "# 来源: security/nss/lib/ckfw/builtins/certdata.txt\n"
             "# 只收 CKA_TRUST_SERVER_AUTH = CKT_NSS_TRUSTED_DELEGATOR 的证书。\n"
             "#\n"

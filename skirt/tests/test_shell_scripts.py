@@ -9,7 +9,7 @@
 
 2026-10-11 实测踩到：scripts/run-vm.sh 里
 
-    echo "  启动 YojigenOS（$ARCH）—— 退出 QEMU 按 Ctrl-A 然后 X"
+    echo "  启动 Yojigen OS（$ARCH）—— 退出 QEMU 按 Ctrl-A 然后 X"
 
 那一行在 `exec qemu` 的正前方，于是脚本一直在那里静默退出——QEMU 从来没被
 它启动过。而输出的最后一行是正常的「内核: …」，看起来像是跑完了。

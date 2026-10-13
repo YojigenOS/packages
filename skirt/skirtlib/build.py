@@ -119,7 +119,7 @@ def make_build_script(spec: dict, arch: str = "") -> str:
         #   37 个 autotools 配方各写一遍就等于写 37 遍，而写 37 遍就会有人忘。
         #   这和上面 LIBDIR 的理由是同一个（见决策记录 0001 的那段说明）。
         #
-        #   不传 --host 时 configure 会跑 config.guess，而它不认识 YojigenOS，
+        #   不传 --host 时 configure 会跑 config.guess，而它不认识 Yojigen OS，
         #   于是 bash --version 显示 aarch64-unknown-linux-gnu。
         #
         #   ★★ 必须【连 --build 一起传】，而且传同一个三元组。

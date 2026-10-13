@@ -1,6 +1,6 @@
 # libpng —— PNG 图像格式参考库
 #
-# 这个包的用处是验证依赖机制：它构建时需要 zlib，而 zlib 是 YojigenOS
+# 这个包的用处是验证依赖机制：它构建时需要 zlib，而 zlib 是 Yojigen OS
 # 自己构建的（不在 host/provides.txt 里），所以只能靠 sysroot 传递。
 
 [package]

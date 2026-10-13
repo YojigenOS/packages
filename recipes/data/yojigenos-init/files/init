@@ -1,5 +1,5 @@
 #!/bin/sh
-# YojigenOS 的 init
+# Yojigen OS 的 init
 #
 # 这是内核把控制权交给用户空间之后跑的【第一个】程序。保持它小：
 # 挂上伪文件系统、说一句话、跑一遍首启钩子、起一个 shell。
@@ -30,13 +30,13 @@ mount -t tmpfs    tmpfs    /run     2>/dev/null
 
 # --- 问候 ---------------------------------------------------------------
 echo
-echo "  欢迎来到 YojigenOS"
+echo "  欢迎来到 Yojigen OS"
 echo
 
 # 把「这台机器到底是什么」摊开说——出问题时这几行就是线索。
 if [ -r /etc/os-release ]; then
     . /etc/os-release
-    echo "    ${PRETTY_NAME:-YojigenOS}"
+    echo "    ${PRETTY_NAME:-Yojigen OS}"
 fi
 echo "    内核      $(uname -r)"
 echo "    架构      $(uname -m)"

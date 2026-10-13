@@ -500,7 +500,7 @@ jobs:
           ./scripts/repo.sh \
               --arch "${{ inputs.arch }}" \
               --sign-key "$SIGNING_KEY_FILE" \
-              --desc "YojigenOS ${{ inputs.arch }} 软件仓库"
+              --desc "Yojigen OS ${{ inputs.arch }} 软件仓库"
 
       # ── 自检：从自己的仓库装一遍 ────────────────────────────────────────
       #

@@ -19,7 +19,7 @@
 
 # 关于库路径布局（见 docs/决策记录/0001）：
 #
-#   YojigenOS 的库统一放 /usr/lib。但 gcc 在 aarch64-linux 上会把目标库
+#   Yojigen OS 的库统一放 /usr/lib。但 gcc 在 aarch64-linux 上会把目标库
 #   （libstdc++、libgcc_s、libatomic ...）装进 /usr/lib64 —— 这个路径由
 #   gcc 的目标配置写死：
 #

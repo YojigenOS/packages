@@ -117,7 +117,7 @@ jobs:
         if: inputs.buildenv == ''
         run: |
           # 这个镜像【不发布】。它只是 `FROM debian:stable-slim` + 一批 apt 包
-          # ——不是一个 YojigenOS 的产物，是借来的起点。发布它等于发布一份
+          # ——不是一个 Yojigen OS 的产物，是借来的起点。发布它等于发布一份
           # Debian 的衍生品，而且会让「我们发布了什么」这条线变模糊。
           #
           # 【也不钉 Debian 的 digest】。理论上"钉住才能复现"，但对这个项目
@@ -283,7 +283,7 @@ jobs:
           ./scripts/repo.sh \
               --arch "${{ matrix.arch }}" \
               --sign-key "$SIGNING_KEY_FILE" \
-              --desc "YojigenOS ${{ matrix.arch }} 软件仓库"
+              --desc "Yojigen OS ${{ matrix.arch }} 软件仓库"
 
       # ★ 自举的验收：把刚建出来的仓库装成一个系统，再让【系统里的 apk】
       #   自己报个版本。apk 是 glibc 程序，它能在那个 chroot 里跑起来意味着

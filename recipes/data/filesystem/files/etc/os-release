@@ -1,6 +1,6 @@
-NAME="YojigenOS"
+NAME="Yojigen OS"
 ID=yojigenos
-PRETTY_NAME="YojigenOS"
+PRETTY_NAME="Yojigen OS"
 BUILD_ID=rolling
 HOME_URL="https://github.com/YojigenOS"
 BUG_REPORT_URL="https://github.com/YojigenOS/packages/issues"

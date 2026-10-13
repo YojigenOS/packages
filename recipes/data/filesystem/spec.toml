@@ -5,7 +5,7 @@
 # 它负责三件事：
 #   1. 目录骨架（/usr/bin、/usr/sbin、/etc、/var、/tmp、/proc…）
 #   2. usr-merge 链接（/bin /sbin /lib /lib64 → usr/），以及 /bin/sh
-#   3. /etc 基础文件，包括 /etc/os-release —— YojigenOS 的身份标识
+#   3. /etc 基础文件，包括 /etc/os-release —— Yojigen OS 的身份标识
 #
 # 在它出现之前，这些东西散落在 gcc（/usr/lib64）和 glibc（usr-merge 链接）
 # 里，两处都留着「技术债」注释。现在有了正式的归属。
@@ -16,7 +16,7 @@
 [package]
 name        = "filesystem"
 version     = "1.0"
-release     = 1
+release     = 2
 date        = 2026-10-10T06:54:56Z
 description = "目录骨架、usr-merge 链接与 /etc 基础文件"
 section     = "core"

@@ -386,7 +386,7 @@ def cmd_clean(args) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser(
         prog="skirt",
-        description="YojigenOS 构建驱动 —— 短裙里装着四次元空间",
+        description="Yojigen OS 构建驱动 —— 短裙里装着四次元空间",
     )
     sub = ap.add_subparsers(dest="cmd", required=True)
 

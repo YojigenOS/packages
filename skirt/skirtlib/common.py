@@ -70,7 +70,7 @@ def target_triple(arch: str) -> str:
 
     ★ 为什么需要它 ────────────────────────────────────────────────────────
 
-    config.guess 不认识 YojigenOS，就把 vendor 段填成 "unknown"：
+    config.guess 不认识 Yojigen OS，就把 vendor 段填成 "unknown"：
 
         bash --version      → GNU bash, version 5.3.0(1)-release
                               (aarch64-unknown-linux-gnu)
