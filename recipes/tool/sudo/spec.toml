@@ -48,30 +48,10 @@ configure  = [
     # ★ 不用 LDAP / SSSD / 各种后端插件：它们都要各自的库。
     "--disable-ldap",
 
-    # ★★ 不建共享的 libsudo_util。
-    #
-    #   实测挂在装它那一步：
-    #
-    #       libtool … install-sh -c -o 0 -g 0 libsudo_util.la …
-    #       chown: changing ownership of '…/libsudo_util.so.0.0.0':
-    #              Operation not permitted
-    #
-    #   那个 `-o 0 -g 0` 是 libtool 传的，而降权构建做不到 chown。
-    #   静态化这个库就没这一步了 —— 而且它本来就是 sudo 内部用的，
-    #   不需要对外暴露。
-    #
-    #   ★ 而这是【今晚第三次】同一件事：
-    #       authorized_keys 的属主   (/root/.ssh)
-    #       我自己试图 -o root       (install 直接失败)
-    #       sudo 的 libsudo_util     (这里)
-    #     根因是同一个：驱动把整个构建降权（setpriv --reuid=$HOSTUID），
-    #     于是【任何需要属主/权限位的包】都会撞。
-    #
-    #     真正的修法在驱动那一层：**让 package() 以 root 跑，build() 保持降权**
-    #     （build 是不受信任的上游代码，package 只是把建好的东西搬到位）。
-    #     那一条还没做 —— 而 sudo 的【本体】要 setuid root，
-    #     所以这个包很可能还要再撞一次。
-    "--disable-shared-libutil",
-
+    # ★ 这里原来有一条 --disable-shared-libutil，是为了绕开"降权装不了属主"。
+    #   那个问题的根在驱动层（build() 和 package() 一起降权），已经修掉了：
+    #   现在 package() 以 root 跑，libtool 那句 `-o 0 -g 0` 能成立。
+    #   **所以这个开关撤掉了** —— 它会让 libsudo_util 静态化，那是个副作用，
+    #   不该为已经不存在的理由留着。
     "--disable-static",
 ]

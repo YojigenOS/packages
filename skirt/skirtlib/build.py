@@ -232,8 +232,32 @@ def make_build_script(spec: dict, arch: str = "") -> str:
         "# steps.sh 若存在，可以通过重定义上面任意函数来覆盖默认行为\n"
         'if [ -f "$WORK/steps.sh" ]; then . "$WORK/steps.sh"; fi\n'
         "\n"
-        "build\n"
-        "package\n"
+        # ★★ 分阶段调用：`run.sh build` / `run.sh package`。
+        #
+        #   分开的理由是【权限】—— 外层调它们两次，两次的权限不同：
+        #
+        #       build()    不受信任的上游代码在跑     → 降权（HOSTUID）
+        #       package()  只是把已经建好的东西搬到位 → ★ root
+        #
+        #   因为有些包必须在【装的时候】设属主或权限位，那是包内容的一部分：
+        #
+        #       sudo          要 setuid root      —— 不设它就不叫 sudo
+        #       /root/.ssh    StrictModes 要 root —— 不设就登不进去
+        #       任何 install -o root 的包         —— 直接失败
+        #
+        #   今晚这三样都撞过，根因是同一个（整个构建降权）。
+        #
+        #   ★ 而"在脚本【内部】再提权"是做不到的：一旦 setpriv 降到 1001
+        #     就回不去了（实测 `setpriv: setresuid failed: Operation not permitted`）。
+        #     所以必须由外层 —— 它此刻还是 root —— 调两次。
+        #
+        #   `all` 是给手工跑用的（两步都做）。驱动走的是分开的两条。
+        "case \"${1:-all}\" in\n"
+        "  all)     build; package ;;\n"
+        "  build)   build ;;\n"
+        "  package) package ;;\n"
+        '  *)       echo "用法: $0 [all|build|package]" >&2; exit 2 ;;\n'
+        "esac\n"
     )
 
 
@@ -473,6 +497,15 @@ def run_in_container(srcrel: str, srcname: str, arch: str, spec: dict, epoch: in
         'export PKGDIR="$WORK/pkg"\n'
         "\n"
         "# 降权执行构建\n"
+        # ★★ 两次调用，两次权限。见 make_build_script 里那段注释。
+        #
+        #   ① build —— 降权。它跑的是上游的代码。
+        #   ② package —— ★ 以 root。它只执行我们写的安装步骤（或驱动默认的
+        #      `make DESTDIR=… install`）：不做网络、不跑上游脚本，而它必须能
+        #      设属主和 setuid 位 —— 那是包内容的一部分。
+        #
+        #   外层此刻是 root（容器以 root 起），所以第二次不需要 setpriv。
+        #   而第一次降下去之后【回不来】，所以顺序必须是先降后不降。
         'setpriv --reuid="$HOSTUID" --regid="$HOSTGID" --clear-groups \\\n'
         '  env HOME="$WORK" \\\n'
         f'      PKGDEST="$WORK/dest" SRCDIR="$WORK/src/{srcrel}" \\\n'
@@ -486,7 +519,13 @@ def run_in_container(srcrel: str, srcname: str, arch: str, spec: dict, epoch: in
         # 名字里的 src.tar 是历史遗留：它现在可能是 tar，也可能是 zip（wheel）。
         # 判断方式在下面那段解压逻辑里，用 zipfile.is_zipfile 读魔数。
         f'      SRCARCHIVE="/in/{srcname}" \\\n'
-        '  bash "$WORK/run.sh"\n'
+        '  bash "$WORK/run.sh" build\n'
+        "\n"
+        "# ② package —— 以 root（外层此刻还是 root）\n"
+        'env HOME="$WORK" \\\n'
+        f'      PKGDEST="$WORK/dest" SRCDIR="$WORK/src/{srcrel}" \\\n'
+        f'      SRCARCHIVE="/in/{srcname}" \\\n'
+        '  bash "$WORK/run.sh" package\n'
         "\n"
         + ccache_stats
         + strip_block
