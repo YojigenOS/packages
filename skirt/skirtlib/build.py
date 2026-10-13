@@ -660,6 +660,11 @@ def run_in_container(srcrel: str, srcname: str, arch: str, spec: dict, epoch: in
         #   （也就是以 root 跑）。所以两种可能都还在 —— 是 package 没做到，
         #   还是后面拷出来时丢的。这一句就是用来分开它们的。
         'echo "[产物] package 之后的属主与 setuid 位：" >&2\n'
+        # ★ 能力位也一起打 —— 上一格就是因为只看了 setuid，没看出
+        #   ping 的能力位在不在（而它两个都不是）。
+        'GC=$(command -v getcap 2>/dev/null || true); [ -x "$GC" ] || GC=/usr/sbin/getcap\n'
+        'if [ -x "$GC" ]; then echo "[产物] 能力位:" >&2; "$GC" -r "$WORK/dest" 2>/dev/null | sed "s|^$WORK/dest||;s|^|  ★ |" >&2; fi\n'
+        'if [ ! -x "$GC" ]; then echo "[产物] ⚠ getcap 不在（/$GC 都试过）—— 能力位这一格查不了" >&2; fi\n'
         'find "$WORK/dest" -perm -4000 -exec ls -ld {} \\; >&2 2>/dev/null || true\n'
         'ls -ld "$WORK/dest/usr/bin/sudo" >&2 2>/dev/null || true\n'
         'echo "[产物] dest 里前三个文件：" >&2\n'
