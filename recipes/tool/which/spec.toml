@@ -1,0 +1,47 @@
+# which —— 在 PATH 里找一个命令的路径
+#
+# 【关于"要不要装它"这件事】
+#
+# GNU which 的最后一个版本是 2.21（2015 年），此后就没再动过。而 Debian、
+# Alpine 这些发行版都已经不再默认装它了，理由是：**POSIX 有一个更好的做法**
+#
+#     command -v 名字          # 在 shell 里，内建，不用起进程
+#
+# 而它仍然被点名要装，因为**用惯了的人会敲 `which`** —— 一个服务器上
+# 缺了它，看起来像"这台机器很怪"，而不像"这个工具已经过时了"。
+#
+# ★ 所以这里的选择是：**装，但知道它为什么可以没有**。
+#   两句话都记着，比只记一句有用。
+
+[package]
+name        = "which"
+version     = "2.21"
+release     = 1
+date        = 2026-10-13T19:00:00Z
+description = "在 PATH 里查找命令（POSIX 时代的老工具，command -v 可替代）"
+section     = "util"
+url         = "https://www.gnu.org/software/which/"
+license     = "GPL-3.0-or-later"
+
+[[source]]
+url    = "https://ftp.gnu.org/gnu/which/which-$VERSION.tar.gz"
+sha256 = "f4a245b94124b377d8b49646bf421f9155d36aa7614b6ebf83705d3ffc76eaad"
+
+[dependencies]
+runtime = ["glibc"]
+build   = ["make", "gcc"]
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["make", "gcc"]
+
+[build]
+# ★ 判据是看它的树（这一条现在每次都先看一眼，因为它已经错过两次）：
+#
+#     configure.ac ✓   Makefile.am ✓   configure ✓
+#
+#   有 configure.ac 就是真 autotools —— 它会从 .ac 生成 configure，
+#   所以 bootstrap 那一步是必要的。（chrony 那次就是反过来：
+#   有 configure 而没有 configure.ac，于是 autoreconf 必然失败。）
+type       = "autotools"
+autoreconf = true
+configure  = ["--prefix=/usr"]
