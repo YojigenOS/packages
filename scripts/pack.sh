@@ -195,7 +195,13 @@ if m.get("provider_priority") is not None:
 #   然后拒绝建索引（"14 errors, not creating index"）。
 sign_arg = "--sign-key /key.rsa " if signed else ""
 
-lines = ["#!/bin/sh", "set -e", "mkdir -p /data", "cp -a /in/payload/. /data/",
+lines = ["#!/bin/sh", "set -e",
+         # ★ getcap/setcap 来自 libcap，而 alpine:latest 里没有它。
+         #   装一次（从 Alpine 自己的仓库，很快）比"能力位静默地丢掉"划算。
+         #   装不上就继续 —— 下面的 getcap 会失败，而那时 .caps 是空的，
+         #   等于退回"没有能力位"的旧行为，不会把构建弄挂。
+         "apk add --no-cache libcap >/dev/null 2>&1 || true",
+         "mkdir -p /data", "cp -a /in/payload/. /data/",
          # ★★ 属主统一成 root:0，而 setuid/setgid 位要保住。
          #
          #   为什么需要这一步：payload 是从容器里【拷到宿主】再挂回来的，而
@@ -218,8 +224,13 @@ lines = ["#!/bin/sh", "set -e", "mkdir -p /data", "cp -a /in/payload/. /data/",
          #     再 chown，再把权限放回去 —— 因为 Linux 的 chown 会清掉那两位。
          "find /data \\( -perm -4000 -o -perm -2000 \\) -type f 2>/dev/null"
          " | while IFS= read -r f; do echo \"$(stat -c %a \"$f\") $f\"; done > /tmp/.setid || true",
+         # ★ 能力位也要记 —— 它的道理和 setuid 完全一样：chown 会清掉
+         #   security.capability。（iputils 给 ping 设的 cap_net_raw 就是这么丢的。）
+         #   而 getcap 在 alpine:latest 里没有，所以下面那行 apk add。
+         "getcap -r /data 2>/dev/null > /tmp/.caps || true",
          "chown -R 0:0 /data",
          "while IFS=' ' read -r m f; do chmod \"$m\" \"$f\" 2>/dev/null || true; done < /tmp/.setid || true",
+         "while read -r f c; do [ -n \"$c\" ] && setcap \"$c\" \"$f\" 2>/dev/null || true; done < /tmp/.caps",
          f"exec apk mkpkg {sign_arg}\\"]
 for k, v in fields:
     if v:

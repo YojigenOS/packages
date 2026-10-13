@@ -485,10 +485,20 @@ def run_in_container(srcrel: str, srcname: str, arch: str, spec: dict, epoch: in
         #
         #   而这个 chown 本身是必要的：宿主（CI runner）要能读和删 /in。
         #   所以做法是【记下来再放回去】。
+        #   ★ 而能力位（security.capability）是同一个道理：chown 也会清掉它。
+        #     iputils 给 ping 设的 cap_net_raw 就是这么丢的 —— 实测
+        #
+        #         CI 里:  setcap … cap_net_admin,cap_net_raw+p /build/dest/usr/bin/ping  ✓
+        #         包里:   ping 一个扩展属性都没有                                       ✗
+        #
+        #     所以两样一起记，一起放回去。**"改属主"这一个动作会顺手动掉两个
+        #     别的属性**，而它们各自都是"让这个程序能用"的一部分。
         "cleanup() {\n"
         '  find /in/dest \\( -perm -4000 -o -perm -2000 \\) -type f > /tmp/.setid 2>/dev/null || true\n'
+        '  getcap -r /in/dest 2>/dev/null > /tmp/.caps || true\n'
         '  chown -R "$HOSTUID:$HOSTGID" /in 2>/dev/null || true\n'
         '  while IFS= read -r f; do chmod u+s "$f" 2>/dev/null || true; done < /tmp/.setid\n'
+        '  while read -r f c; do [ -n "$c" ] && setcap "$c" "$f" 2>/dev/null || true; done < /tmp/.caps\n'
         "}\n"
         "trap cleanup EXIT\n"
         "\n"
