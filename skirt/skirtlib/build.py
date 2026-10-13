@@ -664,7 +664,7 @@ def run_in_container(srcrel: str, srcname: str, arch: str, spec: dict, epoch: in
         #   ping 的能力位在不在（而它两个都不是）。
         'GC=$(command -v getcap 2>/dev/null || true); [ -x "$GC" ] || GC=/usr/sbin/getcap\n'
         'if [ -x "$GC" ]; then echo "[产物] 能力位:" >&2; "$GC" -r "$WORK/dest" 2>/dev/null | sed "s|^$WORK/dest||;s|^|  ★ |" >&2; fi\n'
-        'if [ ! -x "$GC" ]; then echo "[产物] ⚠ getcap 不在（/$GC 都试过）—— 能力位这一格查不了" >&2; fi\n'
+        'if [ ! -x "$GC" ]; then echo "[产物] ⚠ getcap 不在（连绝对路径都试过）—— 能力位这一格查不了" >&2; fi\n'
         'GC2=$(command -v getcap 2>/dev/null || true); [ -x "$GC2" ] || GC2=/usr/sbin/getcap\n'
         'if [ -x "$GC2" ]; then\n'
         # ★★ 而它要写【到 payload 自己里面】。
@@ -686,8 +686,20 @@ def run_in_container(srcrel: str, srcname: str, arch: str, spec: dict, epoch: in
         'fi\n'
         'find "$WORK/dest" -perm -4000 -exec ls -ld {} \\; >&2 2>/dev/null || true\n'
         'ls -ld "$WORK/dest/usr/bin/sudo" >&2 2>/dev/null || true\n'
+        # ★★ 这里【不能】用 `find … | head -3` —— 而这句诊断上一版把我的
+        #   perl 构建弄挂了（退出码 141 = SIGPIPE）。
+        #
+        #   为什么：脚本是 `set -eo pipefail` 的。`head` 读三行就退出，
+        #   `find` 拿到 SIGPIPE 而死，整条管道的退出码成了 141，而 set -e
+        #   把整个脚本杀掉。
+        #
+        #   ★ 而它跟"打印文件名"毫无关系 —— 一个只为了让人看见的句子，
+        #     把一个大包的构建弄挂了。dest 越大越容易撞（perl 有一万多个文件）。
+        #
+        #   改成先落到文件、再读前三行：没有任何会提前退出的读端。
         'echo "[产物] dest 里前三个文件：" >&2\n'
-        'find "$WORK/dest" -type f 2>/dev/null | head -3 | while read f; do ls -ld "$f" >&2; done\n'
+        'find "$WORK/dest" -type f 2>/dev/null > /tmp/.files || true\n'
+        'sed -n "1,3p" /tmp/.files 2>/dev/null | while IFS= read -r f; do ls -ld "$f" >&2; done || true\n'
         + ccache_stats
         + strip_block
         # ── 删掉生成物性质的路径 ──────────────────────────────────────────
