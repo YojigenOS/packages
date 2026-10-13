@@ -24,8 +24,13 @@
 
 [ -r /etc/hostname ] || exit 0
 
-# 只读第一行、去掉首尾空白。空文件就当没设。
-h=$(head -n 1 /etc/hostname 2>/dev/null | tr -d '[:space:]')
+# 只读第一行，去掉【首尾】空白。空文件就当没设。
+#
+# ★ 这里不能用 `tr -d '[:space:]'` —— 那个删的是【所有】空白，包括中间的。
+#   而我们的主机名是 "Yojigen OS"（带空格），那样会被压成 "YojigenOS"。
+#   （原来写的是 tr —— 那时候 /etc/hostname 里是 "yojigen"，看不出问题。
+#     改了默认值才显出来。）
+h=$(head -n 1 /etc/hostname 2>/dev/null | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
 [ -n "$h" ] || exit 0
 
 # 内核接口总是可写（就算在容器里，写它也只会影响那个命名空间）。

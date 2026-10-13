@@ -92,3 +92,33 @@ CONFIG_DEBUG_INFO_NONE=y
 # 校验（固件验签、fs-verity、dm-verity 都在那条链上）才是亏的。
 #
 # 这段注释留着，是为了让下一个人不用再查一遍"为什么这里没有关掉证书的选项"。
+
+# ── 主机名 ────────────────────────────────────────────────────────────────────
+#
+# ★ 内核自己那句话，正是我们这种情况（init/Kconfig 里 DEFAULT_HOSTNAME 那段）：
+#
+#     This option determines the default system hostname before userspace
+#     calls sethostname(2). The kernel traditionally uses "(none)" here,
+#     but you may wish to use a different default here to **make a minimal
+#     system more usable with less configuration**.
+#
+#   不设它，`uname -a` 出来是 `Linux (none) 7.2.9 ...` —— 而我们最早交付的
+#   那个系统就长这样。它不算错（内核的默认值而已），但它是别人看到的第一行字。
+#
+# 【为什么能带空格】
+#
+#   sethostname(2) 只查长度（__NEW_UTS_LEN = 64 字节），**没有任何字符限制**。
+#   实测（TX 上直接写 /proc/sys/kernel/hostname）：
+#
+#       printf '%s' "Yojigen OS" > /proc/sys/kernel/hostname   ✓ 接受
+#       uname -n → [Yojigen OS]
+#
+#   而内核 Kconfig 里那个默认值 "(none)" 本身也带括号 —— 这个字段不是
+#   DNS 名字，是给人看的名字。
+#
+# 【和 /etc/hostname 的关系】
+#
+#   两个层次：这个 CONFIG 决定【用户态还没设之前】显示什么；filesystem 包里
+#   的 /etc/hostname 是用户态那份，由 05-hostname 钩子写进内核。两边写同一个值，
+#   不然开机会先显示一个再被改成另一个。
+CONFIG_DEFAULT_HOSTNAME="Yojigen OS"
