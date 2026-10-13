@@ -717,6 +717,14 @@ def run_in_container(srcrel: str, srcname: str, arch: str, spec: dict, epoch: in
         #   ★ 而它必须【说出来】—— 上一版这里只有一句 `… || true`，
         #     于是 rsync 在不在、成没成，日志里一个字都没有。而我连着两轮
         #     都在猜"能力位到底丢在哪一步"。
+        'GC2=$(command -v getcap 2>/dev/null || true); [ -x "$GC2" ] || GC2=/usr/sbin/getcap\n'
+        'if [ -x "$GC2" ]; then\n'
+        '  "$GC2" -r "$WORK/dest" 2>/dev/null | sed "s|^$WORK/dest||" > /in/caps.txt || true\n'
+        '  n=$(wc -l < /in/caps.txt 2>/dev/null || echo 0)\n'
+        '  echo "[产物] 能力位清单写进 /in/caps.txt，共 $n 条" >&2\n'
+        'else\n'
+        '  echo "[产物] ⚠ 没有 getcap —— 能力位这一格查不了" >&2\n'
+        'fi\n'
         'if command -v rsync >/dev/null 2>&1; then\n'
         '  rsync -aX "$WORK/dest/." /in/dest/ || echo "[产物] ✗ rsync 拷出失败" >&2\n'
         '  echo "[产物] 用 rsync -aX 拷出（保能力位）" >&2\n'
@@ -737,14 +745,6 @@ def run_in_container(srcrel: str, srcname: str, arch: str, spec: dict, epoch: in
         #   ★ 所以换个办法：把 `getcap -r` 的输出写成【文本文件】——
         #     文本跨挂载毫无问题 —— 然后由 pack.sh 用它 setcap。
         #     能力位就从"文件属性"变成了"一份清单"，而清单是可以随便搬的。
-        'GC2=$(command -v getcap 2>/dev/null || true); [ -x "$GC2" ] || GC2=/usr/sbin/getcap\n'
-        'if [ -x "$GC2" ]; then\n'
-        '  "$GC2" -r "$WORK/dest" 2>/dev/null | sed "s|^$WORK/dest||" > /in/caps.txt || true\n'
-        '  n=$(wc -l < /in/caps.txt 2>/dev/null || echo 0)\n'
-        '  echo "[产物] 能力位清单写进 /in/caps.txt，共 $n 条" >&2\n'
-        'else\n'
-        '  echo "[产物] ⚠ 没有 getcap —— 能力位这一格查不了" >&2\n'
-        'fi\n'
         'after=$(find /in/dest \\( -type f -o -type l \\) | wc -l | tr -d " ")\n'
         'if [ "$before" != "$after" ]; then\n'
         '  echo "[产物] ❌ 容器内 $before 项，拷到宿主只剩 $after 项"\n'
