@@ -31,8 +31,27 @@ runtime = ["glibc", "libcap"]
 build   = ["make", "gcc", "autoconf", "automake", "libtool", "libcap"]
 
 [build]
-type       = "autotools"
-autoreconf = true
+# ★★ 它不是 autotools —— 是【手写 configure + Makefile.in】的项目。
+#
+#   实测（走过一次弯路）：原来写的是 type = "autotools" + autoreconf = true，
+#   报的是
+#
+#       autoreconf: error: 'configure.ac' is required
+#
+#   而那句是【真的】—— 它的树里确实没有 configure.ac：
+#
+#       git ls-tree HEAD →  .gitignore COPYING Makefile.in NEWS README
+#                           configure contrib doc examples getdate.y
+#                           make_release test …（159 条，全是 .c/.h 加这些）
+#
+#   它有【现成的 configure】。所以既不用 autoreconf，也不该套驱动对
+#   autotools 的那几个假设（比如它一定会认 --libdir）。
+#
+#   ★ 这和 iproute2 同一类：**"配方按惯例填的那个 type"和"上游实际的构建方式"
+#     是两件事**，而判断依据只有一个 —— 去看它的树。
+#
+#   所以走 custom，configure 和 make 都由 steps.sh 明说。
+type = "custom"
 configure  = [
     "--prefix=/usr",
     "--sysconfdir=/etc",
