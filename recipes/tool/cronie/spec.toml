@@ -31,6 +31,31 @@ build   = ["make", "gcc", "autoconf", "automake", "libtool"]
 [build]
 type       = "autotools"
 autoreconf = true
+
+# ★★ 按 C17 编，不是默认的 C23。
+#
+#   实测：
+#
+#       src/entry.c:488: error: too many arguments to function 'error_func';
+#                              expected 0, have 1
+#
+#   而来路是 C23 改了 `()` 的含义。老代码这样声明函数指针：
+#
+#       entry *load_entry(FILE *file, void (*error_func) (), …)
+#                                              ~~~~~~~~~~~~
+#   那个空的 `()` 在 C17 及以前是【参数未指定】，而 C23 起是【没有参数】。
+#   于是 `(*error_func)(…)` 就成了"给一个不要参数的函数传参数"。
+#
+#   ★ 这和 procps 那次是同一类（`false` 没 include、C23 里 false 是关键字）：
+#     **代码比标准老，而编译器默认跑在新标准上。**
+#
+#   本地拿最小例子验过两个方向：
+#       C23（默认）  报错，和 CI 里那句一样
+#       -std=gnu17   ✓ 过
+#
+#   选 gnu17 而不是打补丁改那个声明：那是个老项目里常见的写法，
+#   一处改了下一处还会撞（而 cronie 里不止一处）。
+cflags     = ["-std=gnu17"]
 configure  = [
     "--prefix=/usr",
     "--sysconfdir=/etc",
