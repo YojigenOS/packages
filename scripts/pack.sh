@@ -196,6 +196,30 @@ if m.get("provider_priority") is not None:
 sign_arg = "--sign-key /key.rsa " if signed else ""
 
 lines = ["#!/bin/sh", "set -e", "mkdir -p /data", "cp -a /in/payload/. /data/",
+         # ★★ 属主统一成 root:0，而 setuid/setgid 位要保住。
+         #
+         #   为什么需要这一步：payload 是从容器里【拷到宿主】再挂回来的，而
+         #   沿途有一次清理用的 `chown -R "$HOSTUID"`（见 build.py 的 cleanup）。
+         #   于是包里的属主成了构建用户（1001），而不是 root。
+         #
+         #   实测的两头：
+         #       dest 里（package 之后，诊断打的）  -rwsr-xr-x root  root  sudo ✓
+         #       发出去的包里（解开发出来的）      -rwxr-xr-x nobody nobody ✗
+         #
+         #   而"属主不是 root"这件事的后果我们撞过两次：
+         #       · sudo      没有 setuid 就不叫 sudo
+         #       · .ssh      StrictModes 拒绝非 root 拥有的 authorized_keys
+         #                   → 在运行中的系统上升级 openssh 之后 SSH 直接进不去
+         #
+         #   所以【发行版的包，文件就该是 root:0】。这是个决定，不是默认值 ——
+         #   而上游的 Makefile 本来也是这么装的（install -o 0 -g 0）。
+         #
+         #   ★ 顺序：先记下带 setuid/setgid 的那些（连同它们的完整权限），
+         #     再 chown，再把权限放回去 —— 因为 Linux 的 chown 会清掉那两位。
+         "find /data \\( -perm -4000 -o -perm -2000 \\) -type f 2>/dev/null"
+         " | while IFS= read -r f; do echo \"$(stat -c %a \"$f\") $f\"; done > /tmp/.setid || true",
+         "chown -R 0:0 /data",
+         "while IFS=' ' read -r m f; do chmod \"$m\" \"$f\" 2>/dev/null || true; done < /tmp/.setid || true",
          f"exec apk mkpkg {sign_arg}\\"]
 for k, v in fields:
     if v:

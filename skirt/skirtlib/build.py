@@ -444,7 +444,33 @@ def run_in_container(srcrel: str, srcname: str, arch: str, spec: dict, epoch: in
         '  export PATH="/usr/lib/ccache:$PATH"\n'
         "fi\n"
         "\n"
-        'cleanup() { chown -R "$HOSTUID:$HOSTGID" /in 2>/dev/null || true; }\n'
+        # ★★ cleanup 必须保住 setuid 位 —— chown 会把它清掉。
+        #
+        #   实测撞到：sudo 的 src/Makefile.in 里写着
+        #
+        #       $(INSTALL) $(INSTALL_OWNER) -m 04755 sudo $(DESTDIR)$(bindir)/sudo
+        #                                        ~~~~~~~~~
+        #   而诊断（package 之后打印属主与 setuid）说 dest 里是
+        #       -rwsr-xr-x 1 root root  /build/dest/usr/bin/sudo   ✓
+        #   解开发出去的包却是
+        #       -rwxr-xr-x nobody nobody  usr/bin/sudo             ✗
+        #
+        #   两头都是真的 —— 丢在中间的 cleanup 上：
+        #
+        #       cp -a "$WORK/dest/." /in/dest/     ← root:root + setuid ✓
+        #       trap cleanup EXIT → chown -R …      ← ★ 清掉了 setuid
+        #
+        #   **Linux 的 chown(2) 会清掉 S_ISUID/S_ISGID**（POSIX 没规定 root
+        #   调用时是否要清，Linux 是清的）。所以"改属主"这个动作顺手改坏了
+        #   另一个属性。
+        #
+        #   而这个 chown 本身是必要的：宿主（CI runner）要能读和删 /in。
+        #   所以做法是【记下来再放回去】。
+        "cleanup() {\n"
+        '  find /in/dest \\( -perm -4000 -o -perm -2000 \\) -type f > /tmp/.setid 2>/dev/null || true\n'
+        '  chown -R "$HOSTUID:$HOSTGID" /in 2>/dev/null || true\n'
+        '  while IFS= read -r f; do chmod u+s "$f" 2>/dev/null || true; done < /tmp/.setid\n'
+        "}\n"
         "trap cleanup EXIT\n"
         "\n"
         "# 依赖包的 payload 合并进根文件系统（需要 root）\n"
