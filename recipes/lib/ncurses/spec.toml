@@ -1,0 +1,84 @@
+# ncurses —— 终端界面库 + terminfo 数据库
+#
+# 【为什么它是这批包的总闸】
+#
+# 服务器第一档那几个，四个里有四个都要它：
+#
+#     less   ·  vim   ·  procps（top）  ·  tmux
+#
+# 加上后面还会要的：bash 的 readline 环境、各种 TUI 工具。**它是这套东西的地基。**
+#
+# 【为什么选 6.4 而不是 6.6 的快照】
+#
+# 上游的发布节奏很怪：稳定版很少（6.4 是 2023 年的），而 master 上每周打一个
+# 带日期的快照（v6_6_20261010 这种）。Debian 用的就是 6.4。
+#
+# 选 6.4：**版本号可读、可复现、是"一个发布"**。快照虽然新，但它是滚动的——
+# 今天钉一个日期、三个月后那个日期已经淹没在几百个快照里了。
+#
+# （真需要新特性的时候再换，那时也有明确的理由可写。）
+
+[package]
+name        = "ncurses"
+version     = "6.4"
+release     = 1
+date        = 2026-10-13T12:00:00Z
+description = "终端界面库与 terminfo 数据库"
+section     = "libs"
+url         = "https://invisible-island.net/ncurses/"
+license     = "MIT"
+
+[[source]]
+git     = "https://github.com/mirror/ncurses"
+commit  = "79b9071f2be20a24c7be031655a5638f6032f29f"
+mirrors = ["https://invisible-island.net/archives/ncurses/"]
+
+[dependencies]
+runtime = ["glibc"]
+build   = ["make", "gcc"]
+
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["make", "gcc"]
+
+[build]
+type      = "autotools"
+# 上游树里【有】configure（它是发布式的源码包，不是 git 快照那种）。
+autoreconf = false
+configure = [
+    "--prefix=/usr",
+
+    # ── 宽字符 ──
+    #
+    # ★ 这条是必须的：没有它编出来的是 libncurses（8-bit），而现在几乎所有
+    # 程序找的都是 libncursesw（wide）。中文、俄文、重音字母全都要它。
+    "--enable-widec",
+
+    # ── 动态库 ──
+    "--with-shared",
+    "--without-normal",   # 不要 .a —— 省一半体积；要静态链接时再说
+
+    # ── 不要调试版 ──
+    #   默认它会再编一套带 _g 后缀的库（libncursesw_g），那是给 debug 用的。
+    "--without-debug",
+
+    # ── pkg-config 文件 ──
+    #   很多包用 pkg-config 找 ncurses（pkg-config ncursesw）。不生成这个文件，
+    #   它们会自己猜链接参数，然后猜错。
+    "--enable-pc-files",
+    "--with-pkg-config-libdir=/usr/lib/pkgconfig",
+
+    # ── 不要的绑定 ──
+    "--without-ada",       # Ada 绑定
+    "--without-cxx-binding",  # C++ 那层（要了就得依赖 g++）
+
+    # ── 不剥符号 ──
+    #   剥了会破坏 .so 的调试信息；构建产物的剥离由打包那一步统一做。
+    "--disable-stripping",
+
+    # ── terminfo 数据库的位置 ──
+    #   这是运行时找的路径。保持默认（/usr/share/terminfo），别改——
+    #   改了之后所有程序都找不到 terminfo，而症状是"终端不认识 TERM"。
+    "--with-default-terminfo-dir=/usr/share/terminfo",
+    "--with-terminfo-dirs=/usr/share/terminfo:/etc/terminfo",
+]
