@@ -56,6 +56,31 @@ def make_build_script(spec: dict, arch: str = "") -> str:
     if oot:
         header += 'BUILDDIR="$SRCDIR/_build"\n'
 
+    # ★★ 标记：这之后的内容是【构建准备】，只该在 build 阶段跑。
+    #
+    #   为什么需要这个：run.sh 现在是【分阶段调用】的（`run.sh build` /
+    #   `run.sh package`，因为 package 要以 root 跑）。而 header 在文件顶部，
+    #   每次调用都会执行 —— 于是 autoreconf 会跑两遍，**补丁会被打两遍**。
+    #
+    #   实测（aarch64 上 gzip）：
+    #
+    #       [补丁] fix-head-macro.patch
+    #       patching file deflate.c          ← 第一次成功
+    #       …
+    #       Reversed (or previously applied) patch detected!  Assume -R? [n]
+    #       Skipping patch.
+    #       3 out of 3 hunks ignored -- saving rejects to file deflate.c.rej
+    #
+    #   而那一轮里 gzip 只被"开始"了一次、日志里补丁也只打了一次 ——
+    #   第二次来自 `run.sh package` 那次调用。**是我拆分阶段时引入的。**
+    #
+    #   ★ 而它只在【有补丁或 autoreconf】的包上现形，而且看起来像"补丁过期"。
+    #     差点去改那个补丁（它本身是对的）。
+    #
+    #   `set -eo pipefail` / `cd "$SRCDIR"` / `BUILDDIR` 留在外面 —— package
+    #   也要 cd 和 BUILDDIR（oot 的 pkgstep 是 `cd "$BUILDDIR"`）。
+    header += "__BUILD_ONLY__\n"
+
     # autoreconf：从 git 树构建 autotools 项目时必须的一步。
     #
     # 【为什么需要它】发行版 tarball 里带着上游跑好的 configure，git 树里
@@ -221,6 +246,14 @@ def make_build_script(spec: dict, arch: str = "") -> str:
     if unknown:
         die(f"{spec['package']['name']}: [build] 里有多余的键 {unknown}"
             f"（{kind} 只认 {sorted(known)}）—— 写错了不会报错，只会被静默忽略")
+
+    # ★ 按标记切开：前半（set / cd / BUILDDIR）两个阶段都要，
+    #   后半（autoreconf / 补丁 / …）只有 build 阶段要。
+    _head, _, _prep = header.partition("__BUILD_ONLY__\n")
+    header = (_head
+              + 'if [ "${1:-all}" != "package" ]; then\n'
+              + _prep
+              + "fi\n")
 
     return (
         header
