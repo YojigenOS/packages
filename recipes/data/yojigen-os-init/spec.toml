@@ -27,11 +27,11 @@ license     = "GPL-3.0-or-later"
 # DD 到真机之后要把根分区撑满整块盘，而那只能在起起来之后做。
 # 依赖写在这里而不是风味列表里——**它是这个包的功能需要的，不是用户要的**。
 runtime = ["glibc", "bash", "coreutils", "util-linux", "e2fsprogs"]
-build   = []
+build   = ["gcc"]
 
 [dependencies.x86_64]
 runtime = ["glibc", "bash", "coreutils", "util-linux", "e2fsprogs"]
-build   = []
+build   = ["gcc"]
 
 [build]
 type = "custom"

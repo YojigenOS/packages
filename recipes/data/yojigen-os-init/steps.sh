@@ -9,7 +9,11 @@
 #   $WORK      容器内工作区
 
 build() {
-    : # 无需编译
+    # 只有一个 C 文件要编：cttyhack。
+    #
+    # 它是为了消掉 tty0 上那句 "/bin/sh: 0: can't access tty" —— 详见
+    # files/cttyhack.c 开头的说明。用 ${CC}（驱动会指向交叉编译器）。
+    "${CC:-gcc}" -O2 -Wall -o "$WORK/cttyhack" "$PKGDIR/files/cttyhack.c"
 }
 
 package() {
@@ -20,4 +24,7 @@ package() {
     # 每一个钩子是谁。10- 排在 20-sshd 之前：先扩盘，再起服务。
     install -Dm755 "$PKGDIR/files/10-grow-root" \
         "$PKGDEST/usr/lib/yojigen-os/boot.d/10-grow-root"
+
+    # cttyhack：给 tty0 上那个 shell 一个控制终端（见 build() 那段）。
+    install -Dm755 "$WORK/cttyhack" "$PKGDEST/usr/libexec/cttyhack"
 }
