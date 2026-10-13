@@ -32,7 +32,7 @@
 [package]
 name        = "openssl"
 version     = "3.5.9"
-release     = 1
+release     = 2
 date        = 2026-10-11T13:30:00Z
 description = "密码学库与工具（libcrypto / libssl / openssl 命令）"
 section     = "libs"
