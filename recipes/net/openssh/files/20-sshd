@@ -58,8 +58,21 @@ if [ ! -x /usr/sbin/sshd ]; then
     exit 0
 fi
 
-# sshd 的权限分离要一个运行时目录（Debian 那边由 systemd 的 RuntimeDirectory
-# 提供，我们没有 systemd，所以自己建）。
+# sshd 的权限分离用两个目录：
+#
+#   /run/sshd    运行时目录（Debian 那边由 systemd 的 RuntimeDirectory 提供，
+#                我们没有 systemd，所以自己建）
+#   /var/empty   降权后的沙箱。**sshd 对它有硬要求**：
+#
+#                    /var/empty must be owned by root and not group or world-writable.
+#
+#               包里建的时候是 711 root（recipe 里写着），但**实测在真机上它会
+#                不对** —— 那就起不来 sshd，而表现是"钥匙被拒"，看着像密钥问题。
+#
+#             ★ 所以钩子自己兜一次：**它该保证自己的前提，而不是信任上游那一步
+#               在每一层搬运之后还成立**。（cpio 那条注释说的是同一件事：
+#               "静默漏掉一个东西，表现是发布时报一个指不到这里的错"。）
+install -d -m 711 -o root -g root /var/empty
 mkdir -p /run/sshd
 
 # sshd 自己会 daemon 化并 fork，所以这里不加 &。
