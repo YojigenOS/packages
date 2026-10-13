@@ -1,0 +1,80 @@
+# fastfetch —— 把系统的信息一眼展示出来
+#
+# 【为什么它对这个项目特别重要】
+#
+# 它是**最直观的那张"自我介绍"**：发行版名字、内核、包数、内存、CPU、桌面……
+# 全在屏幕上。而我们的 /etc/os-release 里写着
+#
+#     NAME="Yojigen OS"     LOGO=yojigen-os
+#
+# —— 也就是说，**它天生就是给这个系统做门面的**。
+#
+# 0016（二次元浓度与吉祥物）里把 fastfetch 归在"招牌层"：那一层展示的是
+# 这个系统是什么，而不是它能干什么。
+#
+# 【为什么它这么好做】
+#
+# 依赖几乎为零。真正必需的只有 cmake / ninja / gcc / python3 / pkgconf
+# —— 我们全都有。其余的（libpci、dbus、libdrm、vulkan、x11…）上游都是
+# `find_package(X QUIET)`：**探测不到就跳过**，不报错。
+#
+# 而 yyjson 它**自带**（src/3rdparty/yyjson），所以连那个都不用加。
+
+[package]
+name        = "fastfetch"
+version     = "2.69.0"
+release     = 1
+date        = 2026-10-13T12:20:00Z
+description = "系统信息展示（发行版 · 内核 · 内存 · CPU · 包数…）"
+section     = "utils"
+url         = "https://github.com/fastfetch-cli/fastfetch"
+license     = "MIT"
+
+[[source]]
+git     = "https://github.com/fastfetch-cli/fastfetch"
+commit  = "0c3b852bf7bad2837a814c7a31bf332092048a2b"
+# ★ 注意：它的 tag 里有两个 v1.0.x，而 GitHub 的 tag 接口**不按版本排序**。
+#   最新的其实是 2.69.0（2026-09-25）。看 releases 接口才看得出来。
+mirrors = []
+
+[dependencies]
+runtime = ["glibc", "zlib"]
+build   = ["cmake", "ninja", "gcc", "python3", "pkgconf"]
+
+[dependencies.x86_64]
+runtime = ["glibc", "zlib"]
+build   = ["cmake", "ninja", "gcc", "python3", "pkgconf"]
+
+[build]
+type = "cmake"
+options = [
+    "-DCMAKE_BUILD_TYPE=Release",
+
+    # ── 用自带的 yyjson ──
+    #   我们没有系统的 yyjson，而它 src/3rdparty/ 里就带着一份。
+    "-DENABLE_SYSTEM_YYJSON=OFF",
+
+    # ── 不要测试 ──
+    "-DBUILD_TESTS=OFF",
+
+    # ── 关掉链接时优化 ──
+    #   LTO 让构建慢好几倍，而在这个体量的程序上省不了多少。真需要时再开。
+    "-DENABLE_LTO=OFF",
+
+    # ── 内建的硬件 id 表 ──
+    #   这样查 CPU/PCI 设备名时不用读外部文件。多几百 KB，值。
+    "-DENABLE_EMBEDDED_PCIIDS=ON",
+    "-DENABLE_EMBEDDED_AMDGPUIDS=ON",
+
+    # ── 我们有的 ──
+    "-DENABLE_ZLIB=ON",       # 压缩的字体/logo 之类
+    "-DENABLE_WCWIDTH=ON",    # 宽字符宽度——中文对齐要靠它
+    "-DENABLE_WORDEXP=ON",    # 配置里的 ~ 展开
+
+    # ── 我们没打算要的（关掉，免得探测到一半的库又想用）──
+    "-DENABLE_LIBZFS=OFF",
+    "-DENABLE_LUA=OFF",
+    "-DENABLE_QUICKJS=OFF",
+    "-DENABLE_TRACER=OFF",
+    "-DENABLE_ASAN=OFF",
+]
