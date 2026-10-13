@@ -1,0 +1,40 @@
+# libcap —— Linux capabilities 的用户态接口
+#
+# capabilities 是"把 root 的权限拆成一块一块"那套机制。没有它，程序只有
+# "全能的 root"和"什么都干不了的普通人"两种状态。
+#
+# 【谁要它】
+#
+#   iproute2   —— ip/ss 要设置套接字的权限（比如普通用户能不能看别的进程的 socket）
+#   systemd    —— 它的核心就在管 capabilities
+#   各种守护进程 —— "以 root 启动、然后降权"是标准做法
+#
+# 上游在 kernel.org，不在 GitHub。这没关系——配方里写的是"哪个仓库的哪个
+# commit"，不是"托管商的链接"。
+
+[package]
+name        = "libcap"
+version     = "2.78"
+release     = 1
+date        = 2026-10-13T12:30:00Z
+description = "Linux capabilities 用户态库（与 setcap/getcap 工具）"
+section     = "libs"
+url         = "https://sites.google.com/site/fullycapable/"
+license     = "BSD-3-Clause OR GPL-2.0-only"
+
+[[source]]
+git    = "https://git.kernel.org/pub/scm/libs/libcap/libcap.git"
+commit = "7a89aa42efc57e18f8c42de700f6367bd7531a1a"
+
+[dependencies]
+runtime = ["glibc"]
+build   = ["make", "gcc", "perl"]
+
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["make", "gcc", "perl"]
+
+[build]
+# libcap 不用 autotools/cmake，就是自己那套 Makefile。
+# 驱动只认 autotools/meson/cmake/custom 四种，所以走 custom，步骤写在 steps.sh 里。
+type = "custom"

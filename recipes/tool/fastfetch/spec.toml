@@ -23,7 +23,7 @@
 [package]
 name        = "fastfetch"
 version     = "2.69.0"
-release     = 1
+release     = 2
 date        = 2026-10-13T12:20:00Z
 description = "系统信息展示（发行版 · 内核 · 内存 · CPU · 包数…）"
 section     = "utils"
@@ -47,7 +47,7 @@ build   = ["cmake", "ninja", "gcc", "python3", "pkgconf"]
 
 [build]
 type = "cmake"
-options = [
+configure = [
     "-DCMAKE_BUILD_TYPE=Release",
 
     # ── 用自带的 yyjson ──

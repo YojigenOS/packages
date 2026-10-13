@@ -1,0 +1,28 @@
+# utf8proc —— 正确��处理 UTF-8（宽度、大小写、规范化）
+#
+# tmux 用它算"这个字符在终端里占几列"。**中文字占两列**，这件事不靠它对不齐——
+# 而"中文优先"这个项目不能在这一格上糊弄。
+
+[package]
+name        = "utf8proc"
+version     = "2.12.0"
+release     = 1
+date        = 2026-10-13T12:30:00Z
+description = "UTF-8 处理库（字符宽度、规范化、大小写）"
+section     = "libs"
+url         = "https://juliastrings.github.io/utf8proc/"
+license     = "MIT"
+
+[[source]]
+git    = "https://github.com/JuliaStrings/utf8proc"
+commit = "79cdd5ab40c79afa559f689ffc13b76812dee1ac"
+
+[dependencies]
+runtime = ["glibc"]
+build   = ["make", "gcc"]
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["make", "gcc"]
+
+[build]
+type = "custom"

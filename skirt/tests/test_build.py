@@ -24,6 +24,7 @@ import os
 import sys
 import tempfile
 import pathlib
+import tomllib
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -327,3 +328,37 @@ class TestAutotoolsPassesBuildAlongsideHost(unittest.TestCase):
         self.assertIn('--host="$PKGTRIPLE"', sh)
         self.assertIn('--target="$PKGTRIPLE"', sh)
 
+class Test配方里的键都是真的(unittest.TestCase):
+    """★ [build] 里写错的键【不会报错】，只会被静默忽略。
+
+    这是实测撞到的：给 fastfetch 写了 13 个 CMake 选项，键名写成 `options`
+    （正确的是 `configure`）。包建成功了——用默认值编的，少了 -DENABLE_ZLIB、
+    -DENABLE_WCWIDTH 那些。界面是绿的，产物是错的。
+
+    所以这里对【所有配方】过一遍：每个键都得是驱动真的会读的。
+    驱动那边也加了一道运行时检查（make_build_script 里），但那个只在构建时
+    触发；这个测试让它在你提交之前就炸。
+    """
+
+    # 从驱动代码里数出来的——grep 一遍所有 b.get(...)
+    KNOWN = {"type", "out_of_tree", "autoreconf", "patches",
+             "configure", "nostrip", "cflags"}
+    KINDS = {"autotools", "meson", "cmake", "custom"}
+
+    def test_所有配方的_build_键都是真的(self):
+        recipes = sorted(pathlib.Path(__file__).resolve().parents[2].glob("recipes/*/*/spec.toml"))
+        self.assertGreater(len(recipes), 40, "配方数量不对，路径大概错了")
+        bad = []
+        for sp in recipes:
+            spec = tomllib.load(open(sp, "rb"))
+            b = spec.get("build", {})
+            kind = b.get("type", "custom")
+            name = sp.parent.relative_to(sp.parents[2])
+            if kind not in self.KINDS:
+                bad.append(f"{name}: 构建类型 {kind!r} 不认识"
+                           f"（只有 {sorted(self.KINDS)}）")
+                continue
+            extra = sorted(set(b) - self.KNOWN)
+            if extra:
+                bad.append(f"{name}: [build] 里多余的键 {extra}")
+        self.assertFalse(bad, "这些键写错了，而写错【不会报错】只会被静默忽略：\n  " + "\n  ".join(bad))

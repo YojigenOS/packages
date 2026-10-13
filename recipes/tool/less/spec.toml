@@ -1,0 +1,40 @@
+# less —— 分页看文件的工具
+#
+# 【为什么它排在很前面】
+#
+# 服务器上最常做的一件事是"看一眼日志"。没有它，只有 cat——而 cat 一个几百 MB
+# 的日志会把终端刷爆，而你想看的往往是【最后那几行】。
+#
+# 它比 more 好：能往回翻、能搜、能跟 tail -f 一起用。所以是 less 不是 more。
+
+[package]
+name        = "less"
+version     = "711"
+release     = 1
+date        = 2026-10-13T12:05:00Z
+description = "分页查看文件（比 more 能往回翻、能搜）"
+section     = "utils"
+url         = "https://www.greenwoodsoftware.com/less/"
+license     = "BSD-3-Clause OR GPL-3.0-or-later"
+
+[[source]]
+git     = "https://github.com/gwsw/less"
+commit  = "52c3b13f35d73c624d4a1ddd0dbe3a1a072159ab"
+mirrors = ["https://www.greenwoodsoftware.com/less/"]
+
+[dependencies]
+runtime = ["glibc", "ncurses"]
+build   = ["make", "gcc"]
+
+[dependencies.x86_64]
+runtime = ["glibc", "ncurses"]
+build   = ["make", "gcc"]
+
+[build]
+type = "autotools"
+options = ["-DFAKE=1"]
+autoreconf = false
+configure = [
+    "--prefix=/usr",
+    "--sysconfdir=/etc",
+]

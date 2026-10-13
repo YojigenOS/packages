@@ -173,6 +173,29 @@ def make_build_script(spec: dict, arch: str = "") -> str:
     else:
         die(f"{spec['package']['name']}: 不认识的构建类型 {kind!r}")
 
+    # ★★ 检查 [build] 里有没有【这个类型不认识的键】。
+    #
+    #   为什么要有这一步：驱动读键用的是 `b.get("configure", 默认值)`——
+    #   **键名写错了不报错，它静静地用默认值**。
+    #
+    #   实测撞到：给 fastfetch 写了 13 个 CMake 选项，键名写成 `options`
+    #   （正确的是 `configure`）。包**建成功了**，用默认值编的——少了
+    #   -DENABLE_ZLIB、-DENABLE_WCWIDTH 这些，而那些正是"中文对齐"要的。
+    #   界面是绿的，产物是错的。
+    #
+    #   这和"CMake 对未知的 -D 变量不报错"是同一类事，只不过这次元凶是
+    #   TOML 的键名。**一个被静默忽略的字段等于没写**。
+    # 这个集合是【从驱动代码里数出来的】——grep 一遍所有 b.get(...)：
+    #     type · out_of_tree · autoreconf · patches · configure · nostrip · cflags
+    # 前三类（build_type / cflags / patches）对所有 kind 都生效。
+    known = {
+        "type", "out_of_tree", "autoreconf", "patches", "configure", "nostrip", "cflags",
+    }
+    unknown = sorted(set(b) - known)
+    if unknown:
+        die(f"{spec['package']['name']}: [build] 里有多余的键 {unknown}"
+            f"（{kind} 只认 {sorted(known)}）—— 写错了不会报错，只会被静默忽略")
+
     return (
         header
         + "\n"

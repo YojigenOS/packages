@@ -1,0 +1,42 @@
+# libevent —— 事件通知库
+#
+# 【为什么现在要它】
+#
+# tmux 要它。而 tmux 是服务器上很要紧的一个东西：**SSH 断了，会话还在**。
+#
+# 【为什么是 2.1.13-stable 不是 2.2.x】
+#
+# libevent 的 2.2 分支挂了很久，而且一直是 alpha/beta 状态（上游自己标的）。
+# 2.1.x 是稳定分支，绝大多数发行版用的就是这个。**能跑的是稳的，不是新的。**
+
+[package]
+name        = "libevent"
+version     = "2.1.13"
+release     = 1
+date        = 2026-10-13T12:30:00Z
+description = "异步事件通知库（tmux 等要用）"
+section     = "libs"
+url         = "https://libevent.org/"
+license     = "BSD-3-Clause"
+
+[[source]]
+git    = "https://github.com/libevent/libevent"
+commit = "211c4234e44e0e7df720f744a0c70be017e39622"
+
+[dependencies]
+runtime = ["glibc", "openssl"]
+build   = ["cmake", "ninja", "gcc"]
+
+[dependencies.x86_64]
+runtime = ["glibc", "openssl"]
+build   = ["cmake", "ninja", "gcc"]
+
+[build]
+type = "cmake"
+configure = [
+    "-DCMAKE_BUILD_TYPE=Release",
+    "-DEVENT__DISABLE_OPENSSL=OFF",   # 开——依赖里有 openssl（evdns 的 DoH 之类会用到）
+    "-DEVENT__DISABLE_TESTS=ON",
+    "-DEVENT__DISABLE_SAMPLES=ON",
+    "-DEVENT__DISABLE_BENCHMARK=ON",
+]
