@@ -51,11 +51,38 @@ package() {
     #   实测日志里那两行 cp 写得很清楚。
     install -m755 chronyc "$PKGDEST/usr/bin/chronyc"
 
-    # 配置样例 —— 上游放在 examples/ 下，装成 /etc/chrony.conf。
-    # 没有它 chronyd 起不来（那才是"装上能用"的一部分）。
-    if [ -f examples/chrony.conf.example ]; then
-        install -Dm644 examples/chrony.conf.example "$PKGDEST/etc/chrony.conf"
-        echo "  ✓ /etc/chrony.conf 用的是上游那份样例"
+    # ── /etc/chrony.conf ────────────────────────────────────────────────
+    #
+    # ★ 上游【故意不装】它 —— Makefile.in 里既没有 chrony.conf 也没有 examples。
+    #   那是发行版的决定，所以这里由我们定。
+    #
+    #   它有【三个】样例，而我第一版写的是 `chrony.conf.example`（没编号）：
+    #
+    #       example1   376 字节   pool.ntp.org + driftfile + makestep + rtcsync
+    #       example2  1537 字节   上面再加 ntsdumpdir 和 logdir
+    #       example3 13956 字节   全注释的参考手册（每行以 ! 开头）
+    #
+    #   取 example1：它小而完整 —— 有能用的 NTP 源（pool.ntp.org），
+    #   有 driftfile（不然每次重启都从零学起），有 step（时钟差得远时能一次跳过去）。
+    #   ★ 那是发行版该装的那一份，不是最全的那一份。
+    if [ -f examples/chrony.conf.example1 ]; then
+        install -Dm644 examples/chrony.conf.example1 "$PKGDEST/etc/chrony.conf"
+        echo "  ✓ /etc/chrony.conf 用的是上游 example1（带 pool.ntp.org）"
+    else
+        echo "  ✗ examples/chrony.conf.example1 不在 —— 上游可能改过名字"
+        ls examples/ 2>/dev/null | sed 's/^/      /'
+        exit 1
+    fi
+
+    # ── /etc/logrotate.d/chrony ────────────────────────────────────────
+    #
+    # ★ 上游把这份放出来了，而它的存在让两个包【真的配上】：
+    #   chrony 写 /var/log/chrony/，logrotate 负责不让它长满。
+    #   没有这份的话，那个目录会一直长 —— 而我们把 logrotate 装上了，
+    #   就该让它们接上。
+    if [ -f examples/chrony.logrotate ]; then
+        install -Dm644 examples/chrony.logrotate "$PKGDEST/etc/logrotate.d/chrony"
+        echo "  ✓ /etc/logrotate.d/chrony 也装了（和 logrotate 那个包接上）"
     fi
 
     # 而 man 页能建就建（asciidoctor 在的时候），建不了就明说跳过了——
