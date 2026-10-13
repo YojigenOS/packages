@@ -10,7 +10,7 @@
 [package]
 name        = "less"
 version     = "711"
-release     = 1
+release     = 2
 date        = 2026-10-13T12:05:00Z
 description = "分页查看文件（比 more 能往回翻、能搜）"
 section     = "utils"
@@ -24,15 +24,17 @@ mirrors = ["https://www.greenwoodsoftware.com/less/"]
 
 [dependencies]
 runtime = ["glibc", "ncurses"]
-build   = ["make", "gcc"]
+build   = ["make", "gcc", "autoconf", "automake", "libtool"]
 
 [dependencies.x86_64]
 runtime = ["glibc", "ncurses"]
-build   = ["make", "gcc"]
+build   = ["make", "gcc", "autoconf", "automake", "libtool"]
 
 [build]
 type = "autotools"
-autoreconf = false
+# ★ 上游 git 树里【没有】configure —— 只有 configure.ac。之前这里写的 false
+#   是从 ncurses 那份抄过来的，实测报 "./configure: No such file or directory"。
+autoreconf = true
 configure = [
     "--prefix=/usr",
     "--sysconfdir=/etc",
