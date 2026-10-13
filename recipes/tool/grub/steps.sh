@@ -26,10 +26,35 @@ grub_targets() {
     esac
 }
 
-# 目标 → /usr/lib/grub/ 下的目录名。GRUB 自己的命名规则就是
-# <target>-<platform>，只有 i386:pc 是特例（它叫 i386-pc，不是 i386-pc）。
+# 目标 → /usr/lib/grub/ 下的目录名。
+#
+# ★ 规则【不是】简单的 <configure --target>-<platform>。GRUB 在 configure 里
+#   先把 CPU 名字归一一次（configure.ac 开头那个 case），归一后的名字才是
+#   目录名：
+#
+#       i[[3456]]86)  → i386     （我们传的 i386，不变）
+#       aarch64*)     → arm64    ★ 我们传 aarch64，目录却是 arm64-efi
+#
+#   这行是实测撞出来的，不是从文档抄的：
+#
+#       ── 配置 aarch64-efi ──    configure --target=aarch64 --with-platform=efi
+#       make / make install      ✓ 模块一个不少
+#       grub: 缺少模块目录 /usr/lib/grub/aarch64-efi    ✗
+#
+#   make install 装到的是 /usr/lib/grub/arm64-efi。GRUB 没错，错的是这个函数：
+#   它以为 --target 收的名字就是目录名，而 GRUB 的 CPU 名字和 configure 收的
+#   名字不是一套。
+#
+# ★ 为什么 x86_64 从来没暴露：i386 和 x86_64 恰好是恒等映射，两个目标都对。
+#   只有 arm64 这一格会现形——而 grub 在 aarch64 上是第一次真去建。
+#   （也就是说，package() 末尾那个"模块到位了吗"的断言抓到的是我自己写错的
+#     名字。它拦下的正是它该拦的那种错：一个装机之后才会炸的错。）
 grub_moddir() {
-    if [ "$1" = "i386" ]; then echo "i386-pc"; else echo "$1-$2"; fi
+    case "$1" in
+        i386)    echo "i386-pc"   ;;   # 归一后仍然是 i386
+        aarch64) echo "arm64-$2"  ;;   # 归一成 arm64，见上面那段
+        *)       echo "$1-$2"     ;;
+    esac
 }
 
 build() {

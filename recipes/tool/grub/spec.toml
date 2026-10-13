@@ -30,11 +30,28 @@
 # ★ 那次验证是在本地用模拟跑的，被叫停了——因为【编译归 CI】：CI 上就是原生
 #   x86_64，不用模拟、又快，而且是最终判据。所以这个包的第一次构建由 CI 判。
 #   如果 CI 报缺 32 位头文件，结论就是"得先有 multilib 工具链"，那时再谈。
+#
+# 【aarch64 上为什么一直没建出来——目录名，不是平台差异】
+#
+# aarch64 的目标是 arm64-efi，配置和编译全程正常（模块一个不少）。倒在
+# package() 末尾那个自检上：
+#
+#     grub: 缺少模块目录 /usr/lib/grub/aarch64-efi
+#
+# 因为 GRUB 在 configure 里把 CPU 名字归一过一次——aarch64 → arm64，装出来的
+# 目录叫 arm64-efi。而 grub_moddir() 当时按 <--target>-<platform> 拼名字，
+# 于是断言去找一个根本不存在的目录。i386 / x86_64 恰好是恒等映射，所以这个
+# 错只在 arm64 这一格现形。修的是 grub_moddir()，不是 GRUB 的平台支持。
+# 详细过程见 steps.sh 那段注释。
+#
+# ★ 顺带一个结论：aarch64 上【不需要】multilib，也不需要任何交叉工具链——
+#   目标是 arm64-efi，宿主也是 aarch64，是原生构建。i386-pc 那个 multilib
+#   问题只存在于 x86_64。
 
 [package]
 name        = "grub"
 version     = "2.14"
-release     = 1
+release     = 2
 date        = 2026-10-12T13:00:00Z
 description = "GRUB 引导器（BIOS 与 UEFI）"
 section     = "system"
