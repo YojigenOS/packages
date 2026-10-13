@@ -24,7 +24,19 @@ export HOME=/root
 # devtmpfs 由内核自动挂载（CONFIG_DEVTMPFS_MOUNT），这里补挂其余的。
 mount -t proc     proc     /proc    2>/dev/null
 mount -t sysfs    sysfs    /sys     2>/dev/null
-mount -t devpts   devpts   /dev/pts 2>/dev/null
+# ★ /dev/pts 这个【目录】要先有 —— devtmpfs 不会替我们建它。
+#
+#   少了 mkdir，mount 会因为"目标不存在"失败，而 `2>/dev/null` 把这句话
+#   藏了起来。后果不是"少挂一个文件系统"，是**SSH 上来拿不到终端**：
+#
+#       PTY allocation request failed on channel 0
+#
+#   实测在真机上撞到。★ 教训：**那句 2>/dev/null 把一个真实的失败静音了** ——
+#   而它是启动路径上最重要的一类失败。
+mkdir -p /dev/pts
+if ! mount -t devpts devpts /dev/pts 2>/dev/null; then
+    echo "  ⚠ /dev/pts 挂不上——SSH 会拿不到终端"
+fi
 mount -t tmpfs    tmpfs    /tmp     2>/dev/null
 mount -t tmpfs    tmpfs    /run     2>/dev/null
 
@@ -79,7 +91,27 @@ echo
 #
 #   setsid + 重定向到 /dev/tty0：开一个独立会话，别和下面的 exec 抢。
 if [ -c /dev/tty0 ]; then
-    setsid sh -c 'exec /bin/sh < /dev/tty0 > /dev/tty0 2>&1' &
+    setsid sh -c '# ── 起 shell ────────────────────────────────────────────────────────────────
+#
+# ★ PID1 不能【退出】—— 退出了内核会 panic（"Attempted to kill init"）。
+#
+#   之前这里是 `exec /bin/sh`，于是那个 shell【就是】PID1：在真机上 SSH 上去
+#   敲个 exit，整台机器就 panic 了。那不是"关机"，是"崩了"。
+#
+#   正确的最低要求：PID1 要么不退出，要么退出时把机器【干净地】关掉。
+#   这里选后者——shell 一退出就关机，因为"开机进 shell"是这个阶段的全部内容
+#   （0007：没有真实需求之前不写代码；服务管理不在这一步里）。
+while :; do
+    /bin/sh
+    echo
+    echo "  shell 退出了。PID1 不能退出（内核会 panic），所以现在关机。"
+    echo "  （想留在系统里就别 exit；想重启请从控制台或重装通道）"
+    if poweroff -f 2>/dev/null || poweroff 2>/dev/null; then
+        break
+    fi
+    echo "  ⚠ 关机命令不可用。停在 PID1 循环里（别 Ctrl-D）。"
+    sleep 3600
+done < /dev/tty0 > /dev/tty0 2>&1' &
 fi
 
 exec /bin/sh
