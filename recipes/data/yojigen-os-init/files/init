@@ -6,7 +6,7 @@
 #
 # 【首启钩子是什么，为什么在这里】
 #
-# /usr/lib/yojigenos/boot.d/ 下的脚本，按名字顺序跑。这是个【面向包的约定】：
+# /usr/lib/yojigen-os/boot.d/ 下的脚本，按名字顺序跑。这是个【面向包的约定】：
 # openssh 要生成主机密钥并起 sshd，将来的东西（machine-id、locale、growpart…）
 # 也都要在启动时做点什么，而 /init 不该知道它们每一个是谁。
 #
@@ -49,8 +49,8 @@ echo
 # 包往这里放脚本。按名字排序 = 顺序可控（靠前缀数字），不依赖文件系统返回的
 # 顺序。任何一个钩子失败都不拦启动：它起不来，人还能从串口进去查；
 # 而如果这里 exit，系统就停在一个连 shell 都没有的地方。
-if [ -d /usr/lib/yojigenos/boot.d ]; then
-    for f in /usr/lib/yojigenos/boot.d/*; do
+if [ -d /usr/lib/yojigen-os/boot.d ]; then
+    for f in /usr/lib/yojigen-os/boot.d/*; do
         [ -x "$f" ] || continue
         echo "  ▸ $(basename "$f")"
         "$f" || echo "    ⚠ 这个钩子失败了，继续"

@@ -1,7 +1,7 @@
 #!/bin/sh
 # 首启：生成 SSH 主机密钥（如果还没有），然后启动 sshd。
 #
-# 由 /init 按 /usr/lib/yojigenos/boot.d/ 下的名字顺序调用。
+# 由 /init 按 /usr/lib/yojigen-os/boot.d/ 下的名字顺序调用。
 #
 # 【为什么不把主机密钥打进包】
 #

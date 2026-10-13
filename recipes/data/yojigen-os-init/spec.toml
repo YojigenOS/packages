@@ -1,4 +1,4 @@
-# yojigenos-init —— 开机后跑的第一个用户空间程序
+# yojigen-os-init —— 开机后跑的第一个用户空间程序
 #
 # 它是决策记录 0007 里说的「可启动产物」的必要条件之一：光有内核不够，
 # 内核得有个东西去 exec。这个包提供那个东西（/init）。
@@ -8,7 +8,7 @@
 # tool 那种分类的检查会判它不合格，而 data 正合适（数据包不该有 .so）。
 
 [package]
-name        = "yojigenos-init"
+name        = "yojigen-os-init"
 version     = "1.0"
 release     = 1
 date        = 2026-10-11T12:30:00Z

@@ -1,8 +1,10 @@
 NAME="Yojigen OS"
-ID=yojigenos
+ID=yojigen-os
 PRETTY_NAME="Yojigen OS"
 BUILD_ID=rolling
-HOME_URL="https://github.com/YojigenOS"
-BUG_REPORT_URL="https://github.com/YojigenOS/packages/issues"
+HOME_URL="https://os.yojigen.cn"
+DOCUMENTATION_URL="https://github.com/YojigenOS/packages/tree/main/docs"
+SUPPORT_URL="https://github.com/YojigenOS"
+BUG_REPORT_URL="https://github.com/YojigenOS/distro/issues"
 ANSI_COLOR="1;36"
-LOGO=yojigenos
+LOGO=yojigen-os

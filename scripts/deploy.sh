@@ -2,9 +2,9 @@
 # 把本地仓库部署到云端
 #
 # 用法：
-#     ./scripts/deploy.sh rustfs:yojigenos-repo            # 干跑，只看会传什么
-#     ./scripts/deploy.sh rustfs:yojigenos-repo --go       # 真的传
-#     ./scripts/deploy.sh rustfs:yojigenos-repo --go --arch aarch64
+#     ./scripts/deploy.sh rustfs:yojigen-os-repo            # 干跑，只看会传什么
+#     ./scripts/deploy.sh rustfs:yojigen-os-repo --go       # 真的传
+#     ./scripts/deploy.sh rustfs:yojigen-os-repo --go --arch aarch64
 #
 # 目标是一个 rclone remote 加桶路径。S3 兼容的服务都行——RustFS、R2、S3、MinIO。
 #
@@ -121,8 +121,22 @@ echo "  模式:    $([ "$GO" = 1 ] && echo '★ 真的传' || echo '干跑（加
 echo
 
 # ★ 签名状态：没签名的话客户端每次都要 --allow-untrusted
-if [ -f "$SRC/yojigenos.rsa.pub" ]; then
+#
+# ★ 这里原来查的是 "$SRC/yojigenos.rsa.pub"——那个文件【从来不存在】。
+#   签名是打在 APKINDEX.tar.gz【里面】的一个成员
+#   （.SIGN.RSA.<密钥名>.rsa.pub），不是仓库目录里的独立文件。所以这个检查
+#   永远走 else 分支，报「没有签名」，而实际是签了的。
+#
+#   ★ 也【不能】靠读索引自己判断：
+#     · 索引是 ADB 格式，不是 gzip tar —— `tar -tzf` 什么都解不出来
+#     · 里面的签名标记没有可 grep 的原始字节（`# sig v00 …` 是 apk adbdump
+#       的【渲染】，不是文件里的字符串），只有 apk 自己说得准，而那要起容器
+#
+#   所以改成让【签名的那一方】留记号：repo.sh 签完写 var/.repo-signed-<arch>。
+#   与其在部署这边重新推导一遍"签没签"，不如让知道的那一方记下来。
+if [ -f "var/.repo-signed-$ARCH" ]; then
     echo "  签名:    有（客户端不用加 --allow-untrusted）"
+    echo "           密钥: $(cat "var/.repo-signed-$ARCH")"
 else
     echo "  签名:    ★ 没有 —— 客户端装的时候要加 --allow-untrusted"
     echo "           生成密钥后跑 scripts/repo.sh --sign-key <密钥> 再部署"

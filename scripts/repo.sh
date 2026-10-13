@@ -4,7 +4,7 @@
 # 用法：
 #     ./scripts/repo.sh                    # aarch64
 #     ./scripts/repo.sh --arch x86_64
-#     ./scripts/repo.sh --sign-key ~/.yojigenos/yojigenos.rsa
+#     ./scripts/repo.sh --sign-key ~/.yojigenos/keys/<你的密钥>.rsa
 #
 # 产出：
 #     var/repo/<arch>/APKINDEX.tar.gz      ← 索引（唯一的"特殊"文件）
@@ -152,11 +152,24 @@ if [ -n "$SIGN_KEY" ]; then
     SIGN_ARGS="--sign-key /key.rsa --keys-dir /keys"
     SIGN_MOUNT="-v $SIGN_KEY:/key.rsa:ro -v $KEYS:/keys:ro"
     echo "  签名: $(basename "$SIGN_KEY")  （公钥现场从它推导）"
+    # ★ 留个记号给 deploy.sh。
+    #
+    #   为什么不让它自己去查索引：索引是 ADB 格式，不是 gzip tar，
+    #   `tar -tzf` 什么都解不出来；而里面的签名标记没有可 grep 的原始字节
+    #   （`# sig v00 …` 是 apk adbdump 的【渲染】，不是文件里的字符串）。
+    #   deploy.sh 原来查的是 "$SRC/yojigenos.rsa.pub"——那个文件从来不存在，
+    #   于是它永远报「没有签名」，而实际是签了的。
+    #
+    #   与其在部署那边重新推导一遍"签没签"，不如让【签名的那一方】记下来。
+    #   放在 var/ 而不是 var/repo/：后者会被 rclone 整个传上去。
+    mkdir -p var
+    echo "$(basename "$SIGN_KEY")" > "var/.repo-signed-$ARCH"
 else
     SIGN_ARGS="--allow-untrusted"
     SIGN_MOUNT=""
+    rm -f "var/.repo-signed-$ARCH"
     echo "  ★ 不签名（本地开发用；装的时候要 --allow-untrusted）"
-    echo "     签名：scripts/keys.sh gen 然后 $0 --sign-key ~/.yojigenos/keys/yojigenos-2026-1.rsa"
+    echo "     签名：scripts/keys.sh gen 然后 $0 --sign-key ~/.yojigenos/keys/yojigen-os-2026-1.rsa"
 fi
 
 DESC="${DESC:-Yojigen OS $ARCH 软件仓库}"

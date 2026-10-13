@@ -44,9 +44,9 @@ package() {
 
     # ── 3. 首启钩子 ─────────────────────────────────────────────────────
     #
-    # /init 按名字顺序跑 /usr/lib/yojigenos/boot.d/ 下的东西。这个钩子做两件
+    # /init 按名字顺序跑 /usr/lib/yojigen-os/boot.d/ 下的东西。这个钩子做两件
     # 事：没有主机密钥就生成，然后起 sshd。
-    install -Dm755 "$PKGDIR/files/20-sshd" "$PKGDEST/usr/lib/yojigenos/boot.d/20-sshd"
+    install -Dm755 "$PKGDIR/files/20-sshd" "$PKGDEST/usr/lib/yojigen-os/boot.d/20-sshd"
 
     # ── 4. root 的默认公钥 ──────────────────────────────────────────────
     #
