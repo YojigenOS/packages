@@ -1,0 +1,79 @@
+# curl —— 命令行 HTTP 客户端 + libcurl
+#
+# 【为什么需要它：5.8 那条链的最后一块】
+#
+# 2026-10-13 在 TX 上撞到的：系统起来了、能 SSH、能 apk 装包，**但没有 curl**。
+# 而 `reinstall.sh` 要靠 curl 下载救援环境——于是：
+#
+#     第一次装得进去（那时候 TX 还是 Rocky，Rocky 有 curl）
+#     换成我们自己的系统之后，反而【装不了自己】了 ✗
+#
+# 这不是"少个小工具"，是一个【能自举的系统】必须具备的能力：
+# **它得能从网上取东西。** apk 有自己的 HTTP 客户端，但那只覆盖 apk 的用法；
+# 别的脚本（reinstall、安装器、各种一次性脚本）默认 curl 或 wget 存在。
+#
+# 【为什么依赖这么少】
+#
+# 只用 openssl + zlib。其余可选的全关掉——HTTP/HTTPS 够用，而每多一个可选
+# 依赖就多一个包要建、多一处要维护。真需要 http2 或 brotli 的时候再开。
+
+[package]
+name        = "curl"
+version     = "8.22.0"
+release     = 1
+date        = 2026-10-13T11:00:00Z
+description = "命令行 HTTP 客户端与 libcurl"
+section     = "net"
+url         = "https://github.com/curl/curl"
+license     = "curl"
+
+[[source]]
+git     = "https://github.com/curl/curl"
+commit  = "01346829096c61b372692f6dc43ffa778c6caccd"
+mirrors = ["https://gitlab.com/curl/curl"]
+
+[dependencies]
+runtime = ["glibc", "openssl", "zlib", "ca-certificates"]
+build   = ["make", "gcc", "perl"]
+
+[dependencies.x86_64]
+runtime = ["glibc", "openssl", "zlib", "ca-certificates"]
+build   = ["make", "gcc", "perl"]
+
+[build]
+type = "autotools"
+# git 树里没有 configure，现场生成。
+autoreconf = true
+configure = [
+    "--prefix=/usr",
+
+    # ── 用我们自己的 openssl / zlib ──
+    "--with-openssl",
+    "--with-zlib",
+
+    # ── 证书 ──
+    #
+    # ★ 不写死路径的话，curl 会去猜（/etc/ssl/certs 之类），而我们的
+    # ca-certificates 把 bundle 放在哪儿是它决定的。写死一处，两边对齐。
+    "--with-ca-bundle=/etc/ssl/certs/ca-certificates.crt",
+
+    # ── 关掉可选依赖（每一个都是要单独建的包）──
+    "--without-nghttp2",     # HTTP/2。HTTPS 够用
+    "--without-libpsl",
+    "--without-brotli",
+    "--without-libidn2",
+    "--without-zstd",
+    "--without-libssh2",     # SFTP/SCP。我们有 openssh 的 scp
+    "--without-librtmp",
+
+    # ── 关掉用不上的协议 ──
+    #    少一个协议就少一块解析代码，也少一块攻击面。
+    "--disable-ldap", "--disable-ldaps",
+    "--disable-rtsp", "--disable-dict", "--disable-telnet", "--disable-tftp",
+    "--disable-pop3", "--disable-imap", "--disable-smtp", "--disable-gopher",
+    "--disable-mqtt",
+    "--disable-manual",      # 省掉内嵌的那份几百 KB 的手册页
+
+    "--enable-ipv6",
+    "--enable-threaded-resolver",
+]
