@@ -35,7 +35,7 @@ MARK=/var/lib/yojigen-os/grown-root
 
 for t in sfdisk resize2fs findmnt lsblk; do
     command -v "$t" >/dev/null 2>&1 || {
-        echo "  ⚠ 缺 $t，跳过扩盘（根分区会保持镜像里的大小）"
+        echo "  ⚠ 缺 ${t}，跳过扩盘（根分区会保持镜像里的大小）"
         exit 0
     }
 done
@@ -50,7 +50,7 @@ SRC=$(readlink -f "$SRC")
 # 那些的扩法完全不同，而猜错了会毁掉分区表。
 case "$SRC" in
     /dev/*[0-9]) ;;
-    *) echo "  · 根在 $SRC，不是普通分区，跳过扩盘"; exit 0 ;;
+    *) echo "  · 根在 ${SRC}，不是普通分区，跳过扩盘"; exit 0 ;;
 esac
 
 DISKNAME=$(lsblk -no PKNAME "$SRC" 2>/dev/null | head -1)
