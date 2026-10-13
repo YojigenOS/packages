@@ -246,7 +246,20 @@ lines = ["#!/bin/sh", "set -e",
          "while IFS=' ' read -r m f; do chmod \"$m\" \"$f\" 2>/dev/null || true; done < /tmp/.setid || true",
          "SC=$(command -v setcap 2>/dev/null || true); [ -x \"$SC\" ] || SC=/usr/sbin/setcap",
          "while read -r f c; do [ -n \"$c\" ] && \"$SC\" \"$c\" \"$f\" 2>/dev/null || true; done < /tmp/.caps",
-         "echo \"[打包] 放回了 $(wc -l < /tmp/.caps 2>/dev/null || echo 0) 个\"",
+         "echo \"[打包] 从 getcap 记到的放回了 $(wc -l < /tmp/.caps 2>/dev/null || echo 0) 个\"",
+         # ★★ 而【主路】是那份文本清单 —— build.py 在拷出之后写的 /in/caps.txt。
+         #   理由：能力位过不了绑定挂载（fsetxattr 报 EOPNOTSUPP），
+         #   而文本可以。所以走清单不走属性。
+         "if [ -s /in/caps.txt ] && [ -x \"$SC\" ]; then",
+         "  n=0",
+         "  while IFS=' ' read -r f c; do",
+         "    [ -n \"$f\" ] && [ -n \"$c\" ] || continue",
+         "    \"$SC\" \"$c\" \"/data$f\" 2>/dev/null && n=$((n+1))",
+         "  done < /in/caps.txt",
+         "  echo \"[打包] ★ 从 /in/caps.txt 设回了 $n 个能力位\"",
+         "else",
+         "  echo \"[打包] ⚠ 没有 /in/caps.txt（或没有 setcap）—— 这一批没有能力位要设\"",
+         "fi",
          f"exec apk mkpkg {sign_arg}\\"]
 for k, v in fields:
     if v:
