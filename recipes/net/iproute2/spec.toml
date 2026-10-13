@@ -1,0 +1,33 @@
+# iproute2 —— ip / ss / tc
+#
+# 【为什么它是第一档里的第一个】
+#
+# 实测撞到过：在新的机器上想看一眼网络，`ip a` 不存在，于是只能
+# `cat /proc/net/route` 去数十六进制。这不是"少个工具"，是**网络的窗口关着**。
+#
+# 它给：ip（地址/路由/邻居）、ss（socket，netstat 的现代替代）、
+# tc（流量控制）、bridge、devlink……
+
+[package]
+name        = "iproute2"
+version     = "7.2.0"
+release     = 1
+date        = 2026-10-13T12:45:00Z
+description = "网络配置与查看（ip · ss · tc）"
+section     = "net"
+url         = "https://wiki.linuxfoundation.org/networking/iproute2"
+license     = "GPL-2.0-or-later"
+
+[[source]]
+git    = "https://git.kernel.org/pub/scm/network/iproute2/iproute2.git"
+commit = "ef50f7fb33425ec4998d8e162b9a16d5e53faca5"
+
+[dependencies]
+runtime = ["glibc", "libcap", "elfutils"]
+build   = ["make", "gcc", "bison", "flex", "pkgconf"]
+[dependencies.x86_64]
+runtime = ["glibc", "libcap", "elfutils"]
+build   = ["make", "gcc", "bison", "flex", "pkgconf"]
+
+[build]
+type = "custom"

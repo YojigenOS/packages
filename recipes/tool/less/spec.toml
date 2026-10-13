@@ -32,7 +32,6 @@ build   = ["make", "gcc"]
 
 [build]
 type = "autotools"
-options = ["-DFAKE=1"]
 autoreconf = false
 configure = [
     "--prefix=/usr",

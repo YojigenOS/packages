@@ -1,0 +1,43 @@
+# strace —— 看一个程序到底在干什么
+#
+# 【为什么它在第二档】
+#
+# 服务器上排障最有力的一件工具：「它明明应该读那个文件，为什么说没有？」
+# strace 把系统调用依次打出来，答案就在里面。
+#
+# 【为什么关掉 mpers】
+#
+# mpers 是"同时支持 32 位和 64 位进程"那套。开着要 32 位的 libc 头文件
+# （gcc-multilib 那种）。纯 64 位系统上用不到，而它会让构建直接失败。
+
+[package]
+name        = "strace"
+version     = "7.2"
+release     = 1
+date        = 2026-10-13T12:40:00Z
+description = "跟踪进程的系统调用与信号"
+section     = "utils"
+url         = "https://strace.io/"
+license     = "LGPL-2.1-or-later"
+
+[[source]]
+git    = "https://github.com/strace/strace"
+commit = "195ac8ddbf6fad16ff1ff125b0feb725b6c46dcf"
+
+[dependencies]
+runtime = ["glibc", "elfutils"]
+build   = ["make", "gcc", "autoconf", "automake", "libtool", "gettext"]
+[dependencies.x86_64]
+runtime = ["glibc", "elfutils"]
+build   = ["make", "gcc", "autoconf", "automake", "libtool", "gettext"]
+
+[build]
+type      = "autotools"
+autoreconf = true
+configure = [
+    "--prefix=/usr",
+    # ★ 关掉 32/64 混合支持。开着要 32 位 libc，纯 64 位系统上没必要，
+    #   而它会以"找不到 bits/wordsize.h 之类"的形式失败。
+    "--enable-mpers=no",
+    "--disable-static",
+]

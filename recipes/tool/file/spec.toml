@@ -1,0 +1,41 @@
+# file —— "这个文件到底是什么"
+#
+# 【为什么它有用】
+#
+# 服务器上经常拿到一个后缀不明的东西。file 不看后缀，看【内容】——
+# 它读魔数。所以 `file x` 在 x 叫 x.tar.gz 但其实是 x 的时候照样说真话。
+#
+# 它同时给 libmagic：很多程序（包括一些语言的标准库）靠它判断文件类型。
+
+[package]
+name        = "file"
+version     = "5.48"
+release     = 1
+date        = 2026-10-13T12:45:00Z
+description = "判断文件类型（按内容，不按后缀）"
+section     = "utils"
+url         = "https://www.darwinsys.com/file/"
+license     = "BSD-2-Clause"
+
+[[source]]
+git    = "https://github.com/file/file"
+commit = "eb754ace19fed5481d8142426543100a2d6bae4e"
+# ★ 这个 commit 是 tag FILE5_48 的【peeled】值（^{}）。
+#   它是附注标签，ls-remote 会同时打出标签对象和它指向的 commit ——
+#   要的是后者，否则 checkout 出来是个 tag 对象，不是树。
+
+[dependencies]
+runtime = ["glibc", "bzip2", "xz", "zlib", "zstd"]
+build   = ["make", "gcc", "autoconf", "automake", "libtool"]
+[dependencies.x86_64]
+runtime = ["glibc", "bzip2", "xz", "zlib", "zstd"]
+build   = ["make", "gcc", "autoconf", "automake", "libtool"]
+
+[build]
+type      = "autotools"
+autoreconf = true
+configure = [
+    "--prefix=/usr",
+    # 压缩包也能认——它靠这几个库往里看。
+    "--enable-bzlib", "--enable-xzlib", "--enable-zlib", "--enable-zstdlib",
+]

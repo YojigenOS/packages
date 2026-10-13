@@ -1,0 +1,37 @@
+# libpcap —— 抓包的底层库
+#
+# 服务器上"到底发出去没有"这种问题，答案在包里面。tcpdump 和很多
+# 网络工具都建在它上面。
+
+[package]
+name        = "libpcap"
+version     = "1.11.0"
+release     = 1
+date        = 2026-10-13T12:45:00Z
+description = "网络抓包库（tcpdump 的底层）"
+section     = "libs"
+url         = "https://www.tcpdump.org/"
+license     = "BSD-3-Clause"
+
+[[source]]
+git    = "https://github.com/the-tcpdump-group/libpcap"
+commit = "87b6a456dd7ac9e34231f8a0a3f99a13a59b4419"
+
+[dependencies]
+runtime = ["glibc"]
+build   = ["make", "gcc", "autoconf", "automake", "libtool", "bison", "flex"]
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["make", "gcc", "autoconf", "automake", "libtool", "bison", "flex"]
+
+[build]
+type      = "autotools"
+autoreconf = true
+configure = [
+    "--prefix=/usr",
+    # ★ 关掉 D-Bus：开着要 dbus 的头文件。我们还没有 dbus（systemd 那批里才有）。
+    "--disable-dbus",
+    # 关掉蓝牙：那个功能要 libbluetooth。
+    "--disable-bluetooth",
+    "--disable-static",
+]

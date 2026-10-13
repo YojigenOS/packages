@@ -1,0 +1,36 @@
+# vim —— 改配置文件的编辑器
+#
+# 【为什么第一档里有它】
+#
+# 服务器上第二常做的事是"改一个配置文件"。没有编辑器，只有 sed ——
+# 而 sed 适合改一行，不适合读一个文件然后决定改哪一行。
+#
+# 【为什么走 custom 而不是 autotools】
+#
+# 它的 configure 不在根目录，在 src/ 下面。驱动的 autotools 那条路是
+# 在根目录跑 ./configure，对它不成立。所以自己写步骤。
+
+[package]
+name        = "vim"
+version     = "9.2.1178"
+release     = 1
+date        = 2026-10-13T12:40:00Z
+description = "编辑器（vi 的改进版）"
+section     = "utils"
+url         = "https://www.vim.org/"
+license     = "Vim"
+
+[[source]]
+git    = "https://github.com/vim/vim"
+commit = "7670338d8b695c476de868dabd34d68d6de2443b"
+
+[dependencies]
+runtime = ["glibc", "ncurses"]
+build   = ["make", "gcc"]
+
+[dependencies.x86_64]
+runtime = ["glibc", "ncurses"]
+build   = ["make", "gcc"]
+
+[build]
+type = "custom"

@@ -1,0 +1,49 @@
+# procps —— ps / top / free / kill / pgrep …
+#
+# 【为什么它排第一档】
+#
+# 没有它，进程是【黑盒】：只能翻 /proc 一个个看。而服务器上最常问的两个问题
+# 就是"什么在占 CPU"和"什么在吃内存"——ps 和 top 就是回答它们的。
+#
+# 顺带它还给 `kill`、`pgrep`、`pkill`、`uptime`、`sysctl` 这些。
+#
+# 上游在 GitLab（不在 GitHub）。配方写的是"哪个仓库的哪个 commit"，
+# 不关心托管商是谁。
+
+[package]
+name        = "procps"
+version     = "4.0.7"
+release     = 1
+date        = 2026-10-13T12:40:00Z
+description = "进程与系统状态工具（ps · top · free · kill · pgrep）"
+section     = "utils"
+url         = "https://gitlab.com/procps-ng/procps"
+license     = "GPL-2.0-or-later AND LGPL-2.1-or-later"
+
+[[source]]
+git     = "https://gitlab.com/procps-ng/procps.git"
+commit  = "66b48a3720d46f304f0fa76f720ca925fa48d97e"
+mirrors = ["https://github.com/warmchang/procps-ng"]
+
+[dependencies]
+runtime = ["glibc", "ncurses"]
+build   = ["make", "gcc", "autoconf", "automake", "libtool", "gettext", "pkgconf"]
+
+[dependencies.x86_64]
+runtime = ["glibc", "ncurses"]
+build   = ["make", "gcc", "autoconf", "automake", "libtool", "gettext", "pkgconf"]
+
+[build]
+type      = "autotools"
+# 上游是 git 树，没有 configure —— 只有 configure.ac。现场生成。
+autoreconf = true
+configure = [
+    "--prefix=/usr",
+    "--sysconfdir=/etc",
+    # ★ 它默认会去看 systemd 在不在，在的话装 systemd 单元。
+    #   我们还没有 systemd，而且就算有，这个包也不该管那件事。
+    "--with-systemd=no",
+    # 不要 8-bit 的 watch（那是给老终端的）。
+    "--without-watch8bit",
+    "--disable-static",
+]

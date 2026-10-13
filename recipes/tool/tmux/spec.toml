@@ -1,0 +1,43 @@
+# tmux —— 终端复用
+#
+# 【为什么它比看起来重要】
+#
+# 「SSH 一断，手上的活全没了」——这事在服务器上不是小麻烦。tmux 之后，
+# 会话跑在服务器上，网络断了重连 `tmux attach` 就接着干。
+#
+# 顺带它能开分屏，一台机器上同时盯几件事。
+
+[package]
+name        = "tmux"
+version     = "3.8"
+release     = 1
+date        = 2026-10-13T12:40:00Z
+description = "终端复用器（断线不掉会话）"
+section     = "utils"
+url         = "https://github.com/tmux/tmux"
+license     = "ISC"
+
+[[source]]
+git    = "https://github.com/tmux/tmux"
+commit = "7f2a35ad3321f9ba57a1062ca73b1f3ff26aca53"
+
+[dependencies]
+runtime = ["glibc", "ncurses", "libevent", "utf8proc"]
+build   = ["make", "gcc", "autoconf", "automake", "libtool", "pkgconf"]
+
+[dependencies.x86_64]
+runtime = ["glibc", "ncurses", "libevent", "utf8proc"]
+build   = ["make", "gcc", "autoconf", "automake", "libtool", "pkgconf"]
+
+[build]
+type      = "autotools"
+autoreconf = true
+configure = [
+    "--prefix=/usr",
+    "--sysconfdir=/etc",
+    # ★ 这条要紧：用 utf8proc 算字符宽度。中文字占两列，不靠它就对不齐。
+    "--enable-utf8proc",
+    # 不要那几个可选后端——我们没有它们。
+    "--disable-utempter",
+    "--disable-systemd",
+]
