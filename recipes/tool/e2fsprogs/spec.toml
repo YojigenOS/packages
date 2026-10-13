@@ -1,0 +1,62 @@
+# e2fsprogs —— ext2/3/4 的工具：mke2fs · e2fsck · resize2fs · tune2fs…
+#
+# 【为什么需要它】
+#
+# 两件事都指着它：
+#
+#   ① fstab 里根的那一行是 `0 1`——最后那个 1 是 fsck pass，意思是"开机时检查
+#      这个文件系统"。而系统里【没有 fsck】。这是当初写 fstab 时就埋下的缺口：
+#      设了一个要求，却没提供满足它的工具。
+#
+#   ② 首启钩子 10-grow-root 要用 resize2fs 把根分区撑满整块盘。镜像是固定
+#      大小的，DD 到真机之后只有起起来才知道自己躺在多大的盘上。
+#
+# 顺带：一个能装软件的系统里没有 mkfs 和 fsck，本来就说不通。
+
+[package]
+name        = "e2fsprogs"
+version     = "1.47.4"
+release     = 1
+date        = 2026-10-13T08:00:00Z
+description = "ext2/3/4 文件系统工具（mke2fs · e2fsck · resize2fs · tune2fs）"
+section     = "base"
+url         = "https://github.com/tytso/e2fsprogs"
+license     = "GPL-2.0-only AND LGPL-2.0-only AND BSD-3-Clause"
+
+[[source]]
+# 写「哪个仓库的哪个 commit」，不写托管商的链接——
+# 链接格式各托管不同（GitHub 是 codeload，Gitea 是 /archive/<sha>，
+# GitLab 又是另一种），那是驱动的事，不该让配方作者记。
+# 校验由 git 自己完成：commit hash 就是那棵树的内容哈希，比 sha256
+# 更强——sha256 钉的是一份字节，而不同托管的归档字节可以不一样。
+git     = "https://github.com/tytso/e2fsprogs"
+commit  = "7ee1d505ef3b37831215f490411f346fe57e9053"
+mirrors = ["https://git.kernel.org/pub/scm/fs/ext2/e2fsprogs"]
+
+[dependencies]
+runtime = ["glibc"]
+build   = ["make", "gcc", "sed", "awk"]
+
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["make", "gcc", "sed", "awk"]
+
+[build]
+type      = "autotools"
+# 上游 git 树里【有】configure（不像 xz 那样要 autoreconf）。用了它就不用
+# 把 autoconf/automake/libtool 拉进构建闭包——那是三个不小的包。
+autoreconf = false
+configure = [
+    "--prefix=/usr",
+
+    # uuidd 是个常驻的 UUID 守护进程。我们要的是离线工具，不是服务。
+    "--disable-uuidd",
+
+    # 不编翻译。中文那件事有自己的计划（见 0006），
+    # 而在这里加 gettext 只是把依赖做大。
+    "--disable-nls",
+
+    # 【不是】--disable-libuuid/--disable-libblkid：
+    # 那两个开关的意思是"别用自带的，用系统的"，会引入 util-linux 的依赖。
+    # 什么都不写 = 用它自己带的那份，依赖最少。
+]

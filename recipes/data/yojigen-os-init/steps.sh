@@ -15,4 +15,9 @@ build() {
 package() {
     # 内核启动后会在根目录找 /init 并 exec 它。路径是约定，不是偏好。
     install -Dm755 "$PKGDIR/files/init" "$PKGDEST/init"
+
+    # 首启钩子。/init 按名字顺序跑这个目录下的东西——它自己不该知道
+    # 每一个钩子是谁。10- 排在 20-sshd 之前：先扩盘，再起服务。
+    install -Dm755 "$PKGDIR/files/10-grow-root" \
+        "$PKGDEST/usr/lib/yojigen-os/boot.d/10-grow-root"
 }

@@ -1,0 +1,106 @@
+#!/bin/sh
+# 首启：把根分区撑满整块盘。
+#
+# 由 /init 按 /usr/lib/yojigen-os/boot.d/ 下的名字顺序调用。
+#
+# 【为什么需要这个】
+#
+# 磁盘镜像是【固定大小】的（现在 1 GiB，根分区 534 MB）。DD 到真机之后，
+# 盘的其余部分完全没用到——而那不是浪费一点点：根只有 534 MB，装个
+# python3 加 gcc 就满了。
+#
+# 【为什么不改镜像的大小】
+#
+# 因为镜像的大小和【目标盘的大小】无关。同一份 1 GiB 的镜像可能 DD 到
+# 40 GB 的云盘上，也可能 DD 到 8 GB 的 U 盘上。**只有起起来之后才知道
+# 自己躺在多大的盘上**——所以这件事只能在 first-boot 做。
+#
+# 【为什么不用 growpart】
+#
+# growpart 是 cloud-utils 里的一个 shell 脚本，而它做的核心动作就是下面
+# 那几行：从 sysfs 读盘的扇区数、读分区的起始扇区、用 sfdisk 改分区表、
+# 再 resize2fs。我们已经有 util-linux（含 sfdisk）和 e2fsprogs 了，
+# **为这几行引入一个包不值得**。
+#
+# 【为什么这里不能失败】
+#
+# 和 20-sshd 一样的道理：启动脚本的责任是"让它起来"，不是"拦住启动"。
+# 扩盘失败的系统还是能起来的（只是空间小），而这里 exit 会让系统停在一个
+# 连 shell 都没有的地方。
+
+set -u
+
+MARK=/var/lib/yojigen-os/grown-root
+[ -e "$MARK" ] && exit 0
+
+for t in sfdisk resize2fs findmnt lsblk; do
+    command -v "$t" >/dev/null 2>&1 || {
+        echo "  ⚠ 缺 $t，跳过扩盘（根分区会保持镜像里的大小）"
+        exit 0
+    }
+done
+
+# ── 根在哪个盘、哪个分区上 ──────────────────────────────────────────────────
+
+SRC=$(findmnt -n -o SOURCE / 2>/dev/null) || exit 0
+[ -n "$SRC" ] || exit 0
+SRC=$(readlink -f "$SRC")
+
+# 只处理 /dev/<盘><数字> 这种形状。别的（LVM、dm、overlay）不动——
+# 那些的扩法完全不同，而猜错了会毁掉分区表。
+case "$SRC" in
+    /dev/*[0-9]) ;;
+    *) echo "  · 根在 $SRC，不是普通分区，跳过扩盘"; exit 0 ;;
+esac
+
+DISKNAME=$(lsblk -no PKNAME "$SRC" 2>/dev/null | head -1)
+[ -n "$DISKNAME" ] || exit 0
+DISK="/dev/$DISKNAME"
+
+PARTNUM=$(cat "/sys/class/block/$(basename "$SRC")/partition" 2>/dev/null) || exit 0
+START=$(cat "/sys/class/block/$(basename "$SRC")/start" 2>/dev/null) || exit 0
+DISK_SECTORS=$(cat "/sys/class/block/$DISKNAME/size" 2>/dev/null) || exit 0
+
+# ── 现在够大吗 ──────────────────────────────────────────────────────────────
+
+CUR_SECTORS=$(cat "/sys/class/block/$(basename "$SRC")/size" 2>/dev/null) || exit 0
+
+# 给 GPT 的备份头留 1 MiB（2048 扇区）——它住在盘尾，不留就会和分区打架。
+WANT=$(( DISK_SECTORS - START - 2048 ))
+
+if [ "$CUR_SECTORS" -ge "$WANT" ]; then
+    mkdir -p "$(dirname "$MARK")" && : > "$MARK"
+    exit 0
+fi
+
+echo "  根分区 $(($CUR_SECTORS / 2048)) MiB → $(($WANT / 2048)) MiB（盘共 $(($DISK_SECTORS / 2048)) MiB）"
+
+# ── 改分区表 ────────────────────────────────────────────────────────────────
+#
+# ★ --no-reread：分区表正被用着（根就挂在上面），内核不会让我们重读。
+#   不重读没关系——下面 resize2fs 是按【设备大小】算的，而内核在重读之前
+#   看到的还是老大小。所以改完之后要 partx -u 让内核认一下。
+#
+# ★ size 给的是绝对扇区数，不是 +1MiB 那种增量写法：明确。
+
+if ! printf 'start=%s, size=%s\n' "$START" "$WANT" \
+        | sfdisk --no-reread --force -N "$PARTNUM" "$DISK" >/dev/null 2>&1; then
+    echo "  ⚠ sfdisk 改分区表失败，根分区保持原样"
+    exit 0
+fi
+
+# 让内核认新的大小。partx 失败也不致命——resize2fs 有时能靠 BLKGETSIZE 看见。
+partx -u "$SRC" 2>/dev/null || true
+
+# ── 撑开文件系统 ────────────────────────────────────────────────────────────
+#
+# resize2fs 在【挂载着】的根上能安全地扩（内核支持在线扩）。缩才需要卸载，
+# 而这里只扩。
+
+if ! resize2fs "$SRC" >/dev/null 2>&1; then
+    echo "  ⚠ resize2fs 失败，分区大了但文件系统还是老的（可以先 reboot 再试）"
+    exit 0
+fi
+
+mkdir -p "$(dirname "$MARK")" && : > "$MARK"
+echo "  ✓ 根分区撑满了（$(findmnt -n -o SIZE / | tr -d ' ') 可用）"
