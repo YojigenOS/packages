@@ -33,7 +33,27 @@ build   = ["make", "gcc", "autoconf", "automake", "libtool", "gettext"]
 
 [build]
 type      = "autotools"
-autoreconf = true
+# ★ 不用驱动的 autoreconf —— strace 有自己的 bootstrap。
+#
+#   上游 INSTALL-git.md 里写着（原文）：
+#
+#       From the git repository root:
+#           ./bootstrap
+#       This generates the configure script and build system files.
+#
+#   而 bootstrap 跑的不是 autoreconf，是一串 gen_*.sh
+#   （m4/gen_bpf_attr_m4.sh、src/generate_mpers_am.sh、src/xlat/gen.sh …）——
+#   它们从模板生成 Makefile.am 之类。少了这一步，autoreconf 报的是：
+#
+#       autoreconf: error: 'configure.ac' is required
+#
+#   而 configure.ac 明明就在那儿 —— 那个报错指的方向是错的。
+#
+#   （这正是 less 那格学到的同一件事：**从 git 建的时候，先读上游的
+#     README / INSTALL-git 之类。** tarball 和 git 是两条路，而上游通常
+#     只在文档里说这件事，Makefile 和 configure.ac 里看不出来。
+#     我在 less 的提交里写过这条，然后在 strace 上又猜了一遍 ✗）
+autoreconf = false
 configure = [
     "--prefix=/usr",
     # ★ 关掉 32/64 混合支持。开着要 32 位 libc，纯 64 位系统上没必要，
