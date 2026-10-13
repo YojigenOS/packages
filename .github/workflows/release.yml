@@ -700,7 +700,14 @@ jobs:
           if-no-files-found: warn
 
       - name: 留存仓库副本
-        if: always()
+        # ★ 和上面那个抢救步骤【互斥】。
+        #
+        #   两个都会传 `repo-<架构>` 这个名字，而播种步骤只认这个名字、只取一个。
+        #   同名不会报错，只会让 `gh run download` 随缘挑一个——**那种错误特别
+        #   难查，因为两边看起来都是"合法"的产物**。
+        #
+        #   没失败时走这条（完整：.apk + 索引），失败时走抢救那条（只有 .apk）。
+        if: always() && !failure()
         continue-on-error: true
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
