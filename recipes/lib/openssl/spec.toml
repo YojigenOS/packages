@@ -101,6 +101,30 @@ section     = "libs"
 # ★ 显式声明，不用默认的"继承主包 runtime"——那个默认是保守的过度声明，
 #   会把主包的依赖（这里是 glibc）都带上。这两个库实际只需要 glibc 和 zlib，
 #   而它们的 so: 依赖会被 ELF 扫描自动补齐。
+# ★ provider-priority = 100 —— 让 apk 【自动选中】这个提供者。
+#
+#   没有它，apk 拒绝自动解析 so: 依赖：
+#
+#       ERROR: unable to select packages:
+#         so:libcrypto.so.3 (virtual):
+#           note: please select one of the 'provided by' packages explicitly
+#           provided by: libcrypto
+#           required by: openssl-3.5.9-r1[so:libcrypto.so.3]
+#
+#   ★ 而 Alpine 的同一个包【有】这个字段：
+#
+#       provider_priority = 100
+#       provides = so:libcrypto.so.3=3
+#
+#   实测对照过：apk 在 Alpine 自己的仓库上会自动选中 libcrypto3/libssl3，
+#   在我们的仓库上不会——差别就是这个字段。
+#
+#   ★ 为什么是"两个提供者"之外的场景也要设：so: 这种虚名的提供关系是 apk
+#     【自动扫 ELF 扫出来的】，配方里根本没写。没有优先级的自动提供，apk
+#     当成"提示"而不是"候选"，于是要人显式指名。
+#
+#   100 和 dash（提供 /bin/sh）一致，也和 Alpine 一致。
+provider-priority = 100
 depends     = ["glibc", "zlib"]
 # `*` 不跨 `/`，所以这个模式匹配 .so.3 和 .so.3.x，但【不】匹配
 # usr/lib/libcrypto.so——最后那个是给链接器的开发文件，不该在运行时包里。
@@ -110,5 +134,29 @@ files       = ["usr/lib/libcrypto.so.3*"]
 name        = "libssl"
 description = "OpenSSL 的 TLS 库（libssl.so.3）"
 section     = "libs"
+# ★ provider-priority = 100 —— 让 apk 【自动选中】这个提供者。
+#
+#   没有它，apk 拒绝自动解析 so: 依赖：
+#
+#       ERROR: unable to select packages:
+#         so:libcrypto.so.3 (virtual):
+#           note: please select one of the 'provided by' packages explicitly
+#           provided by: libcrypto
+#           required by: openssl-3.5.9-r1[so:libcrypto.so.3]
+#
+#   ★ 而 Alpine 的同一个包【有】这个字段：
+#
+#       provider_priority = 100
+#       provides = so:libcrypto.so.3=3
+#
+#   实测对照过：apk 在 Alpine 自己的仓库上会自动选中 libcrypto3/libssl3，
+#   在我们的仓库上不会——差别就是这个字段。
+#
+#   ★ 为什么是"两个提供者"之外的场景也要设：so: 这种虚名的提供关系是 apk
+#     【自动扫 ELF 扫出来的】，配方里根本没写。没有优先级的自动提供，apk
+#     当成"提示"而不是"候选"，于是要人显式指名。
+#
+#   100 和 dash（提供 /bin/sh）一致，也和 Alpine 一致。
+provider-priority = 100
 depends     = ["glibc", "zlib", "libcrypto"]
 files       = ["usr/lib/libssl.so.3*"]

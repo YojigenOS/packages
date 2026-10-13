@@ -91,6 +91,30 @@ description = "GCC 的运行时库（libgcc_s.so.1）"
 section     = "libs"
 # ★ 不继承主包的 runtime——那里面有 gmp/mpfr/mpc，而这两个文件一个都不需要。
 #   实际依赖由 ELF 扫描补齐（libc.so.6 和 ld-linux）。
+# ★ provider-priority = 100 —— 让 apk 【自动选中】这个提供者。
+#
+#   没有它，apk 拒绝自动解析 so: 依赖：
+#
+#       ERROR: unable to select packages:
+#         so:libcrypto.so.3 (virtual):
+#           note: please select one of the 'provided by' packages explicitly
+#           provided by: libcrypto
+#           required by: openssl-3.5.9-r1[so:libcrypto.so.3]
+#
+#   ★ 而 Alpine 的同一个包【有】这个字段：
+#
+#       provider_priority = 100
+#       provides = so:libcrypto.so.3=3
+#
+#   实测对照过：apk 在 Alpine 自己的仓库上会自动选中 libcrypto3/libssl3，
+#   在我们的仓库上不会——差别就是这个字段。
+#
+#   ★ 为什么是"两个提供者"之外的场景也要设：so: 这种虚名的提供关系是 apk
+#     【自动扫 ELF 扫出来的】，配方里根本没写。没有优先级的自动提供，apk
+#     当成"提示"而不是"候选"，于是要人显式指名。
+#
+#   100 和 dash（提供 /bin/sh）一致，也和 Alpine 一致。
+provider-priority = 100
 depends     = ["glibc"]
 # .so.1 是运行时；.so 是给链接器的符号链接（132 字节），也一并收着——
 # 有些构建会直接 -lgcc_s。
@@ -100,5 +124,6 @@ files       = ["usr/lib/libgcc_s.so.1", "usr/lib/libgcc_s.so"]
 name        = "libstdc++"
 description = "GCC 的 C++ 标准库（libstdc++.so.6）"
 section     = "libs"
+provider-priority = 100
 depends     = ["glibc", "libgcc"]
 files       = ["usr/lib/libstdc++.so.6*"]
