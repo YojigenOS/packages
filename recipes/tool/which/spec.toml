@@ -16,7 +16,7 @@
 [package]
 name        = "which"
 version     = "2.21"
-release     = 1
+release     = 2
 date        = 2026-10-13T19:00:00Z
 description = "在 PATH 里查找命令（POSIX 时代的老工具，command -v 可替代）"
 section     = "util"
@@ -46,6 +46,26 @@ build   = ["make", "gcc", "autoconf", "automake", "libtool"]
 #   有 configure.ac 就是真 autotools —— 它会从 .ac 生成 configure，
 #   所以 bootstrap 那一步是必要的。（chrony 那次就是反过来：
 #   有 configure 而没有 configure.ac，于是 autoreconf 必然失败。）
-type       = "autotools"
-autoreconf = true
+type = "autotools"
+
+# ★★ 而【不用】autoreconf —— 这是实测之后改的。
+#
+#   第一版我写了 autoreconf = true，理由是"有 configure.ac 就是真 autotools，
+#   所以要重新生成"。而在 CI 上它报的是：
+#
+#       [autoreconf] 生成 configure 和 Makefile.in
+#       aclocal: error: non-option arguments are not accepted: '@ACLOCAL_CWFLAGS@'
+#
+#   ★ 那个 '@ACLOCAL_CWFLAGS@' 是 2015 年那代 autotools 的写法，
+#     现代的 aclocal 不认。**而这个 tarball 里本来就带着生成好的 configure**
+#     （GNU 的发布包都带），所以重新生成不但没必要，还会把一个能用的树弄坏。
+#
+#   ★ 所以这里的判据不是"有没有 configure.ac"，而是：
+#     **tarball 里有没有【可用的】configure**。有就用它 ——
+#     那是上游测过的那个，而我们的 autotools 比它新十年。
+#
+#   （这条和 chrony 那次是**反面**的：chrony 有 configure 而没有 configure.ac，
+#     走 custom 自己调 configure；which 有 configure.ac 而 configure 也现成，
+#     于是只需要【不要碰它】。两次都是看树得出的，而不是套惯例。）
+autoreconf = false
 configure  = ["--prefix=/usr"]
