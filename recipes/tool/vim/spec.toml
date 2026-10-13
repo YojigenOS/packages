@@ -13,7 +13,7 @@
 [package]
 name        = "vim"
 version     = "9.2.1178"
-release     = 1
+release     = 2
 date        = 2026-10-13T12:40:00Z
 description = "编辑器（vi 的改进版）"
 section     = "utils"

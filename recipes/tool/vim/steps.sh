@@ -1,16 +1,6 @@
 # vim 的构建步骤
 #
-# 它的 configure 在 src/ 下面，不是根目录——所以走 custom。
-#
-# 【为什么不要 GUI 也不要 Python 支持】
-#
-# 服务器上要的是那个能改配置文件的 vim。--with-features=normal 是标准的
-# "没有 GUI 但有 :syntax on 和 :help"那一档；--enable-gui=no 明确关掉
-# GUI（不然它可能去找 X11 的头文件，然后在构建结尾报一个看不懂的错）。
-#
-# ★ --with-tlib=ncursesw
-#   不加这条它可能去找 libtinfo（ncurses 拆出来的那个），而我们没有拆。
-#   我们的 ncurses 是整的，用 --enable-widec 编的，所以库名带 w。
+# 它的 configure 在 src/ 下面，不是根目录 —— 所以走 custom。
 
 build() {
     cd "$SRCDIR/src"
@@ -29,10 +19,26 @@ package() {
     cd "$SRCDIR/src"
     make DESTDIR="$PKGDEST" install
 
-    # vim 的 install 会装一个 vim 和一个 vi（指向 vim 的链接）。
-    # 两者缺一不可：脚本里写 vi 的比写 vim 的多。
-    for f in usr/bin/vim usr/bin/vi; do
-        [ -e "$PKGDEST/$f" ] || { echo "  ✗ $f 不在"; exit 1; }
-    done
-    echo "  ✓ vim 和 vi 都在"
+    # ★ 只对 vim 【报错】—— 那是这个包的本体。
+    [ -x "$PKGDEST/usr/bin/vim" ] || { echo "  ✗ /usr/bin/vim 不在"; exit 1; }
+    echo "  ✓ vim 装好了"
+
+    # ★ 而 vi 是【另一回事】。
+    #
+    #   我第一版把两个都写成"必须存在"，于是这一格挂在：
+    #
+    #       ✗ usr/bin/vi 不在
+    #
+    #   而那时 vim 已经完整装好了（整个 runtime 都拷进去了，日志里能看到）。
+    #
+    #   `vi` 是上游在某些配置下才建的符号链接。**把它当成硬性要求是我的判断，
+    #   不是上游的约定** —— 而那个判断拦在交付物前面，等于因为一个可以后补的
+    #   细节否掉整个包。
+    #
+    #   正确的事是：既然我们是一个发行版，而脚本里写 `vi` 的比写 `vim` 的多，
+    #   那就【我们自己建这个链接】—— 而不是要求上游建。
+    ln -sf vim "$PKGDEST/usr/bin/vi"
+
+    [ -x "$PKGDEST/usr/bin/vi" ] || { echo "  ✗ vi 链接没建成"; exit 1; }
+    echo "  ✓ vi → vim（这个链接是我们建的）"
 }
