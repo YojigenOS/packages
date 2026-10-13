@@ -54,8 +54,28 @@ package() {
     #   替我们改盘），所以先构建时烤一把进去。要换人，改 files/authorized_keys。
     #
     #   公钥不是秘密，打进镜像没有泄露问题；它的作用只是"谁能登进来"。
-    install -d -m 700 "$PKGDEST/root/.ssh"
-    install -Dm600 "$PKGDIR/files/authorized_keys" "$PKGDEST/root/.ssh/authorized_keys"
+    # ★ 属主必须是 root —— 这两行原来【没写 -o/-g】，于是包里的属主是构建用户。
+    #
+    #   后果实测撞到：在【运行中的系统】上 `apk upgrade openssh`，装完之后
+    #   SSH 直接进不去了：
+    #
+    #       root@…: Permission denied (publickey,…)
+    #       ssh -v: 密钥 offer 了，而 server 说 "Authentications that can continue"
+    #
+    #   而密钥本身是对的（两边指纹一模一样）。拒它的是 sshd 的 StrictModes ——
+    #   它会一路查 ${HOME}、${HOME}/.ssh、authorized_keys 的属主。
+    #
+    #   ★★ 为什么"镜像里那份是好的、升级来的这份是坏的"：
+    #      拼 rootfs（pantsu）那一步会把属主归一成 root，
+    #      而【运行中 apk 装包】保留包里的属主 —— 也就是构建用户。
+    #      同一个包，两条路，结果不一样。
+    #
+    #   ★ 而 20-sshd 那个钩子早就知道这一类（它专门写过"只 chmod 是不够的"），
+    #     但它只兜了 /root 和 /var/empty，没兜 .ssh —— 而它是【启动】钩子，
+    #     运行中升级根本不会跑它。所以包本身必须是对的。
+    install -d -m 700 -o root -g root "$PKGDEST/root/.ssh"
+    install -Dm600 -o root -g root "$PKGDIR/files/authorized_keys" \
+        "$PKGDEST/root/.ssh/authorized_keys"
 
     # ── 5. sshd_config 的补充 ───────────────────────────────────────────
     #

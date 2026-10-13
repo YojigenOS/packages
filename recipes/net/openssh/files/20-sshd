@@ -80,6 +80,20 @@ install -d -m 711 -o root -g root /var/empty
 #                  模式 700 对，属主不是 root，StrictModes 照样拒绝。
 #                  （建根那一步是在【构建用户】身份下跑的，/root 会被它建出来。）
 install -d -m 700 -o root -g root /root 2>/dev/null || chmod 0700 /root 2>/dev/null || true
+
+# ★★ 而 .ssh 和那份 authorized_keys 也一样要查属主。
+#
+#   上面那句注释写的是"属主也要对，只 chmod 是不够的"—— 那条教训对 /root 成立，
+#   对 .ssh 里的东西同样成立，而这里原来漏了。
+#
+#   实测：在运行中的系统上 `apk upgrade openssh`（装的包里属主不对，见 steps.sh），
+#   装完之后 SSH 进不去，而表现是"密钥被拒"，看着像密钥问题。
+#
+#   这个钩子兜一遍，是为了让【已经装坏的系统】重启一次自己修回来 ——
+#   不然就只能进控制台手工 chown。
+install -d -m 700 -o root -g root /root/.ssh 2>/dev/null || true
+[ -f /root/.ssh/authorized_keys ] && chown root:root /root/.ssh/authorized_keys 2>/dev/null || true
+chmod 600 /root/.ssh/authorized_keys 2>/dev/null || true
 mkdir -p /run/sshd
 
 # sshd 自己会 daemon 化并 fork，所以这里不加 &。
