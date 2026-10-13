@@ -205,9 +205,12 @@ lines = ["#!/bin/sh", "set -e",
          #   而能力位在那里。apk 装一个 rsync 换来能力位不丢，是划得来的。
          "apk add --no-cache rsync >/dev/null 2>&1 || true",
          "mkdir -p /data",
-         # ★ 有 rsync 就用它，没有退回 cp -a（那时能力位会丢，但不是全丢 ——
-         #   属主和权限还是对的）。**而"用了哪个"要说出来**，不静默。
-         'if command -v rsync >/dev/null 2>&1; then rsync -aX /in/payload/. /data/; echo "[打包] 用 rsync -aX（保能力位）"; else cp -a /in/payload/. /data/; echo "[打包] ⚠ 没有 rsync，退回 cp -a —— 能力位会丢"; fi",
+         # ★ 有 rsync 就用它 —— cp【不保 security.* 扩展属性】，而能力位在那里。
+         #   没有就退回 cp -a（那时能力位会丢，但属主和权限还是对的）。
+         #   **而"用了哪个"要说出来**，不静默。
+         "if command -v rsync >/dev/null 2>&1; then rsync -aX /in/payload/. /data/ && "
+         "echo '[打包] 用 rsync -aX（保能力位）'; "
+         "else cp -a /in/payload/. /data/ && echo '[打包] ⚠ 没有 rsync，退回 cp -a —— 能力位会丢'; fi",
          # ★★ 属主统一成 root:0，而 setuid/setgid 位要保住。
          #
          #   为什么需要这一步：payload 是从容器里【拷到宿主】再挂回来的，而
