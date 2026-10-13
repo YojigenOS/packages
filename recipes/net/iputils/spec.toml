@@ -8,7 +8,7 @@
 [package]
 name        = "iputils"
 version     = "20250605"
-release     = 2
+release     = 3
 date        = 2026-10-13T16:00:00Z
 description = "网络工具（ping / arping / tracepath / clockdiff）"
 section     = "net"
@@ -39,4 +39,28 @@ configure = [
     "-DBUILD_MANS=false",
     "-DSKIP_TESTS=true",
     "-DINSTALL_SYSTEMD_UNITS=false",
+
+    # ★★ 而 ④ 是这一轮补上的，它是"ping 装上了但不能用"的那个根。
+    #
+    #   它有一对选项，写法很别扭：
+    #
+    #       NO_SETCAP_OR_SUID       boolean  value: true    ← ★ 默认【true】= 禁用
+    #       SETCAP_OR_SUID_PING     boolean  value: true    ← 这个默认是 true
+    #
+    #   而 meson.build 里是
+    #
+    #       setcap_ping = false
+    #       if (not get_option('NO_SETCAP_OR_SUID')):
+    #           setcap_ping = get_option('SETCAP_OR_SUID_PING')
+    #
+    #   **一个双重否定，加一个"看起来开着其实被关着"的默认值。**
+    #   于是 ping 装出来是普通的 -rwxr-xr-x，普通用户敲它只会得到
+    #   "socket: Operation not permitted"。
+    #
+    #   实测（把 17 个包装进一个新 root，chroot 里数扩展属性）：
+    #       ping: -rwxr-xr-x root root      没有能力位，也没有 setuid
+    #
+    #   而它自己的逻辑是：有 libcap 且找得到 setcap 就用【能力位】
+    #   （cap_net_raw+ep），否则退回 setuid。我们两样都有，所以会走能力位。
+    "-DNO_SETCAP_OR_SUID=false",
 ]
