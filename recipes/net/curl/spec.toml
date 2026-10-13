@@ -34,11 +34,11 @@ mirrors = ["https://gitlab.com/curl/curl"]
 
 [dependencies]
 runtime = ["glibc", "openssl", "zlib", "ca-certificates"]
-build   = ["make", "gcc", "perl"]
+build   = ["make", "gcc", "perl", "autoconf", "automake", "libtool"]
 
 [dependencies.x86_64]
 runtime = ["glibc", "openssl", "zlib", "ca-certificates"]
-build   = ["make", "gcc", "perl"]
+build   = ["make", "gcc", "perl", "autoconf", "automake", "libtool"]
 
 [build]
 type = "autotools"
