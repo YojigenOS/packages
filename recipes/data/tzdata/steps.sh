@@ -63,5 +63,5 @@ package() {
   #   对照 Alpine 的 tzdata：它的文件列表里没有 /etc/localtime。
   #
   #   要设时区是 `ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime`，
-  #   或者将来 yojigenos-firstboot 去问。两者都不该在这个包里。
+  #   或者将来 yojigen-os-firstboot 去问。两者都不该在这个包里。
 }
