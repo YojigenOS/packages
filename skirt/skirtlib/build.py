@@ -573,6 +573,23 @@ def run_in_container(srcrel: str, srcname: str, arch: str, spec: dict, epoch: in
         f'      SRCARCHIVE="/in/{srcname}" \\\n'
         '  bash "$WORK/run.sh" package\n'
         "\n"
+        # ★ 诊断：package 之后，产物到底是谁的、setuid 在不在。
+        #
+        #   为什么需要它：sudo 的 src/Makefile.in 里写着
+        #
+        #       $(INSTALL) $(INSTALL_OWNER) -m 04755 sudo $(DESTDIR)$(bindir)/sudo
+        #                                        ~~~~~~~~~
+        #   而解开发出去的包，那个文件是 -rwxr-xr-x nobody nobody ——
+        #   setuid 没了，属主也不是 root。而 sudo 没有 setuid 就不叫 sudo。
+        #
+        #   这之前我已经验过驱动的顺序：package 排在 chown 之后、且不降权
+        #   （也就是以 root 跑）。所以两种可能都还在 —— 是 package 没做到，
+        #   还是后面拷出来时丢的。这一句就是用来分开它们的。
+        'echo "[产物] package 之后的属主与 setuid 位：" >&2\n'
+        'find "$WORK/dest" -perm -4000 -exec ls -ld {} \\; >&2 2>/dev/null || true\n'
+        'ls -ld "$WORK/dest/usr/bin/sudo" >&2 2>/dev/null || true\n'
+        'echo "[产物] dest 里前三个文件：" >&2\n'
+        'find "$WORK/dest" -type f 2>/dev/null | head -3 | while read f; do ls -ld "$f" >&2; done\n'
         + ccache_stats
         + strip_block
         # ── 删掉生成物性质的路径 ──────────────────────────────────────────
