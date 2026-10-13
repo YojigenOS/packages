@@ -35,6 +35,19 @@ build   = ["cmake", "ninja", "gcc"]
 type = "cmake"
 configure = [
     "-DCMAKE_BUILD_TYPE=Release",
+
+    # ★ CMake 4 不再兼容 cmake_minimum_required 写得很老的项目，而 libevent
+    #   2.1.13 就是那种。实测报：
+    #
+    #       CMake Error at CMakeLists.txt:1 (cmake_minimum_required):
+    #         Compatibility with CMake < 3.5 has been removed...
+    #         Or, add -DCMAKE_POLICY_VERSION_MINIMUM=3.5 to try configuring anyway
+    #
+    #   最后那句就是修法本身 —— 上游把它写在报错里，照抄即可。
+    #
+    #   这是在"改上游"和"改我们的构建方式"之间选了后者：加一个变量比
+    #   给 libevent 打补丁轻，而且意图明确（"按 3.5 的策略规则来"）。
+    "-DCMAKE_POLICY_VERSION_MINIMUM=3.5",
     "-DEVENT__DISABLE_OPENSSL=OFF",   # 开——依赖里有 openssl（evdns 的 DoH 之类会用到）
     "-DEVENT__DISABLE_TESTS=ON",
     "-DEVENT__DISABLE_SAMPLES=ON",
