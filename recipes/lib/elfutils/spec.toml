@@ -69,21 +69,23 @@ configure = [
   "--disable-debuginfod",
   "--disable-libdebuginfod",
 
-  # ★ 【临时】把 pkg-config 指到一个空实现上。
+  # ★ 这里原来有一行临时的 "PKG_CONFIG=/bin/true"，2026-10-13 删掉了。
   #
-  #   elfutils 的 configure 无条件要求 pkg-config 存在：
-  #       checking for pkg-config... no
+  #   它当初为什么在：elfutils 的 configure 无条件要求 pkg-config 存在，
+  #   而 CI 的 SKIRT_PROVIDES 声明了 pkgconf（它确实在 base-devel.toml 里），
+  #   于是 skirt 不把它合并进构建容器——可手推的那个 x86_64 镜像里其实
+  #   【没有】它。镜像和声明不一致，而报错只有一句
+  #
   #       configure: error: pkg-config not found
   #
-  #   但它真正用到的库（zlib / bz2 / lzma / zstd）都是用 AC_CHECK_LIB 直接
-  #   探测的（日志里看得到：checking for library containing gzdirect... -lz）。
-  #   pkg-config 只服务于那些可选特性，而 debuginfod 那一路我们已经显式关掉。
+  #   看不出「声明里有、镜像里没有」这层。
   #
-  #   为什么现在要这么绕：CI 的构建环境里 SKIRT_PROVIDES 声明了 pkgconf
-  #   （它确实在 base-devel.toml 里），所以 skirt 不会把它合并进构建容器——
-  #   而手推的那个 x86_64 镜像里其实【没有】它。镜像和声明不一致。
+  #   它为什么可以删：x86_64 的 devel 镜像已经【从我们自己的仓库】重建过
+  #   （2026-10-13），pkgconf 真的在里面了：
   #
-  #   ★ 这是临时措施：等 x86_64 的 devel 镜像从我们自己的仓库重建之后
-  #     （那时 pkgconf 真的在里面），这一行就该删掉。
-  "PKG_CONFIG=/bin/true",
+  #       (42/49) Installing pkgconf (3.0.8-r1)
+  #
+  #   ★ 这类临时措施的危险不在于它错，在于它【不知道自己什么时候该退休】。
+  #     当初那行注释写了退休条件，所以现在能删得干净——那不是巧合，是那句话
+  #     的全部用处。
 ]
