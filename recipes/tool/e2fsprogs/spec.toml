@@ -16,7 +16,7 @@
 [package]
 name        = "e2fsprogs"
 version     = "1.47.4"
-release     = 1
+release     = 2
 date        = 2026-10-13T08:00:00Z
 description = "ext2/3/4 文件系统工具（mke2fs · e2fsck · resize2fs · tune2fs）"
 section     = "base"
@@ -56,7 +56,46 @@ configure = [
     # 而在这里加 gettext 只是把依赖做大。
     "--disable-nls",
 
-    # 【不是】--disable-libuuid/--disable-libblkid：
-    # 那两个开关的意思是"别用自带的，用系统的"，会引入 util-linux 的依赖。
-    # 什么都不写 = 用它自己带的那份，依赖最少。
+    # ── libuuid / libblkid：显式要自带的那份 ──────────────────────────────
+    #
+    # ★ 这两个开关【必须显式写】，不能靠默认值。原来这里只有上面两行，理由
+    #   是"什么都不写 = 用它自己带的那份，依赖最少"——那个理由本身没错，但
+    #   "什么都不写"并不等于那句话：configure.ac 里这两个选项的默认分支是
+    #
+    #       if test -n "$PKG_CONFIG"; then
+    #           AC_CHECK_LIB(uuid, uuid_generate,
+    #               [LIBUUID=`$PKG_CONFIG --libs uuid`])      ← 找到就用系统的
+    #       fi
+    #       if test -n "$LIBUUID"; then ... else ... 用自带那份 ... fi
+    #
+    #   所以真实行为是【由构建环境里有没有 pkg-config 决定的】：
+    #
+    #       x86_64（base-devel 镜像里有 pkg-config） → 用系统的 → 96 个文件
+    #       aarch64（那个镜像里没有）                → 用自带的 → 143 个文件
+    #
+    #   同一份配方编出两种包，差别藏在"环境里恰好有没有某个程序"里——这是
+    #   决策记录 0011 说的隐式依赖。而且它在 aarch64 上多出来的那 25 个文件
+    #   会和 util-linux 撞（blkid / uuidgen / findfs / libblkid.a / libuuid.a /
+    #   头文件 / blkid.pc / uuid.pc / man 页），apk 装 minimal 风味时直接拒绝。
+    #
+    # ★ 为什么不反过来写 --disable-libuuid / --disable-libblkid（那是 Debian /
+    #   Fedora / Alpine 的写法，也是"用 util-linux 那份、不重复造库"更正确的
+    #   选择）：那条路第一步就要 pkg-config 这个【程序】——
+    #
+    #       if test -z "$PKG_CONFIG"; then
+    #           AC_MSG_ERROR([pkg-config not installed; please install it.])
+    #
+    #   而 aarch64 的 base-devel 镜像里没有它（镜像建于 10-11，pkgconf 是之后
+    #   才加进 distro 的 base-devel.toml 的；x86_64 的镜像重建过所以有）。
+    #   那是 distro 那边的缺口，配方治不了。
+    #
+    #   等那个镜像重建、有了 pkg-config，这里可以换成 --disable-*：那时
+    #   e2fsprogs 的 ELF 会多出 so:libuuid.so.1 / so:libblkid.so.1 的依赖，
+    #   util-linux 提供它们，同时也少掉一份常年不更新的私有副本。那是另一件事，
+    #   写在这里是为了下一个人知道"为什么现在不是那样"。
+    #
+    # ★ 让出去的细节（哪 25 个文件、为什么归 util-linux）在 steps.sh 的
+    #   package() 里，那里也有一条断言守着"不许留"。
+    "--enable-libuuid",
+    "--enable-libblkid",
 ]
