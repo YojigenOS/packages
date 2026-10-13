@@ -55,7 +55,7 @@ package() {
             fi
         done
         if [ -z "$found" ]; then
-            echo "  ✗ 找不到 $f——首启扩盘（resize2fs）和开机 fsck（e2fsck）都指着它" >&2
+            echo "  ✗ 找不到 ${f}——首启扩盘（resize2fs）和开机 fsck（e2fsck）都指着它" >&2
             echo "    在 \$PKGDEST 下扫了一遍：$(find "$PKGDEST" -name "$f" 2>/dev/null | head -3)" >&2
             exit 1
         fi
