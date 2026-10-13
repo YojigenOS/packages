@@ -27,9 +27,14 @@
 # 只读第一行，去掉【首尾】空白。空文件就当没设。
 #
 # ★ 这里不能用 `tr -d '[:space:]'` —— 那个删的是【所有】空白，包括中间的。
-#   而我们的主机名是 "Yojigen OS"（带空格），那样会被压成 "YojigenOS"。
-#   （原来写的是 tr —— 那时候 /etc/hostname 里是 "yojigen"，看不出问题。
-#     改了默认值才显出来。）
+#   它是在一次"主机名改成带空格的 Yojigen OS"的改动里暴露出来的：
+#
+#       [yojigen]    → [yojigen]      ✓
+#       [Yojigen OS] → [YojigenOS]    ✗ 空格被吃掉
+#
+#   （现在的主机名是 "YojigenOS"，看不出这个错——所以这段注释留着，
+#     万一哪天又改了，别再踩一次。**修一个 bug 时顺手把它的成因写下来，
+#     比只改掉那一行值钱。**）
 h=$(head -n 1 /etc/hostname 2>/dev/null | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
 [ -n "$h" ] || exit 0
 

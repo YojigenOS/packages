@@ -121,4 +121,4 @@ CONFIG_DEBUG_INFO_NONE=y
 #   两个层次：这个 CONFIG 决定【用户态还没设之前】显示什么；filesystem 包里
 #   的 /etc/hostname 是用户态那份，由 05-hostname 钩子写进内核。两边写同一个值，
 #   不然开机会先显示一个再被改成另一个。
-CONFIG_DEFAULT_HOSTNAME="Yojigen OS"
+CONFIG_DEFAULT_HOSTNAME="YojigenOS"
