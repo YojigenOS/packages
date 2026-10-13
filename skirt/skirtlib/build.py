@@ -250,10 +250,23 @@ def make_build_script(spec: dict, arch: str = "") -> str:
     # ★ 按标记切开：前半（set / cd / BUILDDIR）两个阶段都要，
     #   后半（autoreconf / 补丁 / …）只有 build 阶段要。
     _head, _, _prep = header.partition("__BUILD_ONLY__\n")
-    header = (_head
-              + 'if [ "${1:-all}" != "package" ]; then\n'
-              + _prep
-              + "fi\n")
+    # ★ 只有 _prep 非空时才包那个 if。
+    #
+    #   实测撞上：custom 类型的包（libcap / iproute2 / chrony …）没有
+    #   autoreconf、没有补丁，_prep 是空的 —— 而 `if …; then` 后面直接 `fi`
+    #   在 shell 里是非法的：
+    #
+    #       /build/run.sh: line 4: syntax error near unexpected token `fi'
+    #
+    #   而我第一版验的时候拿的是 gzip（它有补丁，_prep 非空），所以没撞上。
+    #   **验的时候要挑边界那一头，不是顺手那一头。**
+    if _prep.strip():
+        header = (_head
+                  + 'if [ "${1:-all}" != "package" ]; then\n'
+                  + _prep
+                  + "fi\n")
+    else:
+        header = _head
 
     return (
         header
