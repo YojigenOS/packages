@@ -640,6 +640,65 @@ jobs:
           echo '  只做到了「生成仓库」，没有推送。'
           echo "  产物在 var/repo/${{ inputs.arch }}/"
 
+      # ── 建包倒了？把已经建好的抢救出来 ──────────────────────────────────
+      #
+      # ★★ 为什么需要这个。
+      #
+      #   原来「产物」这条安全网只在【建包成功】时存在：建包 → 打包并签名
+      #   → 生成仓库索引 → 留存仓库副本。中间的「打包并签名」被跳过了的话，
+      #   var/repo 就是空的，`upload-artifact` 传一个空目录，于是**没有 artifact**。
+      #
+      #   实测撞了两次，代价是实的：
+      #
+      #     B  aarch64  102 分钟  29 个包全建出来 → 倒在自检 → artifact 是空的
+      #     B² aarch64   12 分钟  27 个包建出来   → 倒在 zlib → artifact 是空的
+      #
+      #   那两批包的成果只剩 ccache（有用，但要重跑），包里一个都没留下。
+      #
+      # ★ 这个步骤用 `if: failure()`：前面的步骤失败时它仍然会跑。
+      #   它把【已经建好的】打成 .apk，传成和正常路径【同一个名字】的 artifact：
+      #
+      #       repo-<架构>
+      #
+      #   同名的理由：这两条路只有一条会走（正常的那条在失败时被跳过），
+      #   而播种步骤只认 `repo-<架构>` 这一个名字、只从里面捞 *.apk，
+      #   两种内容它都吃得下（正常的是 .apk + 索引，抢救的是 .apk）。
+      #
+      #   于是「上一轮倒在半路」不再是白跑——下一次播种接上就是了。
+      - name: 抢救已建好的（建包失败时才跑）
+        if: failure()
+        env:
+          SIGNING_KEY_B64: ${{ secrets.SIGNING_KEY }}
+        run: |
+          set -uo pipefail
+          ARCH="${{ inputs.arch }}"
+          echo "  建包失败了。看看已经建出来的有多少。"
+          ls -d var/output/"$ARCH"/*/ 2>/dev/null | wc -l | sed 's/^/    已建出的产物: /'
+
+          # 密钥（正常路径那一步在后面，那时可能已经轮不到它跑了）
+          if [ -n "${SIGNING_KEY_B64:-}" ]; then
+            mkdir -p "$(dirname "$SIGNING_KEY_FILE")"
+            echo "$SIGNING_KEY_B64" | base64 -d > "$SIGNING_KEY_FILE" 2>/dev/null \
+              && chmod 600 "$SIGNING_KEY_FILE" \
+              && echo "  ✓ 签名密钥就位" \
+              || echo "  ★ 密钥没落地，下面会打成不签名的包（只是给下一轮当种子，不影响）"
+          fi
+
+          # 打包。【失败不追究】——本来就是在失败路径上，能打多少算多少。
+          ./scripts/pack.sh --all --arch "$ARCH" 2>&1 | tail -6 || true
+
+          # 和正常路径同名，播种步骤不用改。
+          echo "  打包目录 $(ls var/pkgs/"$ARCH"/*.apk 2>/dev/null | wc -l | tr -d ' ') 个包"
+
+      - name: 留存仓库副本（抢救）
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: repo-${{ inputs.arch }}
+          path: var/pkgs/${{ inputs.arch }}
+          retention-days: 7
+          if-no-files-found: warn
+
       - name: 留存仓库副本
         if: always()
         continue-on-error: true
