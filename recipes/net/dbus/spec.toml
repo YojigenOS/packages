@@ -1,0 +1,86 @@
+# dbus —— 进程间通信总线
+#
+# 【为什么它在"服务器化"那一档，而且标着"systemd 前置"】
+#
+# 它本身是个消息总线：进程之间不直接认识，而是往它上面发消息。
+# 服务器上直接用到它的地方比看上去少 —— 而它是 systemd 的前置之一
+# （systemd 用 dbus 做服务状态的查询和控制）。
+#
+# ★ 而这里有一条要写清楚的现实：**我们现在没有 systemd**。
+#   所以装上它，是"把前置备齐"这个决定的一部分，不是"现在就要用"。
+#   记在这里，免得以后有人看到装了它却没有 systemd 而困惑。
+
+[package]
+name        = "dbus"
+version     = "1.16.2"
+release     = 1
+date        = 2026-10-13T18:00:00Z
+description = "进程间通信总线（systemd 前置之一）"
+section     = "system"
+url         = "https://www.freedesktop.org/wiki/Software/dbus/"
+license     = "AFL-2.1 OR GPL-2.0-or-later"
+
+[[source]]
+git    = "https://gitlab.freedesktop.org/dbus/dbus.git"
+commit = "958bf9db2100553bcd2fe2a854e1ebb42e886054"
+# ★ tag dbus-1.16.2 的 peeled 值。
+
+[dependencies]
+runtime = ["glibc", "expat"]
+build   = ["make", "gcc", "meson", "ninja", "expat", "python3"]
+[dependencies.x86_64]
+runtime = ["glibc", "expat"]
+build   = ["make", "gcc", "meson", "ninja", "expat", "python3"]
+
+[build]
+# ★★ 它是 meson，不是 autotools。
+#
+#   判据是【看它的树】，不是看它长得像什么：
+#       git ls-tree HEAD → 有 meson.build + meson_options.txt ✓
+#                          有 CMakeLists.txt（另一条路，README.cmake 讲它）
+#                          ★ 没有 configure.ac ✗
+#
+#   （这一条是上一轮在 chrony 上学的：我按"长得像 autotools"填了
+#     autoreconf = true，而它根本没有 configure.ac。判据只有那一个。）
+type = "meson"
+
+configure = [
+    # ★ 关掉的一律是"要我们没有的库"。每一条都对着 meson_options.txt 里的名字。
+    #
+    #   apparmor / selinux / libaudit   三个都是 Linux 的安全模块，我们都没有。
+    #                                   它们默认 auto —— 也就是说"取决于构建环境
+    #                                   里碰巧有没有"。显式关掉，让"没有"是决定。
+    "-Dapparmor=disabled",
+    "-Dselinux=disabled",
+    "-Dlibaudit=disabled",
+
+    #   systemd                         它默认 auto。而我们【没有】systemd ——
+    #                                   开着的话它会装 systemd 单元，那些是死文件。
+    "-Dsystemd=disabled",
+
+    #   x11_autolaunch                  X11 下自动起 session bus 的机制。没有 X。
+    "-Dx11_autolaunch=disabled",
+
+    #   launchd                         macOS 的对应物。没有。
+    "-Dlaunchd=disabled",
+
+    #   文档三件套                      都要额外工具（doxygen / ducktype / xmlto）。
+    "-Ddoxygen_docs=disabled",
+    "-Dducktype_docs=disabled",
+    "-Dxml_docs=disabled",
+    "-Dqt_help=disabled",
+
+    #   测试                            要 test_user / test_socket_dir 那套布置。
+    #                                   intrusive 那个还会往系统里塞东西。
+    "-Dmodular_tests=disabled",
+    "-Dinstalled_tests=false",
+    "-Dintrusive_tests=false",
+
+    # ★ 而这几样【留着】，理由是具体的：
+    #
+    #   message_bus（默认 true）        那才是 dbus 的本体（dbus-daemon）
+    #   tools（默认 true）              dbus-send / dbus-monitor —— 没有它们
+    #                                   装上也没法用
+    #   user_session（默认 true）       每个用户一条会话总线
+    #   traditional_activation          老的按需启动机制，很多程序还在用
+]
