@@ -14,14 +14,23 @@ build() {
     cd "$SRCDIR"
 
     # 1. 生成那些"发布包里才有"的文件。
-    #    它的 all 目标就是干这个的（注释原文：Make files needed to run
-    #    Makefile (after configure)）。
-    make -f Makefile.aut
+    #
+    #    ★ 目标是 `distfiles`，不是默认的 `all`。
+    #
+    #      上游 README 第二节写的就是 "make -f Makefile.aut distfiles" ——
+    #      我第一次只跑了 `make -f Makefile.aut`（= all），它生成的够编过，
+    #      但【不够装】：install 要 less.nro（手册页的 nroff 源），
+    #      而那个只有 distfiles 会生成。实测：
+    #
+    #          make: *** No rule to make target 'less.nro', needed by 'install'.  Stop.
+    #
+    #      "编过了"和"装得上"是两件事——这个包把这一点演示了两遍。
+    make -f Makefile.aut distfiles
 
     # 2. 确认第一步真的产出了我们要的那两个。
     #    不验的话，失败会延后到编译时，报一句和成因隔着好几层的
     #    "No rule to make target 'funcs.h'"。
-    for f in funcs.h lessmsg.inc configure; do
+    for f in funcs.h lessmsg.inc configure less.nro; do
         [ -e "$f" ] || { echo "  ✗ make -f Makefile.aut 之后 $f 还是不在"; exit 1; }
     done
     echo "  ✓ funcs.h / lessmsg.inc / configure 都生成了"
