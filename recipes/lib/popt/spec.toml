@@ -1,0 +1,46 @@
+# popt —— 命令行选项解析库
+#
+# 【为什么它在这里】
+#
+# 不是为了它自己 —— 是为了 logrotate。后者的 configure.ac 里写着：
+#
+#     AC_CHECK_LIB([popt],[poptParseArgvString],,
+#       AC_MSG_ERROR([libpopt required but not found]))
+#
+# 那个 AC_MSG_ERROR 说明它是**硬要求**，不是可选。
+
+[package]
+name        = "popt"
+version     = "1.19"
+release     = 1
+date        = 2026-10-13T16:00:00Z
+description = "命令行选项解析库"
+section     = "libs"
+url         = "https://rpm-software-management.github.io/popt/"
+license     = "MIT"
+
+[[source]]
+git    = "https://github.com/rpm-software-management/popt"
+commit = "916e61045d268f7e37ade5ec047eb77e8299e6ad"
+# ★ 这个 commit 是 tag popt-1.19-release 的【peeled】值（^{}）。
+#   它是附注标签，ls-remote 会同时打出标签对象和它指向的 commit。
+
+[dependencies]
+runtime = ["glibc"]
+build   = ["make", "gcc", "autoconf", "automake", "libtool", "gettext"]
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["make", "gcc", "autoconf", "automake", "libtool", "gettext"]
+
+[build]
+type       = "autotools"
+autoreconf = true
+configure  = [
+    "--prefix=/usr",
+    "--disable-static",
+
+    # ★ 关掉 NLS（翻译）。理由和 procps 那格一样：从 git 建时 gettext 的
+    #   po/ 那一套容易断，而我们暂时不需要翻译 —— 但这条有代价，
+    #   与「中文优先」是有张力的，记在 procps 的配方里。
+    "--disable-nls",
+]

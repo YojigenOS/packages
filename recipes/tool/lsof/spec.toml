@@ -1,0 +1,51 @@
+# lsof —— "谁占着这个文件 / 这个端口"
+#
+# 【为什么它是排障必备】
+#
+#     lsof -i :80          谁在听 80
+#     lsof /var/log/x.log  谁开着这个日志
+#     lsof +D /mnt         谁在占着这个挂载点（umount 说 busy 的时候）
+#
+# 最后那条是它最不可替代的用法 —— `fuser` 只能给 PID，而你要知道是【什么】。
+
+[package]
+name        = "lsof"
+version     = "4.99.7"
+release     = 1
+date        = 2026-10-13T16:00:00Z
+description = "列出打开的文件（含网络连接）"
+section     = "utils"
+url         = "https://github.com/lsof-org/lsof"
+license     = "lsof"
+
+[[source]]
+git    = "https://github.com/lsof-org/lsof"
+commit = "646395f8e893edb5572405b2311a079f55f269f2"
+
+[dependencies]
+runtime = ["glibc"]
+build   = ["make", "gcc", "autoconf", "automake", "libtool"]
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["make", "gcc", "autoconf", "automake", "libtool"]
+
+[build]
+type       = "autotools"
+autoreconf = true
+configure  = [
+    "--prefix=/usr",
+
+    # ★ 用 --without-libtirpc 把它钉死，而不是留给 auto。
+    #
+    #   上游的默认是 auto：有 libtirpc 就用（多支持 NFS 的 RPC），
+    #   没有就退回自带的 stub。
+    #
+    #   我们这里选"明确不要"，理由和 iproute2 的 SBINDIR 那条一样 ——
+    #   **取决于构建环境里碰巧有什么，等于同一个配方在不同机器上产出不同**。
+    #   而那正是 e2fsprogs 那次撞过的东西（x86_64 96 个文件 vs aarch64 143 个，
+    #   差别只在于镜像里有没有 pkg-config）。
+    #
+    #   代价是不支持 NFS 的 RPC 解析。对我们现在的用途（本地排障）没有影响，
+    #   而且这个代价是显式记录下来的，不是碰运气碰出来的。
+    "--without-libtirpc",
+]

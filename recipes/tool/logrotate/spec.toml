@@ -1,0 +1,44 @@
+# logrotate —— 日志轮转
+#
+# 【为什么服务器上必须有它】
+#
+# 没有它，`/var/log` 会一直长到把盘填满。而"盘满"是那种**先慢后快**的故障：
+# 先是一些写不进去的报错，然后 sshd 起不来、apk 装不了，最后连日志都记不下。
+#
+# 它不是守护进程 —— 是 cron 每天调一次的命令。所以它和 cronie 是一对。
+
+[package]
+name        = "logrotate"
+version     = "3.22.0"
+release     = 1
+date        = 2026-10-13T16:00:00Z
+description = "日志轮转、压缩、清理"
+section     = "utils"
+url         = "https://github.com/logrotate/logrotate"
+license     = "GPL-2.0-or-later"
+
+[[source]]
+git    = "https://github.com/logrotate/logrotate"
+commit = "41efb71b765b08e53e2c411e0a2897d30f44eefc"
+# ★ tag 3.22.0 的 peeled 值。
+
+[dependencies]
+runtime = ["glibc", "popt"]
+build   = ["make", "gcc", "autoconf", "automake", "libtool", "popt"]
+[dependencies.x86_64]
+runtime = ["glibc", "popt"]
+build   = ["make", "gcc", "autoconf", "automake", "libtool", "popt"]
+
+[build]
+type       = "autotools"
+autoreconf = true
+configure  = [
+    "--prefix=/usr",
+    "--disable-static",
+
+    # ★ 默认会在编译期探测 SELinux 和 ACL —— 而我们两个都没有。
+    #   显式关掉，让"没有"是一个决定而不是一个探测结果。
+    "--without-selinux",
+
+    "--disable-nls",
+]

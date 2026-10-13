@@ -1,0 +1,42 @@
+# iputils —— ping / arping / tracepath / clockdiff
+#
+# 【为什么它排在第二档第一个】
+#
+# 排障的第一步几乎总是"通不通"。而 `ping` 是回答这个问题最短的路。
+# （`ip` 能做很多事，但它不能发 ICMP。）
+
+[package]
+name        = "iputils"
+version     = "20250605"
+release     = 1
+date        = 2026-10-13T16:00:00Z
+description = "网络工具（ping / arping / tracepath / clockdiff）"
+section     = "net"
+url         = "https://github.com/iputils/iputils"
+license     = "GPL-2.0-or-later AND BSD-3-Clause"
+
+[[source]]
+git    = "https://github.com/iputils/iputils"
+commit = "6e1cb146547eb6fbb127ffc8397a9241be0d33c2"
+# ★ tag 20250605 的 peeled 值。
+
+[dependencies]
+runtime = ["glibc", "libcap"]
+build   = ["make", "gcc", "meson", "ninja", "libcap"]
+[dependencies.x86_64]
+runtime = ["glibc", "libcap"]
+build   = ["make", "gcc", "meson", "ninja", "libcap"]
+
+[build]
+type = "meson"
+configure = [
+    # ★ 关掉三样东西，每样都有具体理由：
+    #
+    #   ① man 页要 xsltproc（我们从没打过它）—— 而 man 页生成失败会
+    #      连带整个构建挂掉。
+    #   ② 测试要一个能跑的 ping（要 CAP_NET_RAW），在容器里不一定成。
+    #   ③ systemd 单元 —— 我们还没有 systemd，装了也是死文件。
+    "-DBUILD_MANS=false",
+    "-DSKIP_TESTS=true",
+    "-DINSTALL_SYSTEMD_UNITS=false",
+]

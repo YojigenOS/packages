@@ -1,0 +1,51 @@
+# sudo —— "以别人的身份跑一条命令"
+#
+# 【为什么服务器上必须有它】
+#
+# 现在这个系统上只有 root 能登进来（sshd 配的是 prohibit-password），
+# 而"每件事都当 root 做"是个真实的风险：一条打错的命令就没有边界了。
+#
+# sudo 的价值不在于"少输一次密码"，在于**它是一条可以写的边界**：
+# 谁能做什么、要不要密码、要做什么记录 —— 都记在 /etc/sudoers 里。
+
+[package]
+name        = "sudo"
+version     = "1.9.17p2"
+release     = 1
+date        = 2026-10-13T16:00:00Z
+description = "以其他用户身份执行命令"
+section     = "system"
+url         = "https://www.sudo.ws/"
+license     = "ISC"
+
+[[source]]
+git    = "https://github.com/sudo-project/sudo"
+commit = "d1b48c651cec19fe37d1f0d3299d2283fb0f88e4"
+
+[dependencies]
+runtime = ["glibc", "openssl"]
+build   = ["make", "gcc", "autoconf", "automake", "libtool", "openssl", "flex", "bison"]
+[dependencies.x86_64]
+runtime = ["glibc", "openssl"]
+build   = ["make", "gcc", "autoconf", "automake", "libtool", "openssl", "flex", "bison"]
+
+[build]
+type       = "autotools"
+autoreconf = true
+configure  = [
+    "--prefix=/usr",
+    "--sysconfdir=/etc",
+    "--with-vardir=/var",
+
+    # ★ 要文档的话它会去找 mandoc / docbook —— 我们两样都没有。
+    #   关掉，不然 configure 会静默降级或者中途报错。
+    "--disable-nls",
+
+    # ★ 关掉 PAM。我们没有 PAM，而它默认会试着用 —— 那份默认会在
+    #   运行时才现形（sudo 起来了，但任何一条命令都验不过）。
+    "--without-pam",
+
+    # ★ 不用 LDAP / SSSD / 各种后端插件：它们都要各自的库。
+    "--disable-ldap",
+    "--disable-static",
+]
