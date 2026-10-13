@@ -47,18 +47,29 @@ configure = [
     "--without-watch8bit",
     "--disable-static",
 
-    # ── NLS（gettext 翻译）暂时关掉 ──
+    # ── NLS（gettext 翻译）关掉 ──
     #
-    # ★ 这不是"不需要"，是"现在还不能要"，理由要写清楚：
+    # ★ 这一条我一开始写错了成因，留着这段是因为错的那版很典型：
     #
-    #   gettext 的构建需要 autopoint 先跑一遍（它往 po/ 里放 Makefile.in.in）。
-    #   我们的 autoreconf 流程没跑那一步，于是 procps 实测挂在：
+    #   我原来写的是「gettext 的构建需要 autopoint 先跑一遍，而我们没跑」。
+    #   **那是错的** —— 日志里明明写着：
     #
-    #       Making all in po
-    #       make[2]: *** No rule to make target 'all'.  Stop.
+    #       Copying file po/Makefile.in.in            ← autopoint 跑了，生成了
+    #       checking whether NLS is requested... no   ← --disable-nls 生效了
+    #       config.status: creating po/Makefile.in    ← 也生成了
     #
-    #   而【NLS 正是"程序输出显示什么语言"的机制】——关掉它意味着这些工具的
-    #   报错信息是英文。这与「中文优先」那条要求是有张力的，所以记在这里，
-    #   而不是悄悄关掉。修法在 0006（apk 自己的 i18n）那条线上。
+    #   真正的成因在 procps 自己的 Makefile.am 里：
+    #
+    #       SUBDIRS = local po-man po testsuite
+    #
+    #   `po` 是【无条件】列着的。NLS 一关，gettext 生成的那份 po/Makefile
+    #   就没有 all 目标，顶层 make 走进去就断
+    #   （Making all in po / No rule to make target 'all'）。
+    #
+    #   修法在 steps.sh 里（把 po 从 SUBDIRS 摘掉）。
+    #
+    # ★ 而 NLS 关掉本身还有一层代价要记住：**它是"程序输出显示什么语言"的
+    #   机制**。关掉意味着这些工具的报错信息是英文——这与「中文优先」是有
+    #   张力的。修法在 0006（apk 自己的 i18n）那条线上。
     "--disable-nls",
 ]
