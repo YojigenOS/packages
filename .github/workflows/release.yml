@@ -502,6 +502,8 @@ jobs:
       # ★ 签名必须在打包这一步——包建出来就是签好的。不然后面 mkndx 建索引
       #   时会逐个验证，全部报 UNTRUSTED signature，然后拒绝建索引。
       - name: 打包并签名
+        # ★ 同上：建成的那些要能被打成 .apk 并签名。
+        if: ${{ !cancelled() }}
         run: |
           set -euo pipefail
           # ★ 用 --all 而不是把 inputs.packages 再列一遍。
@@ -532,6 +534,8 @@ jobs:
       #
       # ★ 只给这一步和发布那步凭据，不给建包那步——最小暴露面。
       - name: 生成仓库索引
+        # ★ 建包挂了也要跑：建成的那些要进索引才被 apk 看见。
+        if: ${{ !cancelled() }}
         env:
           S3_AK: ${{ secrets.S3_AK }}
           S3_SK: ${{ secrets.S3_SK }}
