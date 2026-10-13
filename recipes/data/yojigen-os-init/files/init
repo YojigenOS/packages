@@ -63,4 +63,23 @@ fi
 # 那些属于「能装软件」那一层，不在「能开机」里。
 echo "  进入 shell。输入 exit 关机。"
 echo
+
+# ── VGA 上也开一个 shell ────────────────────────────────────────────────────
+#
+# ★ 为什么需要：cmdline 是 `console=tty0 console=ttyS0,115200`，而
+#   **写在最后的那个会成为 /dev/console**。所以下面那个 exec 落在【串口】上，
+#   tty0（VGA）只有内核日志、没有 getty、没有提示符。
+#
+#   本地看不出来（QEMU 用 -serial file: 抓的是串口日志，一切正常）。
+#   而一台上云主机上——**VNC 连的是 tty0**，于是"在控制台里敲什么都没反应"。
+#
+#   实测撞上：腾讯云 VNC 里一直只有内核日志，按键变成
+#   `atkbd serio0: Unknown key pressed`——那是 PS/2 键盘事件，
+#   说明 VNC 连的是 tty0，而我们的 shell 不在那儿。
+#
+#   setsid + 重定向到 /dev/tty0：开一个独立会话，别和下面的 exec 抢。
+if [ -c /dev/tty0 ]; then
+    setsid sh -c 'exec /bin/sh < /dev/tty0 > /dev/tty0 2>&1' &
+fi
+
 exec /bin/sh

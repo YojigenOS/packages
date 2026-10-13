@@ -17,6 +17,35 @@
 
 set -u
 
+# ── root 在 /etc/shadow 里是锁定的 ──────────────────────────────────────────
+#
+# ★ 这一条是真机上才暴露的：**sshd 对锁定账号拒绝一切认证，包括公钥。**
+#
+#   /etc/shadow 里那句注释说明了它的来历：
+#
+#       # 没有密码（!），root 只能通过提权或直接访问进入。
+#       # 这是给【容器基础镜像】用的合理默认值；真机上【安装器会设置 root 密码】。
+#       root:!::0:::::
+#
+#   而 DD 通道【没有安装器】——没有任何东西会去解开 root。于是：
+#   系统起来了、sshd 起来了、公钥也在 /root/.ssh/authorized_keys 里，
+#   但钥匙被拒：
+#
+#       root@…: Permission denied (publickey,password,keyboard-interactive)
+#
+#   而"连不上"在一台云主机上就是变砖：没有串口，VNC 又是另一回事。
+#
+# ★ 首启做，不在构建时做——理由和主机密钥一样：构建时做等于所有机器共用一个值。
+#
+# ★ 换成 `*` 而不是留空：留空表示"不需要密码"，而 * 表示"永远匹配不上"。
+#   两者都不锁定，但只有后者是安全的。（下面另外把密码认证明确关掉，双保险。）
+if [ "$(awk -F: '$1=="root"{print substr($2,1,1)}' /etc/shadow 2>/dev/null)" = "!" ]; then
+    echo "  解开 root（/etc/shadow 里是锁定的，sshd 会因此拒绝公钥）…"
+    awk -F: 'BEGIN{OFS=":"} $1=="root" && substr($2,1,1)=="!" {$2="*"} {print}' \
+        /etc/shadow > /etc/shadow.new && cat /etc/shadow.new > /etc/shadow && rm -f /etc/shadow.new
+    chmod 600 /etc/shadow
+fi
+
 # ── 主机密钥 ────────────────────────────────────────────────────────────────
 if ! ls /etc/ssh/ssh_host_*_key >/dev/null 2>&1; then
     echo "  生成 SSH 主机密钥（第一次启动，之后不再做）…"
