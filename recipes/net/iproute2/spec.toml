@@ -11,7 +11,7 @@
 [package]
 name        = "iproute2"
 version     = "7.2.0"
-release     = 1
+release     = 2
 date        = 2026-10-13T12:45:00Z
 description = "网络配置与查看（ip · ss · tc）"
 section     = "net"
