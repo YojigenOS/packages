@@ -73,9 +73,23 @@ package() {
     #   ★ 而 20-sshd 那个钩子早就知道这一类（它专门写过"只 chmod 是不够的"），
     #     但它只兜了 /root 和 /var/empty，没兜 .ssh —— 而它是【启动】钩子，
     #     运行中升级根本不会跑它。所以包本身必须是对的。
-    install -d -m 700 -o root -g root "$PKGDEST/root/.ssh"
-    install -Dm600 -o root -g root "$PKGDIR/files/authorized_keys" \
-        "$PKGDEST/root/.ssh/authorized_keys"
+    # ★★ 而 -o root 在这里【做不到】，因为构建是降权跑的（驱动里 setpriv）。
+    #   非 root 改不了属主，install 会直接失败：
+    #
+    #       install: cannot change owner and permissions of '/build/dest/root/.ssh':
+    #                Operation not permitted
+    #
+    #   所以试着设，失败了不影响 —— 真正的修正交给 20-sshd 那个启动钩子。
+    #
+    #   ★ 这不是绕过：整套东西就是这样设计的（驱动里
+    #     `chown -R "$HOSTUID:$HOSTGID" "$WORK"`），于是【所有包】的属主
+    #     都是构建用户。pantsu 拼 rootfs 时会归一成 root，所以镜像里是对的；
+    #     运行中 apk 装包保留真实 uid —— 两条路的结果不一样。
+    #
+    #   钩子就是为这个存在的。它原来修了 /root 和 /var/empty，漏了 .ssh。
+    install -d -m 700 "$PKGDEST/root/.ssh"
+    install -Dm600 "$PKGDIR/files/authorized_keys" "$PKGDEST/root/.ssh/authorized_keys"
+    chown -R root:root "$PKGDEST/root/.ssh" 2>/dev/null || true
 
     # ── 5. sshd_config 的补充 ───────────────────────────────────────────
     #
