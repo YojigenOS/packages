@@ -25,6 +25,11 @@ package() {
     install -Dm755 "$PKGDIR/files/10-grow-root" \
         "$PKGDEST/usr/lib/yojigen-os/boot.d/10-grow-root"
 
+    # 首启钩子，按名字顺序跑。05 排在 10（扩盘）前面：
+    # 主机名要尽早设——日志、DHCP、sshd 都会用到它。
+    install -Dm755 "$PKGDIR/files/05-hostname" \
+        "$PKGDEST/usr/lib/yojigen-os/boot.d/05-hostname"
+
     # cttyhack：给 tty0 上那个 shell 一个控制终端（见 build() 那段）。
     install -Dm755 "$WORK/cttyhack" "$PKGDEST/usr/libexec/cttyhack"
 }

@@ -1,0 +1,48 @@
+#!/bin/sh
+# 把 /etc/hostname 里的名字设给内核。
+#
+# 【为什么要这一步】
+#
+# 不设它，`uname -a` 出来是：
+#
+#     Linux (none) 7.2.9 #1 SMP PREEMPT_DYNAMIC ... x86_64 GNU/Linux
+#            ~~~~~~
+#
+# `(none)` 是内核的【默认值】——它不读 /etc/hostname，那是个用户态文件。
+# 把它写进内核是别人干的活：systemd 有 systemd-hostnamed，传统 init 有
+# /etc/init.d/hostname。**我们两个都没有**，于是文件躺在那儿、没人读。
+#
+# 【为什么走 /proc 而不是 hostname 命令】
+#
+# `hostname` 这个命令不在 coreutils 里——它是 net-tools 的，或者 busybox 的。
+# 我们都没有。而写 /proc/sys/kernel/hostname 是内核接口，**任何工具都不需要**。
+#
+# 【为什么是 05-】
+#
+# 它要排在别人前面：日志、DHCP、sshd 都会用到主机名，而它们里最靠前的是
+# 15-network。05 留出余量。
+
+[ -r /etc/hostname ] || exit 0
+
+# 只读第一行、去掉首尾空白。空文件就当没设。
+h=$(head -n 1 /etc/hostname 2>/dev/null | tr -d '[:space:]')
+[ -n "$h" ] || exit 0
+
+# 内核接口总是可写（就算在容器里，写它也只会影响那个命名空间）。
+if ! printf '%s' "$h" > /proc/sys/kernel/hostname 2>/dev/null; then
+    echo "  ⚠ 设不了主机名（/proc/sys/kernel/hostname 不可写）"
+    exit 0
+fi
+echo "  主机名: $h"
+
+# ── 顺带让本机能解析自己的名字 ──
+#
+# 很多程序要"知道自己的域名式名字"（sudo、日志、某些邮件/服务库）。
+# 它们会去查 /etc/hosts，而那里原来只有 localhost。
+#
+# 127.0.1.1 是 Debian 起的那个惯例：一个只在本机有效的地址，
+# 专门用来把主机名指回自己。用它而不是 127.0.0.1，是因为
+# localhost 那条已经在，而主机名该是【另一个】名字。
+if ! grep -qE "[[:space:]]${h}$" /etc/hosts 2>/dev/null; then
+    printf '127.0.1.1\t%s\n' "$h" >> /etc/hosts
+fi
