@@ -63,5 +63,38 @@ build() {
     fi
     echo "  ✓ SUBDIRS 里没有 po 了"
 
+
+    # ★ 别让 procps 重新生成 local/capnames.h。
+    #
+    #   那条规则（Makefile.am 里，l.489 附近）：
+    #
+    #       local/capnames.h: Makefile
+    #           @if [ -e /usr/include/linux/capability.h ] ; then
+    #             echo "$$capnames_header" > $@; \
+    #             sed -n -e ... >> $@; \
+    #             echo -e "};\n\n" >> $@;        ← ★ 问题在这句
+    #             ...
+    #
+    #   **`echo -e` 不是 POSIX。** make 用的是 /bin/sh，而我们的 /bin/sh 是
+    #   dash（dash-binsh 那个包），它的 echo 不认识 -e —— 会把它当普通文本
+    #   打出来。于是文件尾部变成：
+    #
+    #       static const char *cap_names[] = { ...  -e };
+    #
+    #   而编译时的报错是：
+    #
+    #       local/capnames.h:52:2: error: 'e' undeclared here
+    #          52 | -e };
+    #
+    #   ——一字不差。这是上游的一个真 bug（他们的 echo -e 假定 /bin/sh 是 bash）。
+    #
+    #   而那个文件本身是 **checked in 的**（上游自己写着 auto-generated,
+    #   do not edit），规则注释也写着 "if it needs updating" —— 也就是说
+    #   它【不】需要更新。所以最干净的修法不是去打补丁改那句 echo，而是
+    #   别让它重新生成：把时间戳弄得比 Makefile 新即可。
+    #
+    #   （Makefile 是 configure 生成的，所以必须在这个时刻 touch，不能早。）
+    touch local/capnames.h
+    echo "  ✓ local/capnames.h 时间戳更新 —— 那条会踩 dash 的 echo -e 的规则不会跑了"
     make
 }
