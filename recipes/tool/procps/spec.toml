@@ -46,4 +46,19 @@ configure = [
     # 不要 8-bit 的 watch（那是给老终端的）。
     "--without-watch8bit",
     "--disable-static",
+
+    # ── NLS（gettext 翻译）暂时关掉 ──
+    #
+    # ★ 这不是"不需要"，是"现在还不能要"，理由要写清楚：
+    #
+    #   gettext 的构建需要 autopoint 先跑一遍（它往 po/ 里放 Makefile.in.in）。
+    #   我们的 autoreconf 流程没跑那一步，于是 procps 实测挂在：
+    #
+    #       Making all in po
+    #       make[2]: *** No rule to make target 'all'.  Stop.
+    #
+    #   而【NLS 正是"程序输出显示什么语言"的机制】——关掉它意味着这些工具的
+    #   报错信息是英文。这与「中文优先」那条要求是有张力的，所以记在这里，
+    #   而不是悄悄关掉。修法在 0006（apk 自己的 i18n）那条线上。
+    "--disable-nls",
 ]
