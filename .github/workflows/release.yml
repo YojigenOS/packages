@@ -436,14 +436,6 @@ jobs:
       #
       #   key 里有 run_id，所以每次都是新 key；restore-keys 会取最近的那份。
       #   key 已存在时 cache/save 会跳过——那就跳过，continue-on-error 兜着。
-      - name: 存已建好的包
-        if: always()
-        continue-on-error: true
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
-        with:
-          path: var/pkgs/${{ inputs.arch }}
-          key: pkgs-${{ inputs.arch }}-${{ github.run_id }}
-
       - name: 存 ccache
         if: always()
         continue-on-error: true
@@ -556,6 +548,26 @@ jobs:
       # ★ 发布前先证明"这个仓库能装"。
       #   这正是 packages 侧待办里缺的那条检查——「用包管理器装」比
       #   「直接叠 payload」严格，它会把声明不全的依赖立刻暴露出来。
+      # ★ 这一步必须在【打包并签名】之后。
+      #
+      #   原来它在【建包】之后、打包之前——于是 var/pkgs 里只有"进来的"那些
+      #   （播种的 + 缓存恢复的），**本轮刚建出来的一个都没有**（它们还没打成
+      #   .apk）。缓存于是永远停在上一轮的状态。
+      #
+      #   实测撞上：C⁵ 建好了 9 个包（含 linux/grub/openssh），但它存下来的
+      #   缓存是 301 MB，和之前每一轮**一模一样**——那 9 个不在里面。而它的
+      #   artifact 是 331 MB（抢救步骤在打包之后跑，所以那边是齐的）。
+      #
+      #   ★ 一个"每次都存、每次都存了同样的东西"的缓存，看起来是在工作，
+      #     实际上什么都没存进去。
+      - name: 存已建好的包
+        if: always()
+        continue-on-error: true
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: var/pkgs/${{ inputs.arch }}
+          key: pkgs-${{ inputs.arch }}-${{ github.run_id }}
+
       - name: 自检 —— 包都在，而且能装出一个系统
         run: |
           set -euo pipefail
