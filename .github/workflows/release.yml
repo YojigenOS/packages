@@ -317,6 +317,24 @@ jobs:
           # ★ 已经有 .apk 的跳过。这是「一轮失败不用从头再来」的另一半——
           #   缓存负责把上一轮的包捞回来，这里负责不重做它们。
           #
+          #   ★ inputs.packages 的【顺序】要按依赖来，而且是【运行时依赖也算】。
+          #
+          #     实测排错过一次：把 meson 排在 ninja 前面，报
+          #
+          #         skirt: 错误 依赖 ninja 还没有构建
+          #
+          #     因为 meson 的 runtime 里有 ninja（它运行时要调 ninja），而驱动
+          #     合并进构建容器 sysroot 的是 runtime + build 两类。
+          #
+          #     别手排——问它：
+          #
+          #         ./skirt/skirt order <列表>
+          #
+          #   ★ 已知的坑：跳过的包只在 var/pkgs 里，【var/output 里没有它的
+          #     payload】。所以如果它又是本批次里另一个包的依赖，那一个会报
+          #     「依赖 X 还没有构建」。用 seed_run 时不会遇到（那时一律重建），
+          #     但纯增量续跑时会。
+          #
           #   判据用【产物名】而不是配方名，因为子包和配方不是一对一：
           #   libgcc / libstdc++ 是 gcc 的子包，glibc-dev 是 glibc 的。列表里
           #   母包排在子包前面（glibc → glibc-dev），所以母包缺的时候会先把它
