@@ -1,0 +1,54 @@
+#!/bin/sh
+# 首启：用 DHCP 拿地址。
+#
+# 由 /init 按 /usr/lib/yojigen-os/boot.d/ 下的名字顺序调用。
+# 15- 排在 20-sshd 之前——**先有网，sshd 才有意义**。
+#
+# 【为什么需要它】
+#
+# 0013 里记的 TX（腾讯云 CVM）网络：
+#
+#     eth0  10.1.0.7/22        ← NAT 内网
+#     default via 10.1.0.1 proto dhcp
+#     公网 106.53.42.186       ← NAT 映射，不在网卡上
+#
+# 不是静态 IP、不是 /32、网关也在子网内——跑 DHCP 就能上网，不用写死。
+#
+# 【没有它会怎么样】
+#
+# sshd 照样起，但谁也连不上。云主机没有串口，只剩 VNC（要控制台密码）。
+# **那是"机器变砖"的形状。**
+#
+# ★ 这个坑的形状和「盘里没有 apk」是同一个：**"起得来"不蕴含"能用"**。
+#   启动测试只看那句问候语，而问候语在没有网络的机器上照样打得出来。
+
+set -u
+
+command -v dhcpcd >/dev/null 2>&1 || {
+    echo "  ⚠ 找不到 dhcpcd，跳过配网"
+    exit 0
+}
+
+# 已经有地址了就不做（重启时省几秒）。
+if [ -s /proc/net/route ] && [ "$(wc -l < /proc/net/route)" -gt 1 ]; then
+    echo "  · 已经有默认路由，跳过 DHCP"
+    exit 0
+fi
+
+echo "  DHCP 拿地址…"
+
+# -w 等到拿到地址（或超时）。超时给 30 秒：慢的 DHCP 是真有的，
+# 而这里多等一会儿的代价远小于"起不来网"。
+if dhcpcd -q -w -t 30 2>&1; then
+    echo "  ✓ 拿到地址"
+else
+    # 不拦启动：网络不通的系统还是能从 VNC 进去查。
+    echo "  ⚠ DHCP 没成功（可以手动跑 dhcpcd 看看）"
+fi
+
+# dhcpcd 顺手写的 resolv.conf。没有它 DNS 不通，apt/apk 之类全废。
+if [ -s /etc/resolv.conf ]; then
+    echo "    DNS: $(head -1 /etc/resolv.conf)"
+fi
+
+exit 0

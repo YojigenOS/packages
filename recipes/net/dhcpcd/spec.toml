@@ -1,0 +1,66 @@
+# dhcpcd —— DHCP 客户端
+#
+# 【为什么需要它】
+#
+# 0013 里那条真机通道的最后一环。TX（腾讯云 CVM）的网络是：
+#
+#     eth0  10.1.0.7/22        ← NAT 内网
+#     default via 10.1.0.1 proto dhcp
+#     公网 106.53.42.186       ← NAT 映射，不在网卡上
+#
+# 不是静态 IP、不是 /32、网关也在子网内——**跑一个 DHCP 客户端就能上网**，
+# 不需要把地址写死。
+#
+# 而在这之前，镜像起来之后是【没有 IP】的：sshd 起来了，但谁也连不上。
+# 云主机没有串口，只剩 VNC（要控制台密码）——那是"机器变砖"的形状。
+#
+# ★ 这件事按项目的标准属于"起得来 ≠ 连得上"：启动测试只看那句问候语，
+#   而问候语在【没有网络】的情况下照样打得出来。
+
+[package]
+name        = "dhcpcd"
+version     = "10.5.2"
+release     = 1
+date        = 2026-10-13T09:00:00Z
+description = "DHCP 客户端（给镜像拿 IP）"
+section     = "net"
+url         = "https://github.com/NetworkConfiguration/dhcpcd"
+license     = "BSD-2-Clause"
+
+[[source]]
+git     = "https://github.com/NetworkConfiguration/dhcpcd"
+commit  = "7c50b51a142ca5e8cbbf8f65cd8111d6f200608a"
+
+[dependencies]
+runtime = ["glibc"]
+build   = ["make", "gcc", "gawk"]
+
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["make", "gcc", "gawk"]
+
+[build]
+type      = "autotools"
+# ★ 它的 configure 是【手写的】，不是 autoconf 生成的（树里没有 configure.ac）。
+#   所以不能 autoreconf——那会覆盖掉上游那份。
+autoreconf = false
+configure = [
+    "--prefix=/usr",
+    "--sysconfdir=/etc",
+    "--dbdir=/var/lib/dhcpcd",
+    "--runstatedir=/run",
+
+    # ★★ 权限分离默认开着，它会去找一个叫 dhcpcd 的用户。
+    #
+    #   而这个系统【还没有用户体系】——/init 的注释里写着：
+    #
+    #       "现在还没有用户体系（没有 shadow/pam），那些属于「能装软件」
+    #        那一层，不在「能开机」里。"
+    #
+    #   不关掉的话，dhcpcd 起来会找不到那个用户而失败——而失败的表现是
+    #   "没有 IP"，看起来像网络问题。
+    "--disable-privsep",
+
+    # 不装它的 udev 规则和 systemd 单元：我们两样都没有。
+    "--without-udev",
+]
