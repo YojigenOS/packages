@@ -26,10 +26,10 @@ commit = "195ac8ddbf6fad16ff1ff125b0feb725b6c46dcf"
 
 [dependencies]
 runtime = ["glibc", "elfutils"]
-build   = ["make", "gcc", "autoconf", "automake", "libtool", "gettext"]
+build   = ["make", "gcc", "autoconf", "automake", "libtool", "gettext", "gawk"]
 [dependencies.x86_64]
 runtime = ["glibc", "elfutils"]
-build   = ["make", "gcc", "autoconf", "automake", "libtool", "gettext"]
+build   = ["make", "gcc", "autoconf", "automake", "libtool", "gettext", "gawk"]
 
 [build]
 type      = "autotools"
