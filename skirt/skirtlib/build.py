@@ -182,8 +182,27 @@ def make_build_script(spec: dict, arch: str = "") -> str:
             body = f"  ./configure {opts}\n  make"
             pkgstep = '  make DESTDIR="$PKGDEST" install'
     elif kind == "meson":
-        opts = " ".join(b.get("configure",
-                              ["--prefix=/usr", "--libdir=lib", "--buildtype=release"]))
+        # ★★ 和上面 cmake 那段一样的修法 —— 前缀【永远由驱动给】。
+        #
+        #   原来的语义是「配方写了 configure 就整个替换掉默认值」，于是
+        #   iputils 和 dbus 想加几条选项，顺手把 --prefix=/usr 也顶掉了，
+        #   meson 用它自己的默认 /usr/local。实测：
+        #
+        #       ping          → /usr/local/bin/ping        ✗
+        #       dbus-daemon   → /usr/local/bin/dbus-daemon ✗
+        #
+        #   ★ 而 apk-tools 一直是对的 —— 因为它的 configure 是【空的】，
+        #     走的是默认值。**同一个驱动，两个包结果不同，差别只在配方写没写
+        #     那几行。** 这正是"看起来对的"和"真的对"之间那类差别。
+        #
+        #   ★★ 而这条修法上一轮已经给 cmake 写过了（libevent 那次），
+        #     却只写了 cmake。**修一类，不是修一个** —— 那一类就是
+        #     「配方能顶掉前缀」，而它在两个分支里都成立。
+        _base = ["--prefix=/usr", "--libdir=lib", "--buildtype=release"]
+        _extra = [c for c in b.get("configure", [])
+                  if not c.startswith("--prefix=") and not c.startswith("--libdir=")
+                  and not c.startswith("--buildtype=")]
+        opts = " ".join(_base + _extra)
         body = f"  meson setup _build {opts}\n  meson compile -C _build"
         pkgstep = '  DESTDIR="$PKGDEST" meson install -C _build'
     elif kind == "cmake":
