@@ -80,6 +80,10 @@ on:
         description: '从哪一次运行的 repo-<arch> 产物播种（run id；留空不播种）'
         required: false
         default: ''
+      force:
+        description: '重建这些包，即使它们已经在缓存里（空格分隔；留空则照常跳过）'
+        required: false
+        default: ''
 
 # ★ 仓库的默认 token 权限是 `read`，而那个只给 contents + packages。
 #   下载 artifact 要 `actions: read`——不给的话"从上一轮播种"那一步会 403。
@@ -395,13 +399,28 @@ jobs:
           SKIP_OK=1
           [ -n "${{ inputs.seed_run }}" ] && SKIP_OK=0
 
+          # ★ force 里的包一律重建。
+          #
+          #   为什么需要它：跳过的判据是「var/pkgs 里有同名 .apk」，而那分不出
+          #   【旧】——包的版本号在配方改动后不变，所以改完配方再跑，它照样被
+          #   跳过，改动永远不生效。
+          #
+          #   实测就卡在这儿：修好 provider-priority 之后要重建 openssl，而
+          #   openssl 在缓存里 → 跳过 → 白跑一轮。而用 seed_run 关掉跳过会让
+          #   【全部】重建（连 linux 那 30 分钟也重来）。
+          #
+          #   force 是那个中间档：点名重建这几个，其余照常跳过。
+          FORCE=" ${{ inputs.force }} "
+
           built=0 skipped=0
           for p in ${{ inputs.packages }}; do
-            if [ "$SKIP_OK" = 1 ] && ls "$OUT/$p-"*.apk >/dev/null 2>&1; then
+            if [ "$SKIP_OK" = 1 ] && [ "${FORCE#* $p }" = "$FORCE" ] \
+               && ls "$OUT/$p-"*.apk >/dev/null 2>&1; then
               echo "── 跳过 $p（已经有了）──"
               skipped=$((skipped+1))
               continue
             fi
+            case "$FORCE" in *" $p "*) echo "── 建 $p（force：点名要重建）──" ;; esac
             echo "── 建 $p ──"
             ./skirt/skirt build "$p"
             built=$((built+1))
