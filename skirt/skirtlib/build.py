@@ -667,13 +667,20 @@ def run_in_container(srcrel: str, srcname: str, arch: str, spec: dict, epoch: in
         'if [ ! -x "$GC" ]; then echo "[产物] ⚠ getcap 不在（/$GC 都试过）—— 能力位这一格查不了" >&2; fi\n'
         'GC2=$(command -v getcap 2>/dev/null || true); [ -x "$GC2" ] || GC2=/usr/sbin/getcap\n'
         'if [ -x "$GC2" ]; then\n'
-        '  "$GC2" -r "$WORK/dest" 2>/dev/null | sed "s|^$WORK/dest||" > /in/caps.txt || true\n'
-        '  "$GC2" -r "$WORK/dest" 2>/dev/null | sed "s|^$WORK/dest||" > /tmp/caps.txt || true\n'
-        '  n1=$(wc -l < /tmp/caps.txt 2>/dev/null || echo 0)\n'
-        '  cp /tmp/caps.txt /in/caps.txt 2>/dev/null || true\n'
-        '  n2=$(wc -l < /in/caps.txt 2>/dev/null || echo 0)\n'
-        '  echo "[产物] 清单：容器内 $n1 条，宿主上 $n2 条" >&2\n'
-        '  head -3 /tmp/caps.txt 2>/dev/null | sed "s|^|  · |" >&2 || true\n'
+        # ★★ 而它要写【到 payload 自己里面】。
+        #
+        #   为什么：`/in` 在 build 时是 var/work，而在 pack.sh 里是
+        #   var/output/<arch>/<包>-<版本>/ —— 【两个不同的目录】。
+        #   我写了四轮才发现这件事（清单一直写在 build 那边，而 pack 那边读不到）。
+        #
+        #   写进 dest 就跟着 payload 走了：skirt 会把 dest 收成 var/output/…/payload/，
+        #   而 pack.sh 挂的就是那个目录。**自洽，不用两边对齐一个外部路径。**
+        #
+        #   文件名前面一个点 —— pack.sh 读完会把它删掉，不会进包。
+        '  "$GC2" -r "$WORK/dest" 2>/dev/null | sed "s|^$WORK/dest||" > "$WORK/dest/.yojigen-caps" || true\n'
+        '  n=$(wc -l < "$WORK/dest/.yojigen-caps" 2>/dev/null || echo 0)\n'
+        '  echo "[产物] 能力位清单（$n 条）写进 payload 的 .yojigen-caps" >&2\n'
+        '  head -3 "$WORK/dest/.yojigen-caps" 2>/dev/null | sed "s|^|  · |" >&2 || true\n'
         'else\n'
         '  echo "[产物] ⚠ 没有 getcap —— 能力位这一格查不了" >&2\n'
         'fi\n'

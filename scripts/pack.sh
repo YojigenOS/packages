@@ -250,6 +250,63 @@ lines = ["#!/bin/sh", "set -e",
          # ★★ 而【主路】是那份文本清单 —— build.py 在拷出之后写的 /in/caps.txt。
          #   理由：能力位过不了绑定挂载（fsetxattr 报 EOPNOTSUPP），
          #   而文本可以。所以走清单不走属性。
+         # ★★ 能力位走【文本清单】，不走文件属性 —— 理由见 build.py：
+         #   绑定挂载不支持 security.capability，而清单（文本）随便搬。
+         #   清单由 build.py 写在 payload 里的 .yojigen-caps。
+         #
+         #   ★ 而它必须在这里设 —— 在 chown 之后。因为 chown 会清掉能力位。
+         "CAPS=/data/.yojigen-caps",
+         "if [ -s \"$CAPS\" ] && [ -x \"$SC\" ]; then",
+         "  n=0; bad=0",
+         "  while IFS=' ' read -r f c; do",
+         "    [ -n \"$f\" ] && [ -n \"$c\" ] || continue",
+         "    if \"$SC\" \"$c\" \"/data$f\" 2>/dev/null; then n=$((n+1)); else bad=$((bad+1)); fi",
+         "  done < \"$CAPS\"",
+         "  echo \"[打包] ★ 设回了 $n 个能力位$([ \"$bad\" -gt 0 ] && echo \"，$bad 个失败\")\"",
+         "else",
+         "  echo \"[打包] 没有 .yojigen-caps（或没有 setcap）—— 这一批不需要设能力位\"",
+         "fi",
+         # ★ 而清单本身要删掉 —— 它是构建过程的记事，不是这个包的内容。
+         "rm -f \"$CAPS\"",
+         # ★★ 属主统一成 root:0，而 setuid/setgid 位要保住。
+         #
+         #   为什么需要这一步：payload 是从容器里【拷到宿主】再挂回来的，而
+         #   沿途有一次清理用的 `chown -R "$HOSTUID"`（见 build.py 的 cleanup）。
+         #   于是包里的属主成了构建用户（1001），而不是 root。
+         #
+         #   实测的两头：
+         #       dest 里（package 之后，诊断打的）  -rwsr-xr-x root  root  sudo ✓
+         #       发出去的包里（解开发出来的）      -rwxr-xr-x nobody nobody ✗
+         #
+         #   而"属主不是 root"这件事的后果我们撞过两次：
+         #       · sudo      没有 setuid 就不叫 sudo
+         #       · .ssh      StrictModes 拒绝非 root 拥有的 authorized_keys
+         #                   → 在运行中的系统上升级 openssh 之后 SSH 直接进不去
+         #
+         #   所以【发行版的包，文件就该是 root:0】。这是个决定，不是默认值 ——
+         #   而上游的 Makefile 本来也是这么装的（install -o 0 -g 0）。
+         #
+         #   ★ 顺序：先记下带 setuid/setgid 的那些（连同它们的完整权限），
+         #     再 chown，再把权限放回去 —— 因为 Linux 的 chown 会清掉那两位。
+         "find /data \\( -perm -4000 -o -perm -2000 \\) -type f 2>/dev/null"
+         " | while IFS= read -r f; do echo \"$(stat -c %a \"$f\") $f\"; done > /tmp/.setid || true",
+         # ★ 能力位也要记 —— 它的道理和 setuid 完全一样：chown 会清掉
+         #   security.capability。（iputils 给 ping 设的 cap_net_raw 就是这么丢的。）
+         #   而 getcap 在 alpine:latest 里没有，所以下面那行 apk add。
+         # ★ 显式找工具（`command -v` 之后退回 /usr/sbin），并且【明说】
+         #   你有没有真的记到东西 —— 上一版我写了裸的 getcap + `|| true`，
+         #   于是它静默地什么都没做，能力位照样丢。
+         "GC=$(command -v getcap 2>/dev/null || true); [ -x \"$GC\" ] || GC=/usr/sbin/getcap",
+         "if [ -x \"$GC\" ]; then \"$GC\" -r /data > /tmp/.caps 2>/dev/null || true; fi",
+         "echo \"[打包] 记下 $(wc -l < /tmp/.caps 2>/dev/null || echo 0) 个能力位\"",
+         "chown -R 0:0 /data",
+         "while IFS=' ' read -r m f; do chmod \"$m\" \"$f\" 2>/dev/null || true; done < /tmp/.setid || true",
+         "SC=$(command -v setcap 2>/dev/null || true); [ -x \"$SC\" ] || SC=/usr/sbin/setcap",
+         "while read -r f c; do [ -n \"$c\" ] && \"$SC\" \"$c\" \"$f\" 2>/dev/null || true; done < /tmp/.caps",
+         "echo \"[打包] 从 getcap 记到的放回了 $(wc -l < /tmp/.caps 2>/dev/null || echo 0) 个\"",
+         # ★★ 而【主路】是那份文本清单 —— build.py 在拷出之后写的 /in/caps.txt。
+         #   理由：能力位过不了绑定挂载（fsetxattr 报 EOPNOTSUPP），
+         #   而文本可以。所以走清单不走属性。
          "if [ -s /in/caps.txt ] && [ -x \"$SC\" ]; then",
          "  n=0",
          "  while IFS=' ' read -r f c; do",
