@@ -162,9 +162,35 @@ def make_build_script(spec: dict, arch: str = "") -> str:
         body = f"  meson setup _build {opts}\n  meson compile -C _build"
         pkgstep = '  DESTDIR="$PKGDEST" meson install -C _build'
     elif kind == "cmake":
-        opts = " ".join(b.get("configure",
-                              ["-DCMAKE_INSTALL_PREFIX=/usr",
-                               "-DCMAKE_INSTALL_LIBDIR=lib"]))
+        # ★★ 安装前缀【永远由驱动给】，配方写的是【附加】选项。
+        #
+        #   原来是 `b.get("configure", [前缀那两个])` —— 而那个语义是
+        #   「配方写了就整个替换掉默认值」。于是只要某个配方想加一条选项，
+        #   前缀就一起没了。
+        #
+        #   实测撞到 libevent：它写了 -DCMAKE_BUILD_TYPE=Release 等几条，
+        #   于是 -DCMAKE_INSTALL_PREFIX=/usr 被顶掉，cmake 用默认的
+        #   /usr/local。包建成功、发出去、装上，而 tmux 一跑就：
+        #
+        #       error while loading shared libraries: libevent_core-2.1.so.7
+        #
+        #   ——libevent 的库在 /usr/local/lib 里，动态加载器不看那儿。
+        #   **一路绿灯，直到有人真的运行它。**
+        #
+        #   ★ 这已经是今晚第三次撞同一类了：
+        #       libffi    /usr/lib64        → 驱动钉死 LIBDIR
+        #       iproute2  SBINDIR=/sbin     → 配方钉死
+        #       libevent  /usr/local        → 这里
+        #     形状都是「上游的某个默认值不管 PREFIX」。
+        #     而上面那条「检查 [build] 里有没有不认识的键」只抓键名写错，
+        #     抓不到「键名对、但把好默认值顶掉了」。
+        #
+        #   所以：前缀由驱动无条件加上，配方那几条按原样追加。配方里如果
+        #   自己写前缀，也不重复（下面那两行过滤掉）。
+        _base = ["-DCMAKE_INSTALL_PREFIX=/usr", "-DCMAKE_INSTALL_LIBDIR=lib"]
+        _extra = [c for c in b.get("configure", [])
+                  if "CMAKE_INSTALL_PREFIX" not in c and "CMAKE_INSTALL_LIBDIR" not in c]
+        opts = " ".join(_base + _extra)
         body = f"  cmake -B _build {opts}\n  cmake --build _build"
         pkgstep = '  DESTDIR="$PKGDEST" cmake --install _build'
     elif kind == "custom":
