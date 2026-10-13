@@ -663,8 +663,20 @@ jobs:
             '
           kill "$(cat /tmp/http.pid)" 2>/dev/null || true
 
+      # ★ 建包失败时【也要发】—— 发的是已经建成的那些。
+      #
+      #   原来这里是 `if: inputs.deploy`，而 GitHub 的默认行为是"前面挂了
+      #   后面全跳过"。于是：9 个包里 8 个建成了、第 9 个撞了个新坑，
+      #   结果是【一个都发不出去】。
+      #
+      #   而"存已建好的包"那一步早就是 if: always() —— 东西攒下来了，
+      #   只是不发。这个组合没有任何好处：失败的那一轮最需要把能用的
+      #   先落下去（下一轮就能从那儿接着走，而不是从头再来）。
+      #
+      #   !cancelled() 而不是 always()：手动取消的时候不该往下发。
+      #   仓库是增量的，多发几个不会破坏任何东西。
       - name: 发布到 repo.os.yojigen.cn
-        if: ${{ inputs.deploy }}
+        if: ${{ inputs.deploy && !cancelled() }}
         env:
           S3_AK: ${{ secrets.S3_AK }}
           S3_SK: ${{ secrets.S3_SK }}
