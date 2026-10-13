@@ -220,6 +220,29 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # ── 把 .apk 还原成 payload ──────────────────────────────────────────
+      #
+      # ★★ 这一步修的是一个【静默】的坑：包在仓库里、也有 .apk，但 skirt 说
+      #   「依赖 X 还没有构建」。
+      #
+      #     ── 建 linux ──
+      #     [解析] 依赖链: flex → bc → openssl → bzip2 → elfutils → linux
+      #     skirt: 错误 依赖 openssl 还没有构建
+      #            （找不到 var/output/x86_64/openssl-3.5.9-1/payload/）
+      #
+      #   openssl 明明在 var/pkgs 里躺着。缺的是：**播种和跳过都只拿回了 .apk，
+      #   没有拿回 payload**，而 skirt 合并依赖时找的是 var/output/<arch>/<名字>/payload/。
+      #
+      #   `.apk` 是 ADB 格式，`tar -tzf` 解不出来（实测 0 条目），只有
+      #   `apk extract --allow-untrusted` 解得开。见 scripts/restore-payloads.sh。
+      #
+      # ★ 为什么放在循环【之前】就够了：跳过只发生在循环开始前就已经在
+      #   var/pkgs 里的包上——而那些正是这一步还原的。循环里新建的包，payload
+      #   本来就在 var/output 里。
+      - name: 把 .apk 还原成 payload
+        if: inputs.seed_run != ''
+        run: ./scripts/restore-payloads.sh "${{ inputs.arch }}"
+
       # ── 构建环境：我们自己的 ────────────────────────────────────────────
       #
       # ★ 不是 `docker build bootstrap`（那是 Debian 底的）。
