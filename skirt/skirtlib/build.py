@@ -714,7 +714,18 @@ def run_in_container(srcrel: str, srcname: str, arch: str, spec: dict, epoch: in
         #   而第一步拷出来就没了。**
         #
         #   这一句以前是 cp -a：它保得住属主、权限、setuid —— 保不住能力位。
-        'rsync -aX "$WORK/dest/." /in/dest/ || true\n'
+        #   ★ 而它必须【说出来】—— 上一版这里只有一句 `… || true`，
+        #     于是 rsync 在不在、成没成，日志里一个字都没有。而我连着两轮
+        #     都在猜"能力位到底丢在哪一步"。
+        'if command -v rsync >/dev/null 2>&1; then\n'
+        '  rsync -aX "$WORK/dest/." /in/dest/ || echo "[产物] ✗ rsync 拷出失败" >&2\n'
+        '  echo "[产物] 用 rsync -aX 拷出（保能力位）" >&2\n'
+        'else\n'
+        '  cp -a "$WORK/dest/." /in/dest/ || echo "[产物] ✗ cp 拷出失败" >&2\n'
+        '  echo "[产物] ⚠ 没有 rsync，退回 cp -a —— 能力位会丢" >&2\n'
+        'fi\n'
+        'GC2=$(command -v getcap 2>/dev/null || true); [ -x "$GC2" ] || GC2=/usr/sbin/getcap\n'
+        'if [ -x "$GC2" ]; then n=$("$GC2" -r /in/dest 2>/dev/null | wc -l); echo "[产物] 而拷到宿主之后，能力位有 $n 个" >&2; fi\n'
         'after=$(find /in/dest \\( -type f -o -type l \\) | wc -l | tr -d " ")\n'
         'if [ "$before" != "$after" ]; then\n'
         '  echo "[产物] ❌ 容器内 $before 项，拷到宿主只剩 $after 项"\n'
