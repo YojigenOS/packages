@@ -1,0 +1,61 @@
+# chrony —— NTP 客户端/服务端
+#
+# 【为什么服务器上必须有它】
+#
+# 时间不对的后果比看上去大：TLS 证书"还没生效"或"已过期"、
+# 日志里的时间戳对不上因果、`make` 觉得文件是从未来来的而跳过重建。
+# 而云主机的时间会飘 —— 虚拟化那层不保证它准。
+#
+# 相比 ntpd，chrony 在【间歇性联网】和【时钟走得很偏】这两种情况下好得多，
+# 而那正是虚拟机常见的状态。
+
+[package]
+name        = "chrony"
+version     = "4.9"
+release     = 1
+date        = 2026-10-13T17:00:00Z
+description = "NTP 时间同步（客户端与服务端）"
+section     = "net"
+url         = "https://chrony-project.org/"
+license     = "GPL-2.0-only"
+
+[[source]]
+git    = "https://gitlab.com/chrony/chrony"
+commit = "8df4f1263e206585e6c4e61352d042c2dd12916a"
+
+[dependencies]
+runtime = ["glibc", "libcap"]
+build   = ["make", "gcc", "autoconf", "automake", "libtool", "libcap"]
+[dependencies.x86_64]
+runtime = ["glibc", "libcap"]
+build   = ["make", "gcc", "autoconf", "automake", "libtool", "libcap"]
+
+[build]
+type       = "autotools"
+autoreconf = true
+configure  = [
+    "--prefix=/usr",
+    "--sysconfdir=/etc",
+    "--localstatedir=/var",
+    "--sbindir=/usr/sbin",
+
+    # ★ 关掉的这几样都要【我们没有的库】。每一条都是具体的：
+    #
+    #   --without-readline / --without-editline   命令行编辑要 libedit/readline
+    #   --disable-nts                             NTS 要 nettle 或 gnutls
+    #   --disable-sechash                         NTS 的 SipHash 也来自 nettle
+    #
+    # ★ 而 linuxcaps 是【留着】的 —— libcap 我们有（这一批刚建过），
+    #   它能换来"起步之后把 root 权限丢掉"。那是个实打实的安全属性，
+    #   不是可选项。
+    "--without-readline",
+    "--without-editline",
+    "--disable-nts",
+    "--disable-sechash",
+
+    # ★ 不用 seccomp 过滤。它要 libseccomp，而我们没有 ——
+    #   而 chrony 会【静默】降级，所以显式关掉，让"没有"是一个决定。
+    "--disable-scfilter",
+
+    "--disable-nls",
+]

@@ -1,0 +1,50 @@
+# cronie —— 定时任务（cron 守护进程 + crontab）
+#
+# 【为什么它是"服务器化"那一档的】
+#
+# 没有它，`logrotate` 就没有人来调 —— 而后者是防止 /var/log 把盘填满的东西。
+# 也就是说这两个是一对：cronie 提供"何时做"，logrotate 提供"做什么"。
+#
+# 它同时是 `crontab` 命令的来源 —— 那才是日常用得最多的那一个。
+
+[package]
+name        = "cronie"
+version     = "1.7.2"
+release     = 1
+date        = 2026-10-13T17:00:00Z
+description = "定时任务（cron 守护进程 + crontab）"
+section     = "system"
+url         = "https://github.com/cronie-crond/cronie"
+license     = "ISC AND BSD-2-Clause AND BSD-3-Clause AND MIT"
+
+[[source]]
+git    = "https://github.com/cronie-crond/cronie"
+commit = "71894fee3c74f3787e77f21a24fbbe0dffb59e7f"
+
+[dependencies]
+runtime = ["glibc"]
+build   = ["make", "gcc", "autoconf", "automake", "libtool"]
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["make", "gcc", "autoconf", "automake", "libtool"]
+
+[build]
+type       = "autotools"
+autoreconf = true
+configure  = [
+    "--prefix=/usr",
+    "--sysconfdir=/etc",
+    "--localstatedir=/var",
+
+    # ★ 关掉 SELinux 和 audit —— 两个都没有。
+    #   上游的 SELinux 那条是硬报错（AC_MSG_ERROR），所以必须显式关。
+    "--without-selinux",
+    "--without-audit",
+
+    # ★ inotify 是唯一【要留着】的可选件：cronie 靠它知道 crontab 文件改了，
+    #   没有的话就得等它下一轮重新读盘。而 inotify 是内核的一部分，
+    #   没有额外的库依赖。
+    "--with-inotify",
+
+    "--disable-nls",
+]
