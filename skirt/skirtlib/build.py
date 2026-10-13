@@ -699,7 +699,22 @@ def run_in_container(srcrel: str, srcname: str, arch: str, spec: dict, epoch: in
         # 这正是 0002 说的那件事，只是它发生在【拷出来】这一步而不是构建
         # 里：容器内的构建是好的，丢在边界上。数一遍就能把话说清楚。
         'before=$(find "$WORK/dest" \\( -type f -o -type l \\) | wc -l | tr -d " ")\n'
-        'cp -a "$WORK/dest/." /in/dest/ || true\n'
+        # ★★ 用 rsync -aX，不用 cp -a —— 因为 cp【不保 security.* 扩展属性】。
+        #
+        #   实测（同一棵装了能力位的树，五种拷法各试一次）：
+        #
+        #       cp -a                                    → 空 ✗
+        #       cp -a --preserve=all                     → 空 ✗
+        #       cp -a --preserve=xattr                   → 空 ✗
+        #       tar --xattrs                             → 空 ✗
+        #       rsync -aX                                → cap_net_raw=ep ✓
+        #
+        #   能力位（security.capability）正好在那个命名空间里。
+        #   **所以 ping 的能力位一路上都在 dest 里、在诊断里看得见，
+        #   而第一步拷出来就没了。**
+        #
+        #   这一句以前是 cp -a：它保得住属主、权限、setuid —— 保不住能力位。
+        'rsync -aX "$WORK/dest/." /in/dest/ || true\n'
         'after=$(find /in/dest \\( -type f -o -type l \\) | wc -l | tr -d " ")\n'
         'if [ "$before" != "$after" ]; then\n'
         '  echo "[产物] ❌ 容器内 $before 项，拷到宿主只剩 $after 项"\n'
