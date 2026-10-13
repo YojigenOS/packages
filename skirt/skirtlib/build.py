@@ -495,10 +495,29 @@ def run_in_container(srcrel: str, srcname: str, arch: str, spec: dict, epoch: in
         #     别的属性**，而它们各自都是"让这个程序能用"的一部分。
         "cleanup() {\n"
         '  find /in/dest \\( -perm -4000 -o -perm -2000 \\) -type f > /tmp/.setid 2>/dev/null || true\n'
-        '  getcap -r /in/dest 2>/dev/null > /tmp/.caps || true\n'
+        #   ★ 而这一句必须【找到那个工具】才有效 —— 第一版我写的是裸的 `getcap`，
+        #     而 base-devel 里没有它（libcap 只是构建依赖，合并进来的是它的库，
+        #     命令行工具在 /usr/sbin 而那里不在默认 PATH 上）。于是那句
+        #     `… || true` 静默地什么都没做，能力位照样丢。
+        #
+        #     **一个没跑成的检查，绿的和红的都不算数。** 所以这里显式找它，
+        #     找不到就把这件事说出来 —— 不静默。
+        'GC=$(command -v getcap 2>/dev/null || true)\n'
+        '[ -x "$GC" ] || GC=/usr/sbin/getcap\n'
+        'if [ -x "$GC" ]; then "$GC" -r /in/dest > /tmp/.caps 2>/dev/null || true; fi\n'
+        'if [ ! -s /tmp/.caps ] && find /in/dest -perm -4000 -type f 2>/dev/null | grep -q .; then :; fi\n'
+        'SC=$(command -v setcap 2>/dev/null || true)\n'
+        '[ -x "$SC" ] || SC=/usr/sbin/setcap\n'
         '  chown -R "$HOSTUID:$HOSTGID" /in 2>/dev/null || true\n'
         '  while IFS= read -r f; do chmod u+s "$f" 2>/dev/null || true; done < /tmp/.setid\n'
-        '  while read -r f c; do [ -n "$c" ] && setcap "$c" "$f" 2>/dev/null || true; done < /tmp/.caps\n'
+        '  if [ -s /tmp/.caps ]; then\n'
+        '    if [ -x "$SC" ]; then\n'
+        '      while read -r f c; do [ -n "$c" ] && "$SC" "$c" "$f" 2>/dev/null || true; done < /tmp/.caps\n'
+        '      echo "[产物] 放回了 $(wc -l < /tmp/.caps) 个能力位" >&2\n'
+        '    else\n'
+        '      echo "[产物] ✗ 找到了能力位但找不到 setcap —— 它们会丢" >&2\n'
+        '    fi\n'
+        '  fi\n'
         "}\n"
         "trap cleanup EXIT\n"
         "\n"

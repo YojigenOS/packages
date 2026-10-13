@@ -227,10 +227,17 @@ lines = ["#!/bin/sh", "set -e",
          # ★ 能力位也要记 —— 它的道理和 setuid 完全一样：chown 会清掉
          #   security.capability。（iputils 给 ping 设的 cap_net_raw 就是这么丢的。）
          #   而 getcap 在 alpine:latest 里没有，所以下面那行 apk add。
-         "getcap -r /data 2>/dev/null > /tmp/.caps || true",
+         # ★ 显式找工具（`command -v` 之后退回 /usr/sbin），并且【明说】
+         #   你有没有真的记到东西 —— 上一版我写了裸的 getcap + `|| true`，
+         #   于是它静默地什么都没做，能力位照样丢。
+         "GC=$(command -v getcap 2>/dev/null || true); [ -x \"$GC\" ] || GC=/usr/sbin/getcap",
+         "if [ -x \"$GC\" ]; then \"$GC\" -r /data > /tmp/.caps 2>/dev/null || true; fi",
+         "echo \"[打包] 记下 $(wc -l < /tmp/.caps 2>/dev/null || echo 0) 个能力位\"",
          "chown -R 0:0 /data",
          "while IFS=' ' read -r m f; do chmod \"$m\" \"$f\" 2>/dev/null || true; done < /tmp/.setid || true",
-         "while read -r f c; do [ -n \"$c\" ] && setcap \"$c\" \"$f\" 2>/dev/null || true; done < /tmp/.caps",
+         "SC=$(command -v setcap 2>/dev/null || true); [ -x \"$SC\" ] || SC=/usr/sbin/setcap",
+         "while read -r f c; do [ -n \"$c\" ] && \"$SC\" \"$c\" \"$f\" 2>/dev/null || true; done < /tmp/.caps",
+         "echo \"[打包] 放回了 $(wc -l < /tmp/.caps 2>/dev/null || echo 0) 个\"",
          f"exec apk mkpkg {sign_arg}\\"]
 for k, v in fields:
     if v:
