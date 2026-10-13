@@ -35,11 +35,11 @@ mirrors = ["https://git.kernel.org/pub/scm/fs/ext2/e2fsprogs"]
 
 [dependencies]
 runtime = ["glibc"]
-build   = ["make", "gcc", "sed", "awk"]
+build   = ["make", "gcc", "sed", "gawk"]
 
 [dependencies.x86_64]
 runtime = ["glibc"]
-build   = ["make", "gcc", "sed", "awk"]
+build   = ["make", "gcc", "sed", "gawk"]
 
 [build]
 type      = "autotools"
