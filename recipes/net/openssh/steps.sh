@@ -87,9 +87,34 @@ package() {
     #     运行中 apk 装包保留真实 uid —— 两条路的结果不一样。
     #
     #   钩子就是为这个存在的。它原来修了 /root 和 /var/empty，漏了 .ssh。
-    install -d -m 700 "$PKGDEST/root/.ssh"
-    install -Dm600 "$PKGDIR/files/authorized_keys" "$PKGDEST/root/.ssh/authorized_keys"
-    chown -R root:root "$PKGDEST/root/.ssh" 2>/dev/null || true
+    # ★★★ 而【不装成 /root/.ssh/authorized_keys】—— 这是这一版真正的改动。
+    #
+    #   装成那个路径的后果实测撞了两次（第 3 轮一次、刚才一次），而两次都是
+    #   同一件事：**那个文件归包所有，于是每次 `apk upgrade openssh` 都会用
+    #   包里那份把盘上那份替换掉。**
+    #
+    #   而盘上那份是【运行中的机器的身份】—— 用户往里加了自己的钥匙，
+    #   升级一次就没了。属主对不对（上一版修的那个）只决定了"替换之后
+    #   会不会断"，而它救不了"替换本身就发生了"。
+    #
+    #   所以换成一份【模板】，由启动钩子在文件不存在时铺上去：
+    #
+    #       模板（包拥有）  /usr/share/yojigen-os/ssh/authorized_keys.default
+    #       实际文件（不归包）  /root/.ssh/authorized_keys
+    #
+    #   ★ 而"构建时烤一把进去"这个目的照样达到 —— 钩子是在 sshd 起来
+    #     【之前】跑的，所以第一次启动就有钥匙可用。
+    #
+    #   ★ 两条边界都要想清楚：
+    #     · 升级：包不再拥有那个文件 → apk 不碰它 → 用户加过的东西留着 ✓
+    #     · 全新装机：钩子铺模板 → 第一次启动就能登 ✓
+    #     而"用户自己删了想重新要一份"也简单：删掉那个文件，重启 ✓
+    install -Dm644 "$PKGDIR/files/authorized_keys" \
+        "$PKGDEST/usr/share/yojigen-os/ssh/authorized_keys.default"
+
+    # ★ 而【已经装过它的旧机器】上，那个文件还留着 —— 这一版不会去删它
+    #   （删了会把正在用的钥匙弄没），也不会去改它。钩子会照看它的属主。
+    #   换句话说：**从现在起不再动它。**
 
     # ── 5. sshd_config 的补充 ───────────────────────────────────────────
     #

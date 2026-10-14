@@ -92,6 +92,35 @@ install -d -m 700 -o root -g root /root 2>/dev/null || chmod 0700 /root 2>/dev/n
 #   这个钩子兜一遍，是为了让【已经装坏的系统】重启一次自己修回来 ——
 #   不然就只能进控制台手工 chown。
 install -d -m 700 -o root -g root /root/.ssh 2>/dev/null || true
+
+# ★★★ 而现在这个文件【不归任何包所有】—— 由这里负责第一次铺上去。
+#
+#   为什么改成这样：它原来在 openssh 包里，于是每次 `apk upgrade openssh`
+#   都用包里那份替换盘上那份。而盘上那份是【这台机器的身份】：用户往里
+#   加了自己的钥匙，升级一次就没了。实测撞了两次，两次都把 SSH 弄断。
+#
+#   现在的分工：
+#
+#       模板（包拥有，会被升级替换）  /usr/share/yojigen-os/ssh/authorized_keys.default
+#       实际文件（不归包，升级不碰）  /root/.ssh/authorized_keys
+#
+#   ★ 而"没有它就登不进去"这件事由这里兜住 —— 这个钩子在 sshd 起来
+#     【之前】跑，所以第一次启动就有钥匙可用。
+#
+#   ★ 而如果用户把它删了（想重新要一份默认的），重启一次就会回来。
+if [ ! -f /root/.ssh/authorized_keys ]; then
+    if [ -f /usr/share/yojigen-os/ssh/authorized_keys.default ]; then
+        install -m 600 -o root -g root \
+            /usr/share/yojigen-os/ssh/authorized_keys.default \
+            /root/.ssh/authorized_keys 2>/dev/null \
+            && echo "  已铺上默认公钥（/root/.ssh/authorized_keys 原来不在）" \
+            || echo "  ⚠ 铺默认公钥失败——检查 /usr/share/yojigen-os/ssh/"
+    else
+        echo "  ⚠ 没有模板，也没有 /root/.ssh/authorized_keys —— 只能用控制台进去"
+    fi
+fi
+
+# 而已经存在的，只管属主（它是盘上的东西，不是包的东西）。
 [ -f /root/.ssh/authorized_keys ] && chown root:root /root/.ssh/authorized_keys 2>/dev/null || true
 chmod 600 /root/.ssh/authorized_keys 2>/dev/null || true
 mkdir -p /run/sshd
