@@ -44,12 +44,44 @@ fi
 install -d -m 700 -o root -g root /root/.ssh 2>/dev/null \
     || { mkdir -p /root/.ssh 2>/dev/null; chmod 700 /root/.ssh 2>/dev/null; }
 
-if [ -f "$TEMPLATE" ]; then
-    install -m 600 -o root -g root "$TEMPLATE" "$TARGET" 2>/dev/null \
-        || { cp "$TEMPLATE" "$TARGET" 2>/dev/null && chmod 600 "$TARGET" 2>/dev/null; }
+if [ ! -f "$TEMPLATE" ]; then
+    echo "  ⚠ 没有模板 $TEMPLATE —— 只能用控制台进去了"
+    exit 1
+fi
+
+# ★★ 而【成功的信息必须是真的】—— 这一版第一稿在这里说了谎。
+#
+#   第一稿是这样写的：
+#
+#       install -m 600 … "$TEMPLATE" "$TARGET" 2>/dev/null \
+#           || { cp … && chmod …; }
+#       echo "  ✓ 已铺上默认公钥"                 ← ★ 这句不在任何 && 链里
+#
+#   于是 `install` 失败、fallback 也失败（实测：那个 root 里没有
+#   install/cp/chmod），而它照样报"✓ 已铺上"。**一个说谎的成功信息比没有
+#   信息更糟** —— 它会让人不再去看那件事。
+#
+#   所以现在每一句"成了"都挂在【真的成没成】上。
+ok=""
+if install -m 600 -o root -g root "$TEMPLATE" "$TARGET" 2>/dev/null; then
+    ok=1
+elif cp "$TEMPLATE" "$TARGET" 2>/dev/null; then
+    chmod 600 "$TARGET" 2>/dev/null || true
+    ok=1
+fi
+
+# ★ 属主单独再设一次 —— 上面那两条路都可能没设上：
+#     · install 的 -o/-g 在非 root 时是【静默忽略】的
+#     · cp 那条根本没有 chown
+#   而 sshd 的 StrictModes 查属主，查不到就拒绝 —— 实测撞过两次。
+chown root:root "$TARGET" 2>/dev/null || true
+chown root:root /root/.ssh 2>/dev/null || true
+
+if [ -n "$ok" ] && [ -s "$TARGET" ]; then
     echo "  ✓ 已铺上默认公钥（$TARGET 原来不在）"
 else
-    echo "  ⚠ 没有模板 $TEMPLATE —— 只能用控制台进去了"
+    echo "  ✗ 铺默认公钥【失败】—— $TARGET 还是不在，只能用控制台进去"
+    echo "      （模板在 ${TEMPLATE}。检查 install/cp/chmod 在不在，以及 /root 能不能写。）"
     exit 1
 fi
 
