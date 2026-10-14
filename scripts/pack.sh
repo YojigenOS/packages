@@ -321,6 +321,22 @@ lines = ["#!/bin/sh", "set -e",
 for k, v in fields:
     if v:
         lines.append(f"  --info {shlex.quote(f'{k}:{v}')} \\")
+# ── 安装脚本 ──────────────────────────────────────────────────────────
+#
+# 产物目录里的 scripts/<名字>，名字就是 mkpkg 的脚本类型（post-install、
+# post-upgrade…）。collect.py 把它们从配方的 scripts/ 收过来。
+#
+# ★ 路径写成 /in/scripts/<名字> —— /in 就是那个产物目录（上面 -v "$PWD/$d:/in:ro"）。
+#
+# 为什么需要这条通路：见 collect.py 里那段注释。一句话——openssh 的
+# /root/.ssh/authorized_keys 从"归包"改成"不归包"之后，升级路径上会被 apk
+# 删掉，需要 post-install 立刻补回来。
+sd = d / "scripts"
+if sd.is_dir():
+    for f in sorted(sd.iterdir()):
+        if f.is_file():
+            lines.append(f"  --script {shlex.quote(f.name + ':/in/scripts/' + f.name)} \\")
+
 lines.append(f"  --files /data --output {shlex.quote(out_dir + '/' + apk)}")
 out_script.write_text("\n".join(lines) + "\n")
 out_script.chmod(0o755)

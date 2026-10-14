@@ -48,6 +48,19 @@ package() {
     # 事：没有主机密钥就生成，然后起 sshd。
     install -Dm755 "$PKGDIR/files/20-sshd" "$PKGDEST/usr/lib/yojigen-os/boot.d/20-sshd"
 
+    # ── 3b. "保证 root 公钥在"那个小工具 ────────────────────────────────
+    #
+    # ★ 一件事三个触发点，而逻辑只写这一份：
+    #
+    #       post-install     装完之后          ← 配方目录的 scripts/
+    #       post-upgrade     升级之后          ← ★ 而它必需，见那个脚本
+    #       boot.d/20-sshd   开机时            ← 调它
+    #
+    #   三个入口都 exec 它。写三份就会"改一处忘一处"，而这一格出的问题
+    #   恰好全是那个形状。
+    install -Dm755 "$PKGDIR/files/ensure-authorized-keys" \
+        "$PKGDEST/usr/libexec/yojigen-os/ensure-authorized-keys"
+
     # ── 4. root 的默认公钥 ──────────────────────────────────────────────
     #
     # ★ 这是 0013「还没定 #1」的临时答案。DD 通道没有任何注入点（reinstall 不会

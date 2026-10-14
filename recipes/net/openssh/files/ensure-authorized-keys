@@ -1,0 +1,56 @@
+#!/bin/sh
+# 保证 /root/.ssh/authorized_keys 存在、且属主和权限是 sshd 要的那样。
+#
+# 【为什么需要一个小工具，而不是把这段写在三个地方】
+#
+# 同一件事有三个触发点，而它们都得做对：
+#
+#     post-install    装完之后
+#     post-upgrade    升级之后   ← ★ 而这一步是必需的，见下
+#     boot.d/20-sshd  开机时
+#
+# 写三份就会出现"改了一处忘了另一处"——而这正是这一格反复出问题的形状。
+# 所以逻辑只写这一份，三个入口都调它。
+#
+# 【而升级那一格为什么必需】
+#
+# `/root/.ssh/authorized_keys` 原来是【归包所有】的，而那样每次
+# `apk upgrade openssh` 都会用包里那份替换盘上那份 —— 用户往里加过的东西
+# 就没了。所以从 r6 起改成【不归包所有】。
+#
+# 而改完之后多了一个新问题：升级时 apk 会按规矩删掉"旧版本有、新版本没有"
+# 的文件 —— 也就是它。实测过：
+#
+#     装 r4        →  /root/.ssh/authorized_keys 在
+#     升级到 r6    →  /root 下【空了】
+#
+# 而那个文件不在 = 谁也进不去（要等下次开机才被钩子补回来）。
+# **post-upgrade 就是在"装完"和"下次开机"之间补上这一格的。**
+
+set -u
+
+TEMPLATE=/usr/share/yojigen-os/ssh/authorized_keys.default
+TARGET=/root/.ssh/authorized_keys
+
+# 已经有了就不动它 —— **盘上那份是这台机器的东西，不是包的**。
+# 用户往里加过钥匙，就不该被碰。
+if [ -s "$TARGET" ]; then
+    # 只管属主和权限（sshd 的 StrictModes 会一路查）。改属主是安全的。
+    chown root:root "$TARGET" 2>/dev/null || true
+    chmod 600 "$TARGET" 2>/dev/null || true
+    exit 0
+fi
+
+install -d -m 700 -o root -g root /root/.ssh 2>/dev/null \
+    || { mkdir -p /root/.ssh 2>/dev/null; chmod 700 /root/.ssh 2>/dev/null; }
+
+if [ -f "$TEMPLATE" ]; then
+    install -m 600 -o root -g root "$TEMPLATE" "$TARGET" 2>/dev/null \
+        || { cp "$TEMPLATE" "$TARGET" 2>/dev/null && chmod 600 "$TARGET" 2>/dev/null; }
+    echo "  ✓ 已铺上默认公钥（$TARGET 原来不在）"
+else
+    echo "  ⚠ 没有模板 $TEMPLATE —— 只能用控制台进去了"
+    exit 1
+fi
+
+exit 0

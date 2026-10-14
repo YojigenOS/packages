@@ -93,36 +93,24 @@ install -d -m 700 -o root -g root /root 2>/dev/null || chmod 0700 /root 2>/dev/n
 #   不然就只能进控制台手工 chown。
 install -d -m 700 -o root -g root /root/.ssh 2>/dev/null || true
 
-# ★★★ 而现在这个文件【不归任何包所有】—— 由这里负责第一次铺上去。
+# ★★ root 的公钥 —— 逻辑在 /usr/libexec/yojigen-os/ensure-authorized-keys。
 #
-#   为什么改成这样：它原来在 openssh 包里，于是每次 `apk upgrade openssh`
-#   都用包里那份替换盘上那份。而盘上那份是【这台机器的身份】：用户往里
-#   加了自己的钥匙，升级一次就没了。实测撞了两次，两次都把 SSH 弄断。
+#   原来这里是一段内联的"文件不在就铺模板"，而同一件事在 post-install 和
+#   post-upgrade 也要做（那两处是【升级路径】上的，比开机更早）。三处写三份
+#   就会"改一处忘一处"——而这一格出的问题恰好全是那个形状。所以改成调它。
 #
-#   现在的分工：
-#
-#       模板（包拥有，会被升级替换）  /usr/share/yojigen-os/ssh/authorized_keys.default
-#       实际文件（不归包，升级不碰）  /root/.ssh/authorized_keys
-#
-#   ★ 而"没有它就登不进去"这件事由这里兜住 —— 这个钩子在 sshd 起来
-#     【之前】跑，所以第一次启动就有钥匙可用。
-#
-#   ★ 而如果用户把它删了（想重新要一份默认的），重启一次就会回来。
-if [ ! -f /root/.ssh/authorized_keys ]; then
-    if [ -f /usr/share/yojigen-os/ssh/authorized_keys.default ]; then
-        install -m 600 -o root -g root \
-            /usr/share/yojigen-os/ssh/authorized_keys.default \
-            /root/.ssh/authorized_keys 2>/dev/null \
-            && echo "  已铺上默认公钥（/root/.ssh/authorized_keys 原来不在）" \
-            || echo "  ⚠ 铺默认公钥失败——检查 /usr/share/yojigen-os/ssh/"
-    else
-        echo "  ⚠ 没有模板，也没有 /root/.ssh/authorized_keys —— 只能用控制台进去"
-    fi
+#   ★ 而这个文件的归属也变了：它【不归任何包所有】。原来归 openssh，于是
+#     每次 `apk upgrade openssh` 都用包里那份替换盘上那份 —— 用户往里加过
+#     的钥匙就没了。实测撞了两次，两次都把 SSH 弄断。
+#     "配置文件归包、状态不归包" —— 这条线以前没划清楚。
+if [ -x /usr/libexec/yojigen-os/ensure-authorized-keys ]; then
+    /usr/libexec/yojigen-os/ensure-authorized-keys || true
+else
+    echo "  ⚠ 找不到 ensure-authorized-keys —— root 的公钥没人管了"
 fi
 
-# 而已经存在的，只管属主（它是盘上的东西，不是包的东西）。
-[ -f /root/.ssh/authorized_keys ] && chown root:root /root/.ssh/authorized_keys 2>/dev/null || true
-chmod 600 /root/.ssh/authorized_keys 2>/dev/null || true
+# ★ 上面那个工具已经把"存在就校属主、不在就铺模板"两件事都做了 ——
+#   这里原来还抄了一遍同样的两行，而那正是"改一处忘一处"的形状。删掉。
 mkdir -p /run/sshd
 
 # sshd 自己会 daemon 化并 fork，所以这里不加 &。

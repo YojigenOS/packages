@@ -19,6 +19,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from .common import BUILD_DIR, OUTPUT_DIR, die, rmtree_force, sha256_of
+from .spec import spec_path
 
 from .spec import deps_for, package_rel, subpackages
 
@@ -252,6 +253,34 @@ def collect(spec: dict, arch: str) -> list[tuple[Path, int]]:
             meta["provider_priority"] = priority
         (out / "meta.json").write_text(
             json.dumps(meta, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+        # ── 安装脚本（post-install / post-upgrade / …）──────────────────────
+        #
+        # ★ 为什么需要这条通路：apk 的包除了文件树，还能带几个"在装/卸的某个
+        #   时刻跑一下"的脚本，而 `apk mkpkg --script <类型>:<路径>` 就是喂它的
+        #   方式。
+        #
+        #   而为什么现在才加：openssh 那个 `/root/.ssh/authorized_keys` 从
+        #   "归包所有"改成"不归包所有"之后，**升级路径上它会被 apk 删掉**
+        #   （规矩是"旧版本有、新版本没有的文件删掉"）—— 实测过了：
+        #
+        #       装 r4       →  /root/.ssh/authorized_keys 在
+        #       升级到 r6   →  /root 下【空了】
+        #
+        #   而那个文件不在 = 谁也进不去（要等下次开机钩子补回来）。所以需要
+        #   一个"装完立刻补上"的钩子，也就是 post-install。
+        #
+        #   约定：配方目录下的 `scripts/` 里，**文件名就是 mkpkg 的脚本类型**
+        #   （post-install、post-upgrade、pre-install…）。这样不用再发明一层
+        #   配置——名字本身就是类型。
+        rdir = spec_path(pkg["name"])
+        if rdir:
+            sd = rdir.parent / "scripts"
+            if sd.is_dir():
+                (out / "scripts").mkdir(exist_ok=True)
+                for f in sorted(sd.iterdir()):
+                    if f.is_file():
+                        shutil.copy2(f, out / "scripts" / f.name)
         results.append((out, len(entries)))
 
     return results
