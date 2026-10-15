@@ -520,8 +520,6 @@ class Test拿真的_readelf_验手搓的_ELF(unittest.TestCase):
                              "两条路在【真的】动态库上结果不一致")
 
 
-if __name__ == "__main__":
-    unittest.main()
 
 
 class Test版本后缀对着_Alpine_的真产物(unittest.TestCase):
@@ -559,3 +557,7 @@ class Test版本后缀对着_Alpine_的真产物(unittest.TestCase):
 
     def test_名字里没有_so_也不给(self):
         self.assertEqual(elfdeps._version_after_so("libz.so", "libz.so"), "")
+
+
+if __name__ == "__main__":
+    unittest.main()
