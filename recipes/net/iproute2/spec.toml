@@ -14,7 +14,6 @@ version     = "7.2.0"
 release     = 2
 date        = 2026-10-13T12:45:00Z
 description = "网络配置与查看（ip · ss · tc）"
-section     = "net"
 url         = "https://wiki.linuxfoundation.org/networking/iproute2"
 license     = "GPL-2.0-or-later"
 

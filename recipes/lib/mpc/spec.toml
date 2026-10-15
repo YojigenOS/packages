@@ -9,7 +9,6 @@ version     = "1.4.1"
 release     = 1
 date        = 2026-10-10T04:36:35Z
 description = "复数目标准确舍入运算库"
-section     = "libs"
 url         = "https://www.multiprecision.org/mpc/"
 license     = "LGPL-3.0-or-later"
 

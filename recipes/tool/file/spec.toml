@@ -13,7 +13,6 @@ version     = "5.48"
 release     = 1
 date        = 2026-10-13T12:45:00Z
 description = "判断文件类型（按内容，不按后缀）"
-section     = "utils"
 url         = "https://www.darwinsys.com/file/"
 license     = "BSD-2-Clause"
 

@@ -43,7 +43,6 @@ version     = "2026.10.12"
 release     = 1
 date        = 2026-10-12T16:20:00Z
 description = "Mozilla 的根证书列表（HTTPS 信任链）"
-section     = "core"
 url         = "https://wiki.mozilla.org/CA"
 # ★ Mozilla 那份 certdata.txt 自己就是 MPL-2.0。我们生成的是它的衍生物。
 license     = "MPL-2.0"

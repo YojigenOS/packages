@@ -14,7 +14,6 @@ version     = "3.8.2"
 release     = 1
 date        = 2026-10-10T15:12:00Z
 description = "语法分析器生成器（GNU Bison）"
-section     = "devel"
 url         = "https://www.gnu.org/software/bison/"
 license     = "GPL-3.0-or-later"
 

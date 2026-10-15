@@ -31,7 +31,6 @@ version     = "9.12"
 release     = 3
 date        = 2026-10-12T21:30:00Z
 description = "核心文件与文本工具（ls、cp、cat、mkdir…）"
-section     = "base"
 url         = "https://www.gnu.org/software/coreutils/"
 license     = "GPL-3.0-or-later"
 

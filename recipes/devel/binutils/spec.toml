@@ -12,7 +12,6 @@ version     = "2.47"
 release     = 1
 date        = 2026-10-10T09:14:44Z
 description = "二进制工具集：汇编器、链接器、目标文件处理工具"
-section     = "core"
 url         = "https://www.gnu.org/software/binutils/"
 license     = "GPL-3.0-or-later"
 

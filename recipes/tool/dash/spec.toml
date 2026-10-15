@@ -34,7 +34,6 @@ version     = "0.5.13.5"
 release     = 1
 date        = 2026-10-12T13:20:00Z
 description = "POSIX shell（/bin/sh 指向它）"
-section     = "base"
 url         = "http://gondor.apana.org.au/~herbert/dash/"
 license     = "BSD-3-Clause AND GPL-2.0-or-later"
 
@@ -55,7 +54,6 @@ configure = ["--prefix=/usr", "--sysconfdir=/etc"]
 [[subpackage]]
 name        = "dash-binsh"
 description = "让 /bin/sh 指向 dash"
-section     = "base"
 files       = ["usr/bin/sh"]
 # ★ 这个子包【真的】需要主包——它内容是一个指向 dash 的符号链接。
 #   那是"子包依赖主包"成立的少数情况之一，所以要显式写。

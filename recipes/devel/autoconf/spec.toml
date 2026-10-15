@@ -14,7 +14,6 @@ version     = "2.73"
 release     = 1
 date        = 2026-10-10T16:12:00Z
 description = "从 configure.ac 生成可移植的 configure 脚本"
-section     = "devel"
 url         = "https://www.gnu.org/software/autoconf/"
 license     = "GPL-3.0-or-later"
 

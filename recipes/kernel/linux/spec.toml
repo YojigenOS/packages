@@ -26,7 +26,6 @@ version     = "7.2.9"
 release     = 3
 date        = 2026-10-11T13:00:00Z
 description = "Linux 内核（可启动镜像）"
-section     = "core"
 url         = "https://www.kernel.org/"
 license     = "GPL-2.0-only"
 

@@ -19,7 +19,6 @@ version     = "1.47.4"
 release     = 2
 date        = 2026-10-13T08:00:00Z
 description = "ext2/3/4 文件系统工具（mke2fs · e2fsck · resize2fs · tune2fs）"
-section     = "base"
 url         = "https://github.com/tytso/e2fsprogs"
 license     = "GPL-2.0-only AND LGPL-2.0-only AND BSD-3-Clause"
 

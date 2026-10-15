@@ -24,7 +24,6 @@ version     = "2.44"
 release     = 2
 date        = 2026-10-12T19:00:00Z
 description = "GNU C 库：动态链接器与标准 C 库"
-section     = "core"
 url         = "https://www.gnu.org/software/libc/"
 license     = "LGPL-2.1-or-later"
 
@@ -103,7 +102,6 @@ configure = [
 [[subpackage]]
 name        = "glibc-dev"
 description = "glibc 开发文件：头文件、静态库、链接脚本、locale 源数据"
-section     = "devel"
 files = [
   "usr/include/",
   "usr/lib/*.a",
@@ -118,5 +116,4 @@ files = [
 [[subpackage]]
 name        = "glibc-locales"
 description = "生成的 locale 数据：zh_CN / zh_TW / en_US"
-section     = "localization"
 files = ["usr/lib/locale/"]

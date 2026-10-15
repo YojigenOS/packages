@@ -203,13 +203,11 @@ def collect(spec: dict, arch: str,
         if sub is None:
             name, out_dir = pkg["name"], pkg
             desc = pkg.get("description", "")
-            section = pkg.get("section", "")
             lic, url = pkg.get("license", ""), pkg.get("url", "")
             sub_depends = runtime
         else:
             name = sub["name"]
             desc = sub.get("description", "")
-            section = sub.get("section", pkg.get("section", ""))
             lic, url = pkg.get("license", ""), pkg.get("url", "")
 
             # ── ★ 子包【不】依赖主包 ──────────────────────────────────────
@@ -271,7 +269,10 @@ def collect(spec: dict, arch: str,
             "release": pkg["release"],
             "arch": arch,
             "description": desc,
-            "section": section,
+            # ★ `section` 2026-10-15 删了（决策记录 0021）。
+            #   它混了两个轴，而两个轴都已经有别的出处：
+            #   「它是什么」= recipes/<类>/ 的目录名；
+            #   「它在哪个镜像里」= distro/variants/<风味>.toml。
             "license": lic,
             "url": url,
             "depends": sub_depends,

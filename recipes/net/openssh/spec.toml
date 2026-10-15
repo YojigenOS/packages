@@ -47,7 +47,6 @@ version     = "10.5_p1"
 release     = 8
 date        = 2026-10-12T10:15:00Z
 description = "SSH 客户端与服务端"
-section     = "net"
 url         = "https://www.openssh.com/"
 license     = "SSH-OpenSSH"
 

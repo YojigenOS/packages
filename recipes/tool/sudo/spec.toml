@@ -14,7 +14,6 @@ version     = "1.9.17_p2"
 release     = 1
 date        = 2026-10-13T16:00:00Z
 description = "以其他用户身份执行命令"
-section     = "system"
 url         = "https://www.sudo.ws/"
 license     = "ISC"
 

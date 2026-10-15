@@ -16,7 +16,6 @@ version     = "1.16.2"
 release     = 1
 date        = 2026-10-13T18:00:00Z
 description = "进程间通信总线（systemd 前置之一）"
-section     = "system"
 url         = "https://www.freedesktop.org/wiki/Software/dbus/"
 license     = "AFL-2.1 OR GPL-2.0-or-later"
 

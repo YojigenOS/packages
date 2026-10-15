@@ -13,7 +13,6 @@ version     = "1.4.21"
 release     = 1
 date        = 2026-10-10T15:10:00Z
 description = "宏处理器：GNU m4"
-section     = "devel"
 url         = "https://www.gnu.org/software/m4/"
 license     = "GPL-3.0-or-later"
 

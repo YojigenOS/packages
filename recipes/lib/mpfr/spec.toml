@@ -9,7 +9,6 @@ version     = "4.2.2"
 release     = 1
 date        = 2026-10-10T04:36:35Z
 description = "多精度浮点运算库"
-section     = "libs"
 url         = "https://www.mpfr.org/"
 license     = "LGPL-3.0-or-later"
 

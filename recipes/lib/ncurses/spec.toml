@@ -24,7 +24,6 @@ version     = "6.4"
 release     = 1
 date        = 2026-10-13T12:00:00Z
 description = "终端界面库与 terminfo 数据库"
-section     = "libs"
 url         = "https://invisible-island.net/ncurses/"
 license     = "MIT"
 

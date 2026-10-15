@@ -9,7 +9,6 @@ version     = "1.19"
 release     = 1
 date        = 2026-10-10T16:14:00Z
 description = "从 Makefile.am 生成符合 GNU 规范的 Makefile.in"
-section     = "devel"
 url         = "https://www.gnu.org/software/automake/"
 license     = "GPL-3.0-or-later"
 

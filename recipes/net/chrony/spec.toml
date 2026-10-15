@@ -15,7 +15,6 @@ version     = "4.9"
 release     = 3
 date        = 2026-10-13T17:00:00Z
 description = "NTP 时间同步（客户端与服务端）"
-section     = "net"
 url         = "https://chrony-project.org/"
 license     = "GPL-2.0-only"
 

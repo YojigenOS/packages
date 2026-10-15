@@ -54,7 +54,6 @@ version     = "2.14"
 release     = 2
 date        = 2026-10-12T13:00:00Z
 description = "GRUB 引导器（BIOS 与 UEFI）"
-section     = "system"
 url         = "https://www.gnu.org/software/grub/"
 license     = "GPL-3.0-or-later"
 

@@ -15,7 +15,6 @@ version     = "16.2.0"
 release     = 2
 date        = 2026-10-10T05:13:26Z
 description = "GNU 编译器集合（C / C++）"
-section     = "core"
 url         = "https://gcc.gnu.org/"
 license     = "GPL-3.0-or-later WITH GCC-exception-3.1"
 
@@ -119,7 +118,6 @@ type = "custom"
 [[subpackage]]
 name        = "libgcc"
 description = "GCC 的运行时库（libgcc_s.so.1）"
-section     = "libs"
 # ★ 不继承主包的 runtime——那里面有 gmp/mpfr/mpc，而这两个文件一个都不需要。
 #   实际依赖由 ELF 扫描补齐（libc.so.6 和 ld-linux）。
 # ★ provider-priority = 100 —— 让 apk 【自动选中】这个提供者。
@@ -154,7 +152,6 @@ files       = ["usr/lib/libgcc_s.so.1", "usr/lib/libgcc_s.so"]
 [[subpackage]]
 name        = "libstdc++"
 description = "GCC 的 C++ 标准库（libstdc++.so.6）"
-section     = "libs"
 provider-priority = 100
 depends     = ["glibc", "libgcc"]
 files       = ["usr/lib/libstdc++.so.6*"]

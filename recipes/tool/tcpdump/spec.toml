@@ -8,7 +8,6 @@ version     = "4.99.7"
 release     = 1
 date        = 2026-10-13T12:45:00Z
 description = "命令行抓包工具"
-section     = "net"
 url         = "https://www.tcpdump.org/"
 license     = "BSD-3-Clause"
 

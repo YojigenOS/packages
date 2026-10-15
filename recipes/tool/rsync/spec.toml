@@ -16,7 +16,6 @@ version     = "3.5.1"
 release     = 1
 date        = 2026-10-10T16:45:00Z
 description = "增量文件传输与同步工具"
-section     = "devel"
 url         = "https://rsync.samba.org/"
 license     = "GPL-3.0-or-later"
 

@@ -31,7 +31,6 @@ version     = "3.0.8"
 release     = 1
 date        = 2026-10-12T10:50:00Z
 description = "pkg-config 的现代实现"
-section     = "devel"
 url         = "https://github.com/pkgconf/pkgconf"
 license     = "ISC"
 

@@ -8,7 +8,6 @@ version     = "3.8.0"
 release     = 1
 date        = 2026-10-10T23:10:00Z
 description = "可移植的外部函数接口库"
-section     = "libs"
 url         = "https://sourceware.org/libffi/"
 license     = "MIT"
 

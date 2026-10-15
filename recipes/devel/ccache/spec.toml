@@ -22,7 +22,6 @@ version     = "4.14.1"
 release     = 1
 date        = 2026-10-10T16:42:00Z
 description = "编译器缓存：把重复编译的结果存下来复用"
-section     = "devel"
 url         = "https://ccache.dev/"
 license     = "GPL-3.0-or-later"
 

@@ -30,7 +30,6 @@ version     = "1.13.1"
 release     = 1
 date        = 2026-10-12T15:40:00Z
 description = "小巧的构建系统（meson 的后端）"
-section     = "devel"
 url         = "https://ninja-build.org/"
 license     = "Apache-2.0"
 

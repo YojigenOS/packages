@@ -13,7 +13,6 @@ version     = "711"
 release     = 3
 date        = 2026-10-13T12:05:00Z
 description = "分页查看文件（比 more 能往回翻、能搜）"
-section     = "utils"
 url         = "https://www.greenwoodsoftware.com/less/"
 license     = "BSD-3-Clause OR GPL-3.0-or-later"
 

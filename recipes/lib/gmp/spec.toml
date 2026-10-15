@@ -10,7 +10,6 @@ version     = "6.3.0"
 release     = 1
 date        = 2026-10-10T04:36:35Z
 description = "任意精度算术库"
-section     = "libs"
 url         = "https://gmplib.org/"
 license     = "LGPL-3.0-or-later OR GPL-2.0-or-later"
 

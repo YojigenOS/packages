@@ -23,7 +23,6 @@ version     = "2.15"
 release     = 1
 date        = 2026-10-11T14:30:00Z
 description = "归档工具（cpio 格式，做 initramfs 必需）"
-section     = "utils"
 url         = "https://www.gnu.org/software/cpio/"
 license     = "GPL-3.0-or-later"
 

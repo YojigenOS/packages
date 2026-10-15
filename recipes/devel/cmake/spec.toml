@@ -15,7 +15,6 @@ version     = "4.4.4"
 release     = 1
 date        = 2026-10-10T14:35:00Z
 description = "跨平台的构建系统生成器"
-section     = "devel"
 url         = "https://cmake.org/"
 license     = "BSD-3-Clause"
 

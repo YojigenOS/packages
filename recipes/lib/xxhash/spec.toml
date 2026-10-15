@@ -23,7 +23,6 @@ version     = "0.8.4"
 release     = 1
 date        = 2026-10-10T14:50:00Z
 description = "极快的非加密哈希算法（xxHash）"
-section     = "libs"
 url         = "https://github.com/Cyan4973/xxhash"
 license     = "BSD-2-Clause"
 

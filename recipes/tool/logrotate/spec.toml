@@ -13,7 +13,6 @@ version     = "3.22.0"
 release     = 1
 date        = 2026-10-13T16:00:00Z
 description = "日志轮转、压缩、清理"
-section     = "utils"
 url         = "https://github.com/logrotate/logrotate"
 license     = "GPL-2.0-or-later"
 

@@ -16,7 +16,6 @@ version     = "4.5.2"
 release     = 1
 date        = 2026-10-10T16:47:00Z
 description = "密码哈希库（crypt(3) 的现代实现）"
-section     = "libs"
 url         = "https://github.com/besser82/libxcrypt"
 license     = "LGPL-2.1-or-later"
 

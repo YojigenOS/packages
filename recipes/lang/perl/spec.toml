@@ -12,7 +12,6 @@ version     = "5.44.0"
 release     = 1
 date        = 2026-10-10T16:46:00Z
 description = "Perl 解释器"
-section     = "devel"
 url         = "https://www.perl.org/"
 license     = "Artistic-1.0-Perl OR GPL-1.0-or-later"
 

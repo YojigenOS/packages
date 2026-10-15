@@ -9,7 +9,6 @@ version     = "2.6.2"
 release     = 1
 date        = 2026-10-10T16:16:00Z
 description = "通用共享库构建工具"
-section     = "devel"
 url         = "https://www.gnu.org/software/libtool/"
 license     = "GPL-2.0-or-later"
 

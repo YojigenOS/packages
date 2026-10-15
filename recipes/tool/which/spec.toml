@@ -19,7 +19,6 @@ version     = "2.21"
 release     = 2
 date        = 2026-10-13T19:00:00Z
 description = "在 PATH 里查找命令（POSIX 时代的老工具，command -v 可替代）"
-section     = "util"
 url         = "https://www.gnu.org/software/which/"
 license     = "GPL-3.0-or-later"
 

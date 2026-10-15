@@ -14,7 +14,6 @@ version     = "1.0"
 release     = 1
 date        = 2026-10-10T09:45:42Z
 description = "国际化与本地化工具集：msgfmt、xgettext、msgmerge 等"
-section     = "devel"
 url         = "https://www.gnu.org/software/gettext/"
 license     = "GPL-3.0-or-later"
 

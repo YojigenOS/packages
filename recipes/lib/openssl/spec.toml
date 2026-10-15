@@ -35,7 +35,6 @@ version     = "3.5.9"
 release     = 2
 date        = 2026-10-11T13:30:00Z
 description = "密码学库与工具（libcrypto / libssl / openssl 命令）"
-section     = "libs"
 url         = "https://openssl-library.org/"
 license     = "Apache-2.0"
 
@@ -97,7 +96,6 @@ type = "custom"
 [[subpackage]]
 name        = "libcrypto"
 description = "OpenSSL 的加密库（libcrypto.so.3）"
-section     = "libs"
 # ★ 显式声明，不用默认的"继承主包 runtime"——那个默认是保守的过度声明，
 #   会把主包的依赖（这里是 glibc）都带上。这两个库实际只需要 glibc 和 zlib，
 #   而它们的 so: 依赖会被 ELF 扫描自动补齐。
@@ -133,7 +131,6 @@ files       = ["usr/lib/libcrypto.so.3*"]
 [[subpackage]]
 name        = "libssl"
 description = "OpenSSL 的 TLS 库（libssl.so.3）"
-section     = "libs"
 # ★ provider-priority = 100 —— 让 apk 【自动选中】这个提供者。
 #
 #   没有它，apk 拒绝自动解析 so: 依赖：

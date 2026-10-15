@@ -6,7 +6,6 @@ version     = "4.11.0"
 release     = 1
 date        = 2026-10-10T06:39:13Z
 description = "文件查找工具（find、xargs、locate）"
-section     = "base"
 url         = "https://www.gnu.org/software/findutils/"
 license     = "GPL-3.0-or-later"
 

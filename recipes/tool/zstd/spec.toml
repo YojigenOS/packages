@@ -9,7 +9,6 @@ version     = "1.5.7"
 release     = 1
 date        = 2026-10-10T16:43:00Z
 description = "Zstandard 压缩算法与命令行工具"
-section     = "base"
 url         = "https://github.com/facebook/zstd"
 license     = "BSD-3-Clause OR GPL-2.0-only"
 

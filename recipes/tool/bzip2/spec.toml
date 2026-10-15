@@ -32,7 +32,6 @@ version     = "1.0.8"
 release     = 1
 date        = 2026-10-12T10:40:00Z
 description = ".bz2 压缩工具与 libbz2"
-section     = "utils"
 url         = "https://sourceware.org/bzip2/"
 license     = "bzip2-1.0.6"
 

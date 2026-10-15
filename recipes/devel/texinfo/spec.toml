@@ -4,7 +4,6 @@ version     = "7.3"
 release     = 1
 date        = 2026-10-10T22:20:00Z
 description = "GNU 文档系统：makeinfo / texi2any / info"
-section     = "devel"
 url         = "https://www.gnu.org/software/texinfo/"
 license     = "GPL-3.0-or-later"
 

@@ -13,7 +13,6 @@ version     = "1.7.2"
 release     = 1
 date        = 2026-10-13T17:00:00Z
 description = "定时任务（cron 守护进程 + crontab）"
-section     = "system"
 url         = "https://github.com/cronie-crond/cronie"
 license     = "ISC AND BSD-2-Clause AND BSD-3-Clause AND MIT"
 

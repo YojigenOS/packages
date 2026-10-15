@@ -6,7 +6,6 @@ version     = "1.15"
 release     = 1
 date        = 2026-10-10T07:10:43Z
 description = "GNU zip 压缩工具"
-section     = "base"
 url    = "https://ftp.gnu.org/gnu/gzip/gzip-$VERSION.tar.xz"
 # 备用源：同一份字节的镜像（sha256 会校验，所以换源不降低信任）。
 # 顺序按实测速度。选源标准和完整说明见 docs/约定/配方约定.md「备用源」一节。

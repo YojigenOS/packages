@@ -9,7 +9,6 @@ version     = "2.9.0"
 release     = 1
 date        = 2026-10-10T16:44:00Z
 description = "流式 XML 解析库（C 语言）"
-section     = "libs"
 url         = "https://libexpat.github.io/"
 license     = "MIT"
 

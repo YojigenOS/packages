@@ -6,7 +6,6 @@ version     = "5.8.4"
 release     = 1
 date        = 2026-10-10T16:40:00Z
 description = "XZ Utils：xz 压缩工具与 liblzma"
-section     = "base"
 url         = "https://github.com/tukaani-project/xz/releases/download/v$VERSION/xz-$VERSION.tar.xz"
 license     = "GPL-3.0-or-later"
 

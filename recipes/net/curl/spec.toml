@@ -23,7 +23,6 @@ version     = "8.22.0"
 release     = 1
 date        = 2026-10-13T11:00:00Z
 description = "命令行 HTTP 客户端与 libcurl"
-section     = "net"
 url         = "https://github.com/curl/curl"
 license     = "curl"
 

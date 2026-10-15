@@ -9,7 +9,6 @@ version     = "1.11.0"
 release     = 1
 date        = 2026-10-13T12:45:00Z
 description = "网络抓包库（tcpdump 的底层）"
-section     = "libs"
 url         = "https://www.tcpdump.org/"
 license     = "BSD-3-Clause"
 

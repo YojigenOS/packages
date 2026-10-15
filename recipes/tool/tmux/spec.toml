@@ -13,7 +13,6 @@ version     = "3.8"
 release     = 1
 date        = 2026-10-13T12:40:00Z
 description = "终端复用器（断线不掉会话）"
-section     = "utils"
 url         = "https://github.com/tmux/tmux"
 license     = "ISC"
 

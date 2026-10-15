@@ -26,7 +26,6 @@ version     = "2.69.0"
 release     = 2
 date        = 2026-10-13T12:20:00Z
 description = "系统信息展示（发行版 · 内核 · 内存 · CPU · 包数…）"
-section     = "utils"
 url         = "https://github.com/fastfetch-cli/fastfetch"
 license     = "MIT"
 

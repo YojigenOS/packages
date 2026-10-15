@@ -42,7 +42,6 @@ version     = "3.14.8"
 release     = 1
 date        = 2026-10-10T15:32:00Z
 description = "Python 解释器"
-section     = "devel"
 url         = "https://www.python.org/"
 license     = "PSF-2.0"
 

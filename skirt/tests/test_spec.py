@@ -276,3 +276,40 @@ class Test每个配方的字段都合法(unittest.TestCase):
                 if not (tomllib.loads(sp.read_text()).get("source") or [])}
         self.assertEqual(无源, {"filesystem", "yojigen-os-init", "pip"},
                          "没源码的包变了 —— 是新增了一个，还是某个配方的 source 掉了？")
+
+
+class Test删掉的东西不许长回来(unittest.TestCase):
+    """★ `section` 删掉了（决策记录 0021），而这一条守着它别回来。
+
+    它混了两个轴，而两个轴都有别的出处：
+
+        「它是什么」    →  recipes/<类>/ 的目录名（kind_of() 直接读它）
+        「它在哪个镜像里」→  distro/variants/<风味>.toml
+
+    而它已经漂过一次：`libs` 17 个里夹着一个 `lib`、`utils` 13 个里夹着一个
+    `util`、87 个配方里有两个没有它、而 `section = "base"` 有 14 个配方
+    却在 `variants/base.toml` 里是 15 个包 —— **看起来像同一个东西的两个数字**。
+
+    ★ 为什么值得一条测试：`配方约定.md` 里【早就】写过它该删，而 87 个配方
+      一个都没改。**一个写在约定里、而没人执行的规矩，会让人以为约定不是真的。**
+      所以凡是能写成检查的约定，都配一条会红的。
+    """
+
+    def test_没有配方再有_section(self):
+        import pathlib as _p
+        import tomllib
+        from skirtlib.common import RECIPES_DIR
+        坏 = []
+        for spec in sorted(_p.Path(RECIPES_DIR).rglob("spec.toml")):
+            d = tomllib.loads(spec.read_text())
+            if "section" in (d.get("package") or {}):
+                坏.append(f"{spec.parent.name}（主包）")
+            # ★ 子包段是【列表】（`[[subpackage]]`），不是字典 —— 我第一版
+            #   按字典写，于是这条测试自己 AttributeError 了。而它之所以能
+            #   立刻现形，是因为我跑了一遍。
+            for sub in (d.get("subpackage") or []):
+                if "section" in sub:
+                    坏.append(f"{spec.parent.name}（子包 {sub.get('name', '?')}）")
+        self.assertFalse(坏, "这些地方又有 section 了 —— 见决策记录 0021：「一处信息"
+                             "只该有一处」，而它那两个轴都已经有出处了：\n  "
+                             + "\n  ".join(坏))

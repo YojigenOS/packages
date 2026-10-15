@@ -34,7 +34,6 @@ version     = "0.196"
 release     = 1
 date        = 2026-10-12T10:35:00Z
 description = "ELF 与 DWARF 处理库（libelf / libdw）及 eu-* 工具"
-section     = "lib"
 url         = "https://sourceware.org/elfutils/"
 license     = "GPL-3.0-or-later AND LGPL-3.0-or-later"
 

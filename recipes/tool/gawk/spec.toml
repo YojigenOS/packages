@@ -15,7 +15,6 @@ version     = "5.4.0"
 release     = 2
 date        = 2026-10-12T20:30:00Z
 description = "GNU awk，文本处理语言"
-section     = "base"
 url         = "https://www.gnu.org/software/gawk/"
 license     = "GPL-3.0-or-later"
 

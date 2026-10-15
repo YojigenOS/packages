@@ -23,7 +23,6 @@ version     = "10.5.2"
 release     = 2
 date        = 2026-10-13T09:00:00Z
 description = "DHCP 客户端（给镜像拿 IP）"
-section     = "net"
 url         = "https://github.com/NetworkConfiguration/dhcpcd"
 license     = "BSD-2-Clause"
 

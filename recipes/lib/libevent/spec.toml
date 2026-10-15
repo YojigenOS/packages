@@ -15,7 +15,6 @@ version     = "2.1.13"
 release     = 2
 date        = 2026-10-13T12:30:00Z
 description = "异步事件通知库（tmux 等要用）"
-section     = "libs"
 url         = "https://libevent.org/"
 license     = "BSD-3-Clause"
 

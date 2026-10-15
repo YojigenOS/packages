@@ -9,7 +9,6 @@ version     = "2.12.0"
 release     = 1
 date        = 2026-10-13T12:30:00Z
 description = "UTF-8 处理库（字符宽度、规范化、大小写）"
-section     = "libs"
 url         = "https://juliastrings.github.io/utf8proc/"
 license     = "MIT"
 

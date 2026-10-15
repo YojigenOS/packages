@@ -16,7 +16,6 @@ version     = "4.0.7"
 release     = 1
 date        = 2026-10-13T12:40:00Z
 description = "进程与系统状态工具（ps · top · free · kill · pgrep）"
-section     = "utils"
 url         = "https://gitlab.com/procps-ng/procps"
 license     = "GPL-2.0-or-later AND LGPL-2.1-or-later"
 

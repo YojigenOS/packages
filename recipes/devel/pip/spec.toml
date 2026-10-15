@@ -32,7 +32,6 @@ version     = "26.2.1"
 release     = 1
 date        = 2026-10-12T15:30:00Z
 description = "Python 包安装器（来自 python3 自带的 ensurepip）"
-section     = "devel"
 url         = "https://pip.pypa.io/"
 license     = "MIT"
 
