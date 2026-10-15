@@ -1,0 +1,37 @@
+# 跑测试。push 和 PR 都跑。
+#
+# ── 为什么加它（2026-10-15）─────────────────────────────────────────────
+#
+# 这个仓库原来有 136 条测试，而**没有任何 workflow 跑它们** —— 四个 workflow
+# 全是 `workflow_dispatch`，也就是说 push 之后什么都不跑。
+#
+# 那意味着一个坏提交推上去是【没人拦】的。而那和这个项目最上面那条规矩正好
+# 对着干：**能算出来的，不要靠人记得**。在这里，它就是"别靠人记得跑测试"。
+#
+# 便宜：本地跑一遍是十几秒（要 docker，runner 上有）。而它拦住的是一整类
+# 「改过了 ≠ 改动生效了」—— 这一类这一趟已经出现过很多次。
+#
+# ★ 而它是 `push` 触发的，不像那几个 `workflow_dispatch` 要人记得去点。
+#   那几个是【动作】（建包、发版），这个是【检查】—— 检查不该要人记得。
+name: test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 跑 skirt 的测试
+        run: python3 -m unittest discover -s skirt/tests -v 2>&1 | tail -40
+
+      # ★ 上面那个 `tail` 会把 unittest 的退出码吃掉 —— 和 repo.sh 里记着的
+      #   「管道把 mkndx 的退出码吃掉」是同一个坑。所以这里【再判一次产物形态】：
+      #   重跑一遍、不要管道，让退出码自己说话。
+      #
+      #   （一次 9 秒，跑两遍不心疼；而"失败被管道吞掉"这件事很难再发现第二次。）
+      - name: 再跑一遍，这次要退出码
+        run: python3 -m unittest discover -s skirt/tests
