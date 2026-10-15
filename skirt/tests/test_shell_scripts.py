@@ -14,7 +14,9 @@
 那一行在 `exec qemu` 的正前方，于是脚本一直在那里静默退出——QEMU 从来没被
 它启动过。而输出的最后一行是正常的「内核: …」，看起来像是跑完了。
 
-同一类还有 5 处（scripts/smoke.sh 里 3 处、kernel/linux/steps.sh 注释里 1 处）。
+同一类还有 5 处（scripts/smoke.sh 里 3 处 —— 那个脚本 2026-10-15 搬进了
+`skirt smoke`，而 `skirt/tests/test_smoke.py` 里的夹具现在也归这条规矩管；
+kernel/linux/steps.sh 注释里 1 处）。
 
 **这不是「写得不好看」，是会真的炸。** 而它炸得很安静：脚本在最后一行之前
 都是对的，退出码是 1 但没人看。

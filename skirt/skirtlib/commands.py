@@ -71,23 +71,27 @@ def _shown(path: Path) -> Path:
 def cmd_paths(_args) -> None:
     """打印各个工作目录，给 shell 脚本用。
 
-    【为什么需要它】scripts/smoke.sh 要找到产物、源码缓存这些东西。原来它
+    【为什么需要它】`scripts/` 里的脚本要找到产物、源码缓存这些东西。原来它
     自己写死了 `output/$ARCH/`、`cache/`——于是这些路径就有了【两份真相】：
     驱动里一份（common.py 的常量），脚本里一份。
 
     2026-10-11 把产物集中到 var/ 下时，这个毛病当场发作了：驱动改了，脚本
     没改，冒烟测试报"缺产物"。
 
-    ★ 这里原来写的是「scripts/run-vm.sh 和 scripts/smoke.sh」。run-vm.sh
-      已经不在这个仓库里了——它搬去 distro 之后又被删掉（它第一段注释就写着
-      "只是 `pantsu vm` 的一个壳"，2026-10-15 删的就是那个壳）。smoke.sh 还在，
-      所以上面那条理由仍然成立，只是只剩它一个调用方。
+    ★ 那条路的历史：这里原来写的是「scripts/run-vm.sh 和 scripts/smoke.sh」。
+      run-vm.sh 先搬去 distro、后又被删掉；smoke.sh 在 2026-10-15 也搬进了
+      skirt（`skirt smoke`，它现在直接 import common，不需要问路径了）。
 
-    所以路径只该有一处。脚本这样拿：
+    ★ 所以**现在没有调用方了** —— 而它留着：`scripts/` 下还有 keys.sh 这类
+      东西，而"shell 脚本不许自己拼 var/ 下的路径"这条规矩没变（见
+      docs/约定/仓库结构.md「路径只该有一处」）。哪天有脚本要这些路径，
+      出口在这儿，不用再造一个。
+
+    用法：
 
         eval "$(./skirt/skirt paths --shell)"
 
-    然后就能用 $OUTPUT_DIR / $BUILD_DIR / $LOG_DIR。
+    然后就能用 $VAR_DIR / $OUTPUT_DIR / $BUILD_DIR / $LOG_DIR。
     """
     if getattr(_args, "shell", False):
         for name, path in (
@@ -391,6 +395,27 @@ def cmd_deploy(args) -> None:
 
     arch = resolve_arch(args.arch)
     sys.exit(deploy(arch=arch, remote=args.remote, go=args.go))
+
+
+def cmd_smoke(args) -> None:
+    """跑一次真的构建，验证整条链是通的（端到端，几分钟，要 docker）。
+
+    ★ 原来是 scripts/smoke.sh。它【不进】 skirt/tests/ —— 那些是 <1 秒的单元
+      测试，而这一条要真的下载、解压、编译、运行。两条路要分得清：
+
+          python3 -m unittest discover -s skirt/tests   # 单元测试
+          ./skirt/skirt smoke                           # 端到端（几分钟）
+
+      而它的判定部分（尤其第⑥项那条判据）在 skirtlib/smoke.py 里，由
+      test_smoke.py 守着 —— 那是能测的那一半。
+    """
+    import os
+    from .smoke import smoke
+
+    arch = resolve_arch(args.arch or os.environ.get("ARCH"))
+    sys.exit(smoke(arch=arch, probe=args.probe,
+                   buildenv=args.buildenv or os.environ.get("SKIRT_BUILDENV"),
+                   kernel_tar=Path(args.kernel_tar) if args.kernel_tar else None))
 
 
 def cmd_repo(args) -> None:
@@ -700,6 +725,17 @@ def main() -> None:
     p.add_argument("--go", action="store_true",
                    help="真的传（默认只打印会传什么）")
     p.set_defaults(func=cmd_deploy)
+
+    p = sub.add_parser("smoke",
+                       help="跑一次真的构建，验证整条链是通的（端到端，几分钟）")
+    p.add_argument("--arch", default=None,
+                   help="默认是宿主架构（也可以用 ARCH 环境变量）")
+    p.add_argument("--probe", default="hello", help="用哪个包当探针（默认 hello）")
+    p.add_argument("--buildenv", default=None,
+                   help="用哪个构建环境镜像（默认 SKIRT_BUILDENV 或 yojigenos/devel）")
+    p.add_argument("--kernel-tar", default=None,
+                   help="内核 tarball 的路径（第①项要用；没有就跳过那一项）")
+    p.set_defaults(func=cmd_smoke)
 
     p = sub.add_parser("repo",
                        help="把 var/pkgs/<架构>/*.apk 收成 apk 软件仓库（索引 + 包）")
