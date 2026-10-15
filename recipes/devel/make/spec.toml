@@ -5,7 +5,9 @@
 # 它一旦自建成功，「用 Yojigen OS 构建 Yojigen OS」在工具层面就成立了：
 # 从此构建任何包所用的 make，都是我们自己构建出来的那一个。
 #
-# 注意 [dependencies] 里的 build = ["make"]：构建 make 需要 make。
+# 注意 [dependencies.aarch64] 里的 build = ["make"]：构建 make 需要 make。
+# （★ 这句注释在 2026-10-15 之前是【错的】—— 那时候这一段叫 `[dependencies]`。
+#   那天两个架构各拆成显式一份，它才变对。）
 # 第一次构建时 make 还在 host/provides.txt 里，会被跳过；一旦把它从
 # 那份列表里删掉，之后重建 make 用的就是 output/ 里已有的自建 make。
 # 这正是自举该有的样子。
@@ -32,7 +34,7 @@ urls = [
 ]
 sha256 = "dd16fb1d67bfab79a72f5e8390735c49e3e8e70b4945a15ab1f81ddb78658fb3"
 
-[dependencies]
+[dependencies.aarch64]
 runtime = ["glibc"]
 build   = ["make"]
 

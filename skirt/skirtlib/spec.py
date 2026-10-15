@@ -103,13 +103,53 @@ def expand(spec: dict, value, arch: str | None = None):
     return value
 
 
+#: 依赖段里【只该有】这两个键 —— 架构名。别的一律是错的。
+ARCH_KEYS = ("aarch64", "x86_64")
+
+
 def deps_for(spec: dict, arch: str) -> dict:
-    """合并通用依赖与架构特定依赖（架构特定值整体覆盖同名键）。"""
-    deps = dict(spec.get("dependencies", {}))
-    per_arch = deps.pop(arch, None)
-    if isinstance(per_arch, dict):
-        deps.update(per_arch)
-    return deps
+    """这个配方在【这个架构】上的依赖。**必须显式写出该架构那一份。**
+
+    ★ 2026-10-15 改过一次，而改的是语义 —— 原来的写法是「通用 + 架构覆盖」：
+
+        deps = dict(spec["dependencies"])
+        per_arch = deps.pop(arch, None)
+        if isinstance(per_arch, dict):
+            deps.update(per_arch)          ← 键级覆盖
+
+    那个写法有两个洞，而两个都在真实数据里发作了：
+
+    **① 覆盖是【整键】的，所以"少写一个键"等于"那个键是空的"。**
+        `zlib` 和 `hello` 的 `x86_64` 段只写了 `runtime`，于是它们的 `build`
+        被盖成空 —— x86_64 上**没有** build 依赖。而包照样建得出来（构建环境里
+        本来就有那些），所以一直没人看见。后果在 `build_key` 上：x86_64 的 key
+        里不含那些，它们变了不会触发重建。
+
+    **② 另一个架构的那份会【漏进结果】。**
+        `deps_for(spec, "aarch64")` 返回的字典里带着一个 `x86_64` 键 ——
+        因为 `pop(arch)` 只摘掉自己那一份，别人的留着。
+
+    **所以现在改成：两个架构各写一份，没有"通用"。**
+    于是"改了通用那行而只对一个架构生效"这件事在结构上不可能发生
+    —— 因为它没有"通用"可以改。
+
+    ★ 而通用段现在会被【明确拒绝】，不是被忽略：留着一段没人读的依赖，
+      正是"改了不生效"最容易生根的地方。
+    """
+    所有 = spec.get("dependencies") or {}
+    通用 = [k for k in 所有 if k not in ARCH_KEYS]
+    if 通用:
+        raise ValueError(
+            f"依赖段里有非架构键：{通用} —— "
+            f"按约定，两个架构各写一份（{[f'[dependencies.{a}]' for a in ARCH_KEYS]}），"
+            f"没有「通用」那一段"
+        )
+    这份 = 所有.get(arch)
+    if not isinstance(这份, dict):
+        raise ValueError(f"[dependencies.{arch}] 不在（两个架构都要显式写）")
+    # ★ 连里面的列表也拷一层。浅拷贝看着够用，而调用方 `append` 一下就
+    #   会把 spec 里那份改掉 —— 而 spec 是缓存着的。
+    return {k: list(v) if isinstance(v, list) else v for k, v in 这份.items()}
 
 
 def direct_deps(spec: dict, arch: str,

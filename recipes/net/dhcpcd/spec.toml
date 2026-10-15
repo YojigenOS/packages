@@ -31,7 +31,7 @@ license     = "BSD-2-Clause"
 git     = "https://github.com/NetworkConfiguration/dhcpcd"
 commit  = "7c50b51a142ca5e8cbbf8f65cd8111d6f200608a"
 
-[dependencies]
+[dependencies.aarch64]
 runtime = ["glibc"]
 build   = ["make", "gcc", "gawk"]
 

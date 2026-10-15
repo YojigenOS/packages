@@ -26,7 +26,7 @@ license     = "BSD-3-Clause OR GPL-2.0-only"
 git    = "https://git.kernel.org/pub/scm/libs/libcap/libcap.git"
 commit = "7a89aa42efc57e18f8c42de700f6367bd7531a1a"
 
-[dependencies]
+[dependencies.aarch64]
 runtime = ["glibc"]
 build   = ["make", "gcc", "perl"]
 

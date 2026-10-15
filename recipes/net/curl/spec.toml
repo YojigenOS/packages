@@ -32,7 +32,7 @@ git     = "https://github.com/curl/curl"
 commit  = "01346829096c61b372692f6dc43ffa778c6caccd"
 mirrors = ["https://gitlab.com/curl/curl"]
 
-[dependencies]
+[dependencies.aarch64]
 runtime = ["glibc", "openssl", "zlib", "ca-certificates"]
 build   = ["make", "gcc", "perl", "autoconf", "automake", "libtool"]
 

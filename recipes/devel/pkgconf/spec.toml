@@ -39,7 +39,7 @@ license     = "ISC"
 url    = "https://github.com/pkgconf/pkgconf/releases/download/pkgconf-3.0.8/pkgconf-3.0.8.tar.xz"
 sha256 = "943f0bc88bcaeceb630b00262e2a8ad5ea4fac3fba72a4267d8b9ec6b35d1194"
 
-[dependencies]
+[dependencies.aarch64]
 runtime = ["glibc"]
 build   = ["make", "gcc", "coreutils", "bash", "sed", "grep", "findutils", "gawk"]
 

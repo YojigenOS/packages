@@ -47,7 +47,7 @@ urls = [
 ]
 sha256 = "603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a"
 
-[dependencies]
+[dependencies.aarch64]
 runtime = ["glibc"]
 # perl 是构建时必需：openssl 的 Configure 和它生成的 Makefile 都是 perl 脚本，
 # 这不是可选的辅助工具，是构建系统本身。

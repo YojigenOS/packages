@@ -22,7 +22,7 @@ license     = "GPL-2.0-or-later"
 git    = "https://git.kernel.org/pub/scm/network/iproute2/iproute2.git"
 commit = "ef50f7fb33425ec4998d8e162b9a16d5e53faca5"
 
-[dependencies]
+[dependencies.aarch64]
 runtime = ["glibc", "libcap", "elfutils"]
 build   = ["make", "gcc", "bison", "flex", "pkgconf"]
 [dependencies.x86_64]

@@ -33,7 +33,7 @@ git     = "https://github.com/tytso/e2fsprogs"
 commit  = "7ee1d505ef3b37831215f490411f346fe57e9053"
 mirrors = ["https://git.kernel.org/pub/scm/fs/ext2/e2fsprogs"]
 
-[dependencies]
+[dependencies.aarch64]
 runtime = ["glibc"]
 build   = ["make", "gcc", "sed", "gawk"]
 

@@ -28,7 +28,7 @@ urls = [
 ]
 sha256 = "0d5f60154382fee10b114a1c34e785d8b1f492073ae2d3a6f7b147687b366aa0"
 
-[dependencies]
+[dependencies.aarch64]
 runtime = ["glibc"]
 build   = ["gettext", "gcc", "make"]
 
@@ -36,6 +36,17 @@ build   = ["gettext", "gcc", "make"]
 # 展开时会整体覆盖 [dependencies] 里同名的键。
 [dependencies.x86_64]
 runtime = ["glibc"]
+# ★ 这一行的来历（2026-10-15）：原来这一段只写了 `runtime`，而 `build` 是
+#   从上面"通用"那段【继承】来的 —— 旧 `deps_for` 是 `deps.update(per_arch)`，
+#   按【键】覆盖，所以 `build` 一直好着。
+#
+#   ★ 而这里一度以为它被盖成空了 —— 那是读【原始 TOML】看出来的假象：
+#     文件里确实没写，而解析出来是有的。**"文件里没写"和"解析出来没有"是
+#     两件事**，那条判断后来被逐配方比对推翻了（174 个里 0 个语义变化）。
+#
+#   现在两个架构各写一份、没有"通用"，所以这一行必须显式写出来 ——
+#   不是修 bug，是把这个依赖的出处从"继承"改成"写明"。
+build   = ["gettext", "gcc", "make"]
 
 [build]
 type      = "autotools"

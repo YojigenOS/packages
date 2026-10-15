@@ -81,7 +81,7 @@ commit = "44dcdfc255c26a4e19a4a27f66a54169cce5ca72"
 # 而那时的失败是安全的（git 按 commit 校验，拿错内容不会通过）。
 mirrors = ["https://gitlab.alpinelinux.org/alpine/apk-tools.git"]
 
-[dependencies]
+[dependencies.aarch64]
 # ★ openssl 拆出了 libcrypto / libssl 两个运行时子包。
 #
 #   这里写子包而不是 openssl——主包现在只剩命令行和开发文件（15 MB），而 apk

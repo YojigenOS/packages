@@ -29,7 +29,7 @@ urls = [
 ]
 sha256 = "51f74eb0f51cfa9873b85264dfdd5d46e8957ec95b88f0fb762f63d9e164c72e"
 
-[dependencies]
+[dependencies.aarch64]
 # ★ 为什么 perl 是【运行时】依赖而不是构建依赖：
 #
 # makeinfo / texi2any 是 Perl 程序。装了 texinfo 而不装 perl，命令就在，

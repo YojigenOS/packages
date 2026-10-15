@@ -57,7 +57,7 @@ license     = "SSH-OpenSSH"
 url    = "https://mirrors.nju.edu.cn/OpenBSD/OpenSSH/portable/openssh-10.5p1.tar.gz"
 sha256 = "d44d28a839ea9daf969cc69150fde59910b2b39361dad81a3bd6cbd19218db11"
 
-[dependencies]
+[dependencies.aarch64]
 runtime = ["glibc"]
 # ★ openssl / libcrypto / libssl 三个都要声明，少一个的后果很隐蔽：
 #

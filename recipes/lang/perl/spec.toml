@@ -21,7 +21,7 @@ url    = "https://www.cpan.org/src/5.0/perl-$VERSION.tar.gz"
 urls = ["https://mirrors.tuna.tsinghua.edu.cn/CPAN/src/5.0/perl-$VERSION.tar.gz"]
 sha256 = "3b855066b92491cb40e86affb1ca57d1a388aa43e51b91c7806a32c2f65f96c3"
 
-[dependencies]
+[dependencies.aarch64]
 runtime = ["glibc", "libxcrypt"]
 build   = ["gcc", "make", "libxcrypt"]
 

@@ -39,7 +39,7 @@ license     = "LGPL-2.1-or-later"
 url    = "https://people.redhat.com/sgrubb/libcap-ng/libcap-ng-$VERSION.tar.gz"
 sha256 = "3ba5294d1cbdfa98afaacfbc00b6af9ed2b83e8a21817185dfd844cc8c7ac6ff"
 
-[dependencies]
+[dependencies.aarch64]
 runtime = ["glibc"]
 # python3 不在树里——swig 绑定绑不出来，但库本身照样能用。
 build   = ["make", "gcc"]

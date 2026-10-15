@@ -43,7 +43,7 @@ license     = "GPL-3.0-or-later AND LGPL-3.0-or-later"
 url    = "https://mirrors.nju.edu.cn/sourceware/elfutils/0.196/elfutils-0.196.tar.bz2"
 sha256 = "fd5cc6b77ad6773cac93cb3f415f9318ac3b3455eecf801f6b4a742c4f6c7209"
 
-[dependencies]
+[dependencies.aarch64]
 runtime = ["glibc", "zlib"]
 # ★ bzip2 是【必须】的：源是 .tar.bz2，而 GNU tar 对它是去 exec bzip2。
 #   声明在这里 = 驱动会把它的 payload 合并进构建容器 = PATH 上有 bzip2。

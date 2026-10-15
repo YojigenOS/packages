@@ -31,7 +31,7 @@ urls = [
 ]
 sha256 = "ae470fec429775653e042015edc928d07c8c3b2fc59765172a330d3d87785f86"
 
-[dependencies]
+[dependencies.aarch64]
 runtime = ["glibc"]
 # flex 和 bison 是它自己解析器的需要。texinfo 是 man/info 文档。
 build   = ["make", "gcc", "flex", "bison", "texinfo"]

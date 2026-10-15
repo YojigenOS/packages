@@ -22,7 +22,7 @@ license     = "ISC"
 git    = "https://github.com/sudo-project/sudo"
 commit = "d1b48c651cec19fe37d1f0d3299d2283fb0f88e4"
 
-[dependencies]
+[dependencies.aarch64]
 runtime = ["glibc", "openssl"]
 build   = ["make", "gcc", "autoconf", "automake", "libtool", "openssl", "flex", "bison"]
 [dependencies.x86_64]

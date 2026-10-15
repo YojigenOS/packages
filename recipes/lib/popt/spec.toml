@@ -25,7 +25,7 @@ commit = "916e61045d268f7e37ade5ec047eb77e8299e6ad"
 # ★ 这个 commit 是 tag popt-1.19-release 的【peeled】值（^{}）。
 #   它是附注标签，ls-remote 会同时打出标签对象和它指向的 commit。
 
-[dependencies]
+[dependencies.aarch64]
 runtime = ["glibc"]
 build   = ["make", "gcc", "autoconf", "automake", "libtool", "gettext"]
 [dependencies.x86_64]

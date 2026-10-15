@@ -25,7 +25,7 @@ git     = "https://gitlab.com/procps-ng/procps.git"
 commit  = "66b48a3720d46f304f0fa76f720ca925fa48d97e"
 mirrors = ["https://github.com/warmchang/procps-ng"]
 
-[dependencies]
+[dependencies.aarch64]
 runtime = ["glibc", "ncurses"]
 build   = ["make", "gcc", "autoconf", "automake", "libtool", "gettext", "pkgconf"]
 

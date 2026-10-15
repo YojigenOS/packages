@@ -42,7 +42,7 @@ license     = "BSD-3-Clause AND GPL-2.0-or-later"
 url    = "http://gondor.apana.org.au/~herbert/dash/files/dash-$VERSION.tar.gz"
 sha256 = "40090101a2a491f13e901d3d48e90414f26634628b9bfff35ff540363c227a7d"
 
-[dependencies]
+[dependencies.aarch64]
 runtime = ["glibc"]
 # 上游 tarball 里带着 configure（是 autotools 的发行包，不是 git 树），
 # 所以不需要 autoconf/automake。也没有 NLS，不需要 gettext。
@@ -65,3 +65,10 @@ provides    = ["/bin/sh"]
 # ★ 数字【大】的优先（实测：90 赢了 60 和 30）。
 #   将来加 bash-binsh 时给它一个更小的数，dash 就还是默认。
 provider-priority = 100
+
+# ★ 这一整段是 2026-10-15 补的：这个配方原来只有通用那段，
+#   而按新约定两个架构各写一份、没有「通用」——
+#   所以 x86_64 那份要显式写出来（内容取自上面那段）。
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["make", "gcc"]

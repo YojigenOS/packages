@@ -16,7 +16,7 @@ license     = "BSD-3-Clause"
 git    = "https://github.com/the-tcpdump-group/tcpdump"
 commit = "1c950db294b52c99461c89e2a8d0e541d344cf5a"
 
-[dependencies]
+[dependencies.aarch64]
 runtime = ["glibc", "libpcap", "openssl"]
 build   = ["make", "gcc", "autoconf", "automake", "libtool"]
 [dependencies.x86_64]

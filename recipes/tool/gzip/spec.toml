@@ -22,7 +22,7 @@ license     = "GPL-3.0-or-later"
 url    = "https://ftp.gnu.org/gnu/gzip/gzip-$VERSION.tar.xz"
 sha256 = "9aa0cc780dec156b8282844833b342ab7cb08c25d2cd9a1869cdd0df31deff48"
 
-[dependencies]
+[dependencies.aarch64]
 runtime = ["glibc"]
 build   = ["make", "gettext", "gcc"]
 

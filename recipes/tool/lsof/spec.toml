@@ -22,7 +22,7 @@ license     = "lsof"
 git    = "https://github.com/lsof-org/lsof"
 commit = "646395f8e893edb5572405b2311a079f55f269f2"
 
-[dependencies]
+[dependencies.aarch64]
 runtime = ["glibc"]
 build   = ["make", "gcc", "autoconf", "automake", "libtool"]
 [dependencies.x86_64]

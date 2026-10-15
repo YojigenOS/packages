@@ -22,7 +22,7 @@ license     = "GPL-2.0-only WITH Linux-syscall-note"
 url    = "https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-$VERSION.tar.xz"
 sha256 = "b4c5dfbe51a364a6c7f03869200f88c8e1f77403539005f14b7fc6bc91b8d8ba"
 
-[dependencies]
+[dependencies.aarch64]
 runtime = []
 # make 目前在 host/provides.txt 里，会被跳过而不报错。
 # 等我们自建出 make 之后，把那一行删掉，这里就会真的去解析它。

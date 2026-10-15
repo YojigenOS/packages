@@ -19,7 +19,7 @@ license     = "MIT"
 url    = "https://downloads.sourceforge.net/project/expat/expat/$VERSION/expat-$VERSION.tar.gz"
 sha256 = "16afbb9cefead2aa278105cf27d9f597bde7fbf3dbb85015857ca7ca6a4e89ba"
 
-[dependencies]
+[dependencies.aarch64]
 runtime = ["glibc"]
 build   = ["make", "gcc"]
 

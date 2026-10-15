@@ -32,7 +32,7 @@ urls = [
 ]
 sha256 = "e6738e29597f733270731aa90600f37ffdc045079dfc27ec7e8192cc81085c3e"
 
-[dependencies]
+[dependencies.aarch64]
 # binutils 必须是运行时依赖：gcc 自己不汇编也不链接，它调用 `as` 和 `ld`。
 #
 # ★ 真正的理由是【汇编器版本门槛】：本 gcc 16.2 用 AEABI 构建属性声明分支保护，

@@ -27,7 +27,7 @@ license     = "GPL-3.0-or-later"
 url    = "https://ftp.gnu.org/gnu/which/which-$VERSION.tar.gz"
 sha256 = "f4a245b94124b377d8b49646bf421f9155d36aa7614b6ebf83705d3ffc76eaad"
 
-[dependencies]
+[dependencies.aarch64]
 runtime = ["glibc"]
 # ★ autoreconf = true 就要把这三件列进来 —— 那条测试（test_build.py 里
 #   「用 autoreconf 的配方必须把 autoconf/automake/libtool 写进 build」）

@@ -50,57 +50,130 @@ from skirtlib.spec import (deps_for, direct_deps, expand, is_subpackage,
 from support import _dt, _pkg, _all_spec_dirs
 
 class TestDepsFor(unittest.TestCase):
-    """通用依赖与架构特定依赖的合并。"""
+    """★ 两个架构各写一份、**没有「通用」**（2026-10-15 改的语义）。
 
-    def test_base_only(self):
-        s = {"package": {"name": "x", "version": "1"},
-             "dependencies": {"runtime": ["glibc"], "build": ["make"]}}
+    这一组测试原来守的是旧语义 ——「通用 + 架构整键覆盖」。那个写法有两个洞，
+    而两个都在真实配方里发作了：
+
+    **① 覆盖是整键的** → 某个架构段只写一半就会让另一半"看起来是空的"。
+       有一条测试甚至把这个叫 `test_arch_overrides_same_key_wholesale`，
+       也就是把那个行为当成正确的写进去了。
+
+    **② 另一个架构那份会漏进结果** → 有一条测试叫
+       `test_other_arch_key_survives`，docstring 写的是：
+
+           「已知的粗糙之处……把它钉成测试，是为了将来真要清理时能看见影响面。」
+
+       ——而这次就是那次清理。**它现在反过来断言：不许漏出来。**
+    """
+
+    def _spec(self, deps):
+        return {"package": {"name": "x", "version": "1"}, "dependencies": deps}
+
+    def test_两个架构各给各的(self):
+        s = self._spec({"aarch64": {"runtime": ["glibc"], "build": ["make"]},
+                        "x86_64":  {"runtime": ["glibc"], "build": ["make", "gcc"]}})
         self.assertEqual(deps_for(s, "aarch64"),
                          {"runtime": ["glibc"], "build": ["make"]})
+        self.assertEqual(deps_for(s, "x86_64"),
+                         {"runtime": ["glibc"], "build": ["make", "gcc"]})
 
-    def test_no_dependencies_section(self):
-        self.assertEqual(deps_for({"package": {"name": "x", "version": "1"}}, "aarch64"), {})
+    def test_结果里不许带别的架构键(self):
+        """★ 这就是原来那条 `test_other_arch_key_survives` 的反面。"""
+        s = self._spec({"aarch64": {"runtime": ["glibc"]},
+                        "x86_64":  {"runtime": ["glibc"], "build": ["gcc"]}})
+        结果 = deps_for(s, "aarch64")
+        self.assertNotIn("x86_64", 结果)
+        self.assertNotIn("aarch64", 结果)
+        self.assertEqual(结果, {"runtime": ["glibc"]})
 
-    def test_arch_overrides_same_key_wholesale(self):
-        """架构段对同名键是整体覆盖，不是追加。"""
-        s = {"package": {"name": "x", "version": "1"},
-             "dependencies": {"runtime": ["glibc"], "build": ["make"],
-                              "x86_64": {"build": ["make", "gcc"]}}}
-        d = deps_for(s, "x86_64")
-        self.assertEqual(d["build"], ["make", "gcc"])
-        self.assertEqual(d["runtime"], ["glibc"])
+    def test_通用段会被明确拒绝(self):
+        """★ 不是"忽略"，是【报错】。
 
-    def test_requested_arch_key_removed(self):
-        """架构段本身不该作为一个依赖字段漏出来。"""
-        s = {"package": {"name": "x", "version": "1"},
-             "dependencies": {"runtime": [], "x86_64": {"runtime": ["glibc"]}}}
-        self.assertNotIn("x86_64", deps_for(s, "x86_64"))
+        留一段没人读的依赖，正是「改了不生效」最容易生根的地方 ——
+        而 try 那样正是这个项目最怕的形状。所以让它响亮地失败。
+        """
+        s = self._spec({"runtime": ["glibc"], "build": ["make"],
+                        "x86_64": {"runtime": ["glibc"], "build": ["make"]}})
+        with self.assertRaises(ValueError) as cm:
+            deps_for(s, "aarch64")
+        self.assertIn("通用", str(cm.exception))
 
-    def test_other_arch_key_survives(self):
-        """已知的粗糙之处：解析 aarch64 时，x86_64 段仍留在结果里。
+    def test_缺了某一个架构也要报错(self):
+        s = self._spec({"aarch64": {"runtime": ["glibc"]}})
+        with self.assertRaises(ValueError) as cm:
+            deps_for(s, "x86_64")
+        self.assertIn("x86_64", str(cm.exception))
 
-        direct_deps() 只看 runtime / build，所以目前无害。把它钉成测试，
-        是为了将来真要清理时能看见影响面。"""
-        s = {"package": {"name": "x", "version": "1"},
-             "dependencies": {"x86_64": {"build": ["gcc"]}}}
-        self.assertIn("x86_64", deps_for(s, "aarch64"))
+    def test_没有依赖段也报错(self):
+        """每个包至少要有 glibc，所以"没有依赖段"一定是漏写了。"""
+        with self.assertRaises(ValueError):
+            deps_for({"package": {"name": "x", "version": "1"}}, "aarch64")
+
+    def test_返回的是副本(self):
+        """改了返回的东西不该动到 spec。"""
+        s = self._spec({"aarch64": {"runtime": ["glibc"]},
+                        "x86_64":  {"runtime": ["glibc"]}})
+        结果 = deps_for(s, "aarch64")
+        结果["runtime"].append("改坏了")
+        self.assertEqual(deps_for(s, "aarch64")["runtime"], ["glibc"])
+
+
+class Test所有配方都守这个约定(unittest.TestCase):
+    """★ 而这一条是真正会守住它的那个 —— 上面那些用的是手搓的字典。"""
+
+    def test_每个配方都是两个架构各一份(self):
+        import pathlib as _p
+        import tomllib
+        from skirtlib.common import RECIPES_DIR
+        坏 = []
+        for sp in sorted(_p.Path(RECIPES_DIR).rglob("spec.toml")):
+            d = tomllib.loads(sp.read_text())
+            keys = set(d.get("dependencies") or {})
+            if keys != {"aarch64", "x86_64"}:
+                坏.append(f"{sp.parent.name}: {sorted(keys)}")
+        self.assertFalse(坏, "这些配方的依赖段不是「两个架构各一份」：\n  " + "\n  ".join(坏))
+
+    def test_每个配方两个架构都解析得出来(self):
+        """上面那条看的是【键名】，这一条真的调一次解析 —— 两条都要。
+
+        （"文件里有那个段"和"解析得出来"是两件事，这一整批就是被那条差别
+          绊过一次：`zlib` 的 x86_64 段看起来少了 `build`，而解析出来是有的。）
+        """
+        import pathlib as _p
+        import tomllib
+        from skirtlib.common import RECIPES_DIR
+        坏 = []
+        for sp in sorted(_p.Path(RECIPES_DIR).rglob("spec.toml")):
+            d = tomllib.loads(sp.read_text())
+            for arch in ("aarch64", "x86_64"):
+                try:
+                    deps_for(d, arch)
+                except ValueError as e:
+                    坏.append(f"{sp.parent.name} / {arch}: {e}")
+        self.assertFalse(坏, "这些配方解析不出来：\n  " + "\n  ".join(坏))
+
 
 class TestDirectDeps(unittest.TestCase):
     """直接依赖 = runtime + build，去重且保持声明顺序。"""
 
     def test_runtime_comes_before_build(self):
         s = {"package": {"name": "x", "version": "1"},
-             "dependencies": {"build": ["make"], "runtime": ["glibc"]}}
+             "dependencies": {"aarch64": {"build": ["make"], "runtime": ["glibc"]}, "x86_64": {"build": ["make"], "runtime": ["glibc"]}}}
         self.assertEqual(direct_deps(s, "aarch64"), ["glibc", "make"])
 
     def test_dedup_preserves_order(self):
         s = {"package": {"name": "x", "version": "1"},
-             "dependencies": {"runtime": ["glibc", "zlib"],
-                              "build": ["make", "zlib"]}}
+             "dependencies": {"aarch64": {"runtime": ["glibc", "zlib"],
+                              "build": ["make", "zlib"]}, "x86_64": {"runtime": ["glibc", "zlib"],
+                              "build": ["make", "zlib"]}}}
         self.assertEqual(direct_deps(s, "aarch64"), ["glibc", "zlib", "make"])
 
-    def test_empty(self):
-        s = {"package": {"name": "x", "version": "1"}}
+    def test_两个架构都空就是空(self):
+        """依赖段【必须】在，而两个架构的列表都可以是空的（比如 filesystem）。"""
+        s = {"package": {"name": "x", "version": "1"},
+             "dependencies": {"aarch64": {"runtime": [], "build": []},
+                              "x86_64":  {"runtime": [], "build": []}}}
         self.assertEqual(direct_deps(s, "aarch64"), [])
 
 class TestDepClosure(unittest.TestCase):
@@ -121,7 +194,7 @@ class TestDepClosure(unittest.TestCase):
     def test_self_dependency_skipped_when_never_built(self):
         """从没构建过时，自依赖应当被跳过（交给构建环境），而不是报错。"""
         s = {"package": {"name": "没有配方的包", "version": "1"},
-             "dependencies": {"build": ["没有配方的包"]}}
+             "dependencies": {"aarch64": {"build": ["没有配方的包"]}, "x86_64": {"build": ["没有配方的包"]}}}
         self.assertEqual(deps_mod.dep_closure(s, "aarch64", set()), [])
 
     def test_real_cycle_is_reported(self):
@@ -133,7 +206,7 @@ class TestDepClosure(unittest.TestCase):
 
     def test_unknown_dependency_exits(self):
         s = {"package": {"name": "x", "version": "1"},
-             "dependencies": {"runtime": ["根本没有这个包"]}}
+             "dependencies": {"aarch64": {"runtime": ["根本没有这个包"]}, "x86_64": {"runtime": ["根本没有这个包"]}}}
         with self.assertRaises(SystemExit):
             deps_mod.dep_closure(s, "aarch64", set())
 

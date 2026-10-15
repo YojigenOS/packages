@@ -37,7 +37,7 @@ commit  = "0c3b852bf7bad2837a814c7a31bf332092048a2b"
 #   最新的其实是 2.69.0（2026-09-25）。看 releases 接口才看得出来。
 mirrors = []
 
-[dependencies]
+[dependencies.aarch64]
 runtime = ["glibc", "zlib"]
 build   = ["cmake", "ninja", "gcc", "python3", "pkgconf"]
 

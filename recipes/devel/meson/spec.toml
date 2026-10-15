@@ -39,7 +39,7 @@ license     = "Apache-2.0"
 url    = "https://files.pythonhosted.org/packages/57/99/36cd25f9598eef70db97577440a70a360af505f6f01c2338a18d1556079c/meson-1.12.1-py3-none-any.whl"
 sha256 = "930bc7542cbd9f57009e182fd014eba48cf1a0180a7b9006d2d32d8f168d8b02"
 
-[dependencies]
+[dependencies.aarch64]
 runtime = ["python3", "ninja"]
 build   = ["python3", "pip"]
 

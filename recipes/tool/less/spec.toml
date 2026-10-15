@@ -22,7 +22,7 @@ git     = "https://github.com/gwsw/less"
 commit  = "52c3b13f35d73c624d4a1ddd0dbe3a1a072159ab"
 mirrors = ["https://www.greenwoodsoftware.com/less/"]
 
-[dependencies]
+[dependencies.aarch64]
 runtime = ["glibc", "ncurses"]
 build   = ["make", "gcc", "autoconf", "automake", "libtool"]
 

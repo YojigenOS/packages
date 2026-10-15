@@ -20,7 +20,7 @@ git    = "https://github.com/iputils/iputils"
 commit = "6e1cb146547eb6fbb127ffc8397a9241be0d33c2"
 # ★ tag 20250605 的 peeled 值。
 
-[dependencies]
+[dependencies.aarch64]
 runtime = ["glibc", "libcap"]
 build   = ["make", "gcc", "meson", "ninja", "libcap"]
 [dependencies.x86_64]

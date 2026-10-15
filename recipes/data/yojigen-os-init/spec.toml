@@ -20,7 +20,7 @@ license     = "GPL-3.0-or-later"
 # 没有 source：这个脚本是我们自己写的，不是从上游取的。
 # files/ 目录里的东西由 steps.sh 装进去。
 
-[dependencies]
+[dependencies.aarch64]
 # 它自己要用 mount、date、uname——分别来自 util-linux 和 coreutils。
 #
 # e2fsprogs（resize2fs）是首启钩子 10-grow-root 要用的：镜像是固定大小的，

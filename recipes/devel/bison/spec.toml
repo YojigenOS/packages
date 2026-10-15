@@ -30,7 +30,7 @@ urls = [
 ]
 sha256 = "9bba0214ccf7f1079c5d59210045227bcf619519840ebfa80cd3849cff5a5bf2"
 
-[dependencies]
+[dependencies.aarch64]
 # m4 是【运行时】依赖：bison 生成分析器的时候会调用它，那是它的工作原理，
 # 不是编译它时才需要。
 runtime = ["glibc", "m4"]

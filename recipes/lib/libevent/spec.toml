@@ -23,7 +23,7 @@ license     = "BSD-3-Clause"
 git    = "https://github.com/libevent/libevent"
 commit = "211c4234e44e0e7df720f744a0c70be017e39622"
 
-[dependencies]
+[dependencies.aarch64]
 runtime = ["glibc", "openssl"]
 build   = ["cmake", "ninja", "gcc"]
 

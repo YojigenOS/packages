@@ -25,7 +25,7 @@ license     = "MIT"
 
 # 无 [[source]]：纯元数据包。skirt 会跳过下载与解压，给它一个空的源码树。
 
-[dependencies]
+[dependencies.aarch64]
 runtime = []
 build   = ["gcc", "make"]
 

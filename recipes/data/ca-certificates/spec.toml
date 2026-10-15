@@ -54,7 +54,7 @@ sha256 = "8944ec6b572b577daee4fc681a425881f841ec2660e4cb5f0eee727f84620697"
 # ★ 它不是归档，别试着解开——见上面那段说明。
 unpack = false
 
-[dependencies]
+[dependencies.aarch64]
 # ★ runtime 是【空的】——这是个纯数据包。
 #
 #   产物只有两个文件（216 KB）：一份 PEM 文本和一个指向它的符号链接。运行时

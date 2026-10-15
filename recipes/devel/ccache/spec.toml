@@ -35,7 +35,7 @@ license     = "GPL-3.0-or-later"
 git     = "https://github.com/ccache/ccache"
 commit  = "c67954b7729c2a7a350c80e7634d704b669307dc"
 
-[dependencies]
+[dependencies.aarch64]
 # xxhash 和 zstd 都是运行时的：ccache 链接它们。
 runtime = ["glibc", "zstd", "xxhash"]
 build   = ["make", "gcc", "cmake", "zstd", "xxhash"]

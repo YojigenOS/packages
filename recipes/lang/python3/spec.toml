@@ -53,7 +53,7 @@ url    = "https://www.python.org/ftp/python/$VERSION/Python-$VERSION.tar.xz"
 urls = ["https://mirrors.aliyun.com/python-release/source/Python-$VERSION.tar.xz"]
 sha256 = "c2215904f02b175596dc49351585104f4bc20341e1c47378b26a2c274360ce73"
 
-[dependencies]
+[dependencies.aarch64]
 runtime = ["glibc", "expat", "libffi", "zlib"]
 build   = ["make", "gcc", "expat", "libffi", "zlib"]
 

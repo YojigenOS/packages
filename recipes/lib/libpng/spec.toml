@@ -19,7 +19,7 @@ license     = "libpng-2.0"
 url    = "https://download.sourceforge.net/libpng/libpng-$VERSION.tar.gz"
 sha256 = "86a3e4b501f7f50e392c4e456ea158893e9a595b1c63eb88c7bb9f6cf8772dad"
 
-[dependencies]
+[dependencies.aarch64]
 runtime = ["glibc", "zlib"]
 build   = ["zlib", "gcc", "make"]
 

@@ -21,7 +21,7 @@ license     = "ISC"
 git    = "https://github.com/tmux/tmux"
 commit = "7f2a35ad3321f9ba57a1062ca73b1f3ff26aca53"
 
-[dependencies]
+[dependencies.aarch64]
 runtime = ["glibc", "ncurses", "libevent", "utf8proc"]
 build   = ["make", "gcc", "autoconf", "automake", "libtool", "pkgconf"]
 

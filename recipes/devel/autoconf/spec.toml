@@ -30,7 +30,7 @@ urls = [
 ]
 sha256 = "9fd672b1c8425fac2fa67fa0477b990987268b90ff36d5f016dae57be0d6b52e"
 
-[dependencies]
+[dependencies.aarch64]
 # perl 和 m4 都是【运行时】依赖：autoconf 是 Perl 程序，而它生成 configure
 # 的过程就是在跑 m4 宏。
 runtime = ["glibc", "perl", "m4"]

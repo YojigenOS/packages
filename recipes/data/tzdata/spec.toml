@@ -27,7 +27,7 @@ url = "https://data.iana.org/time-zones/releases/tzdata$VERSION.tar.gz"
 #     等我们自己的源码镜像建起来，这个包是第一批受益者。）
 sha256 = "b26882805f26aac59d5b222978e6580484b834ccdc98be89df2f05a6dc53a652"
 
-[dependencies]
+[dependencies.aarch64]
 # ★ runtime 是【空的】——纯数据包。
 #
 #   产物是 598 个 TZif 文件加三张对照表，一个字节的可执行代码都没有。运行时

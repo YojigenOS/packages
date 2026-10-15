@@ -29,7 +29,7 @@ license     = "BSD-3-Clause"
 git     = "https://github.com/shadow-maint/shadow"
 commit  = "7188fbf46f397ab40d2e77d6f0bb8ebbe479cc0c"
 
-[dependencies]
+[dependencies.aarch64]
 # libxcrypt 提供 crypt()。glibc 2.44 自己【不带】libcrypt 了（上游早就把
 # crypt 拆出去了），所以这是个真依赖，不是可选。
 runtime = ["glibc", "libxcrypt"]

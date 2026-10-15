@@ -63,7 +63,7 @@ url    = "https://mirrors.nju.edu.cn/gnu/grub/grub-2.14.tar.xz"
 # 从 NJU 和清华各下一份比对过——这个值一错就谁都建不出来。
 sha256 = "bc8d3c73535b8838d8c8e2654d73edc4e6ae8c8acdb45d5df5dc9a1547446d43"
 
-[dependencies]
+[dependencies.aarch64]
 # 运行时要 glibc（grub-install 那些工具是普通 ELF）；模块本身是 freestanding 的，
 # 但它们是数据文件，不产生 so: 依赖。
 runtime = ["glibc"]

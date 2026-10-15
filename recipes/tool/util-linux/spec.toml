@@ -27,7 +27,7 @@ urls = [
 ]
 sha256 = "fbd62a100ab7bb8746ba0661255c3c48185b1e9021507c624da01fbc696330ec"
 
-[dependencies]
+[dependencies.aarch64]
 # libcap-ng 是运行时的：setpriv 链接它。
 runtime = ["glibc", "libcap-ng"]
 build   = ["make", "gcc", "gettext", "libcap-ng"]

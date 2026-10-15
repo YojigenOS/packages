@@ -42,7 +42,7 @@ license     = "LGPL-2.1-or-later"
 url    = "https://github.com/besser82/libxcrypt/releases/download/v$VERSION/libxcrypt-$VERSION.tar.xz"
 sha256 = "71513a31c01a428bccd5367a32fd95f115d6dac50fb5b60c779d5c7942aec071"
 
-[dependencies]
+[dependencies.aarch64]
 runtime = ["glibc"]
 # autoreconf 要 autoconf / automake / libtool，它们必须【声明】——
 # 否则会悄悄用构建环境镜像里的那份，那就又是隐式依赖了。

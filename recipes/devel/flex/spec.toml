@@ -27,7 +27,7 @@ license     = "BSD-2-Clause"
 url    = "https://github.com/westes/flex/releases/download/v$VERSION/flex-$VERSION.tar.gz"
 sha256 = "e87aae032bf07c26f85ac0ed3250998c37621d95f8bd748b31f15b33c45ee995"
 
-[dependencies]
+[dependencies.aarch64]
 # ★ m4 是【运行时】依赖，不只是构建时：flex 靠 m4 处理它的 skeleton 文件，
 #   所以用 flex 生成的每一步都离不开 m4。
 runtime = ["glibc", "m4"]

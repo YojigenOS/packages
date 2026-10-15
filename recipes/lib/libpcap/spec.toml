@@ -17,7 +17,7 @@ license     = "BSD-3-Clause"
 git    = "https://github.com/the-tcpdump-group/libpcap"
 commit = "87b6a456dd7ac9e34231f8a0a3f99a13a59b4419"
 
-[dependencies]
+[dependencies.aarch64]
 runtime = ["glibc"]
 build   = ["make", "gcc", "autoconf", "automake", "libtool", "bison", "flex"]
 [dependencies.x86_64]

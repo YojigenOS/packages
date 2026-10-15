@@ -35,7 +35,7 @@ urls = [
 ]
 sha256 = "ed9fa05b338a5b308eca0c25e93fe4ba8e3adfaa6f94bedf1f39b0a0d1010751"
 
-[dependencies]
+[dependencies.aarch64]
 runtime = ["glibc"]
 build   = ["make", "gcc"]
 

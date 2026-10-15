@@ -38,7 +38,7 @@ license     = "Apache-2.0"
 url    = "https://github.com/ninja-build/ninja/archive/refs/tags/v1.13.1.tar.gz"
 sha256 = "f0055ad0369bf2e372955ba55128d000cfcc21777057806015b45e4accbebf23"
 
-[dependencies]
+[dependencies.aarch64]
 # ★ 它是 C++ 写的，NEED libstdc++.so.6 和 libgcc_s.so.1。
 #
 #   那两个库在 gcc 包里（256 MB），所以 gcc 拆出了两个运行时子包：

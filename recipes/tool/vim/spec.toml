@@ -24,7 +24,7 @@ license     = "Vim"
 git    = "https://github.com/vim/vim"
 commit = "7670338d8b695c476de868dabd34d68d6de2443b"
 
-[dependencies]
+[dependencies.aarch64]
 runtime = ["glibc", "ncurses"]
 build   = ["make", "gcc"]
 

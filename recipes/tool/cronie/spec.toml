@@ -21,7 +21,7 @@ license     = "ISC AND BSD-2-Clause AND BSD-3-Clause AND MIT"
 git    = "https://github.com/cronie-crond/cronie"
 commit = "71894fee3c74f3787e77f21a24fbbe0dffb59e7f"
 
-[dependencies]
+[dependencies.aarch64]
 runtime = ["glibc"]
 build   = ["make", "gcc", "autoconf", "automake", "libtool"]
 [dependencies.x86_64]

@@ -25,7 +25,7 @@ license     = "GPL-3.0-or-later"
 url    = "https://rsync.samba.org/ftp/rsync/src/rsync-$VERSION.tar.gz"
 sha256 = "c55f9c9dc10fb8bec397b399a0fdded53cc9a2d8e30891bb0d63724d25c37bef"
 
-[dependencies]
+[dependencies.aarch64]
 runtime = ["glibc"]
 build   = ["gcc", "make"]
 

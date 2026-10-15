@@ -17,7 +17,7 @@ license     = "MIT"
 git    = "https://github.com/JuliaStrings/utf8proc"
 commit = "79cdd5ab40c79afa559f689ffc13b76812dee1ac"
 
-[dependencies]
+[dependencies.aarch64]
 runtime = ["glibc"]
 build   = ["make", "gcc"]
 [dependencies.x86_64]

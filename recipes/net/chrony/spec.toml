@@ -23,7 +23,7 @@ license     = "GPL-2.0-only"
 git    = "https://gitlab.com/chrony/chrony"
 commit = "8df4f1263e206585e6c4e61352d042c2dd12916a"
 
-[dependencies]
+[dependencies.aarch64]
 runtime = ["glibc", "libcap"]
 build   = ["make", "gcc", "autoconf", "automake", "libtool", "libcap"]
 [dependencies.x86_64]

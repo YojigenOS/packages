@@ -33,7 +33,7 @@ urls = [
 ]
 sha256 = "f87cee69eec2b4fcbf60a396b030ad6aa3415f192aa5f7ee84cad5e11f7f5ae3"
 
-[dependencies]
+[dependencies.aarch64]
 runtime = ["glibc"]
 # gettext：patch 有自己的翻译（po/ 目录），不带它中文就打不出来。
 build   = ["make", "gcc", "gettext"]

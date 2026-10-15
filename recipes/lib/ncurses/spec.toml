@@ -33,7 +33,7 @@ git     = "https://github.com/mirror/ncurses"
 commit  = "79b9071f2be20a24c7be031655a5638f6032f29f"
 mirrors = ["https://invisible-island.net/archives/ncurses/"]
 
-[dependencies]
+[dependencies.aarch64]
 runtime = ["glibc"]
 build   = ["make", "gcc"]
 

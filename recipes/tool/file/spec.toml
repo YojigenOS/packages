@@ -24,7 +24,7 @@ commit = "eb754ace19fed5481d8142426543100a2d6bae4e"
 #   它是附注标签，ls-remote 会同时打出标签对象和它指向的 commit ——
 #   要的是后者，否则 checkout 出来是个 tag 对象，不是树。
 
-[dependencies]
+[dependencies.aarch64]
 runtime = ["glibc", "bzip2", "xz", "zlib", "zstd"]
 build   = ["make", "gcc", "autoconf", "automake", "libtool"]
 [dependencies.x86_64]

@@ -22,7 +22,7 @@ license     = "BSD-3-Clause OR GPL-2.0-only"
 git     = "https://github.com/facebook/zstd"
 commit  = "f8745da6ff1ad1e7bab384bd1f9d742439278e99"
 
-[dependencies]
+[dependencies.aarch64]
 runtime = ["glibc"]
 build   = ["make", "gcc"]
 
