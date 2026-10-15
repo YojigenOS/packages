@@ -174,10 +174,27 @@ def local_rclone() -> bool:
     return shutil.which("rclone") is not None
 
 
-#: 传包那一步的参数。值都有理由，见模块顶上"传大包要强制分片"那段。
+#: ★ 这一组是【两边共享】的分段上传参数。
+#:
+#:   `packages` 往仓库推 `.apk`，`distro` 往同一个仓库推镜像 —— 两个仓库
+#:   （两个代码仓库），同一套 S3 调优。而它们**没法互相 import**，
+#:   所以这里有一份、`distro/pantsu/pantsulib/repo.py` 有一份。
+#:
+#:   而 `distro` 那边自己写着：「这是【第三次】在 repo.py 里补 `skirt deploy`
+#:   已经有的东西了……每次都是撞上才知道——**它们的形状是"那边能跑"，
+#:   所以没人会去比。**」
+#:
+#:   所以这里给出的保证只有一条：**这一组值改动时，两边一起改。**
+#:   `distro/pantsu/tests/test_repo.py` 里有一条测试会真的加载这个文件、
+#:   把这一组和自己那份比 —— 少一个就红。
+SHARED_S3_ARGS = ("--s3-upload-cutoff", "8Mi",
+                  "--s3-chunk-size", "5Mi",
+                  "--s3-upload-concurrency", "4")
+
+#: 传包那一步的参数 = 共享那三个 + 这一侧自己的。
+#: 值都有理由，见模块顶上"传大包要强制分片"那段。
 PACKAGES_ARGS = ("--checksum", "--exclude", INDEX_NAME,
-                 "--s3-upload-cutoff", "8Mi", "--s3-chunk-size", "5Mi",
-                 "--s3-upload-concurrency", "4", "--progress")
+                 *SHARED_S3_ARGS, "--progress")
 
 
 def steps(arch: str, remote: str, *, go: bool, src: str | None = None
