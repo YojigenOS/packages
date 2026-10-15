@@ -23,7 +23,7 @@
 | 配方内容（spec + steps + 补丁 + files/ + scripts/） | 显而易见 | — |
 | `SOURCE_DATE_EPOCH` | 0005 | — |
 | **构建环境** | Debian 环境 vs 自举环境产出不同 | GCS 位那次：同配方、同 gcc，产物不同 |
-| **驱动本身** | 驱动决定输出 | `--libdir` 那次：只改驱动，gcc 的行为就变了 |
+| **工具集**（驱动 + `scripts/`） | 它们决定输出 | `--libdir` 那次：只改驱动，gcc 的行为就变了 |
 | 架构 | | — |
 | **依赖的 build_key** | 递归的链 | — |
 
@@ -117,31 +117,52 @@ def _strip_docstrings(tree: ast.AST) -> ast.AST:
     return tree
 
 
-def driver_hash() -> str:
-    """驱动自己的内容 —— 注释和文档字符串剥掉之后。
+def tooling_hash() -> str:
+    """工具集的内容 —— 驱动 + 打包脚本。注释和文档字符串剥掉之后。
 
-    为什么驱动要进这个键：实测过，**只改驱动就能改变产物** —— 那次是给驱动
-    加 `--libdir`，同一个 gcc 的行为就变了。所以「同配方、同 gcc」不等于
-    "同产物"。
+    【为什么要进这个键】
 
-    而为什么剥注释：见 `_strip_docstrings`。剥不掉的就退回原始字节，
-    并且**说出来** —— 那意味着这一个文件会比它实际需要的变化得更频繁。
+    实测过，**只改驱动就能改变产物** —— 那次是给驱动加 `--libdir`，同一个 gcc
+    的行为就变了。所以「同配方、同 gcc」不等于"同产物"。
+
+    ★ 而 2026-10-15 之前这里**只哈希 `skirt/**/*.py`**，没算 `scripts/`。
+      那是个真缺口：`scripts/pack.sh` 决定「包里放什么」（它跑 `apk mkpkg`、
+      恢复能力位、补 ELF 依赖），**改了它产物就变，而 key 不动** —— 正是
+      "少一样比没有键更危险"那个形状。而它当场就被撞上了：那一天里 `pack.sh`
+      改了两次（加安装脚本、换时间戳），两次都没进 key。
+
+      所以现在连 `scripts/**/*.sh` 一起哈希。
+
+    【两类的处理不一样，是有意的】
+
+      · Python：`ast.parse` + 剥文档字符串 → 只改注释、只改格式都不进哈希
+      · shell：原始字节 → **注释也算进去**
+
+    为什么 shell 不剥：剥 shell 的注释要懂 heredoc、引号里的 `#`、续行 ——
+    而**剥错的后果是漏掉一次真实改动**，那比多算几次严重得多。方向选保守那头。
+
+    剥不掉或解析不了的文件一律退回原始字节，并且**说出来** —— 那意味着这一个
+    文件会比它实际需要的变化得更频繁。
     """
     files = sorted(
-        p for p in (ROOT / "skirt").rglob("*.py")
+        p for p in list((ROOT / "skirt").rglob("*.py"))
+        + list((ROOT / "scripts").rglob("*.sh"))
         if "__pycache__" not in p.parts
     )
     h = hashlib.sha256()
     for p in files:
         src = p.read_text(encoding="utf-8")
-        try:
-            norm = ast.unparse(_strip_docstrings(ast.parse(src)))
-        except SyntaxError:
+        rel = p.relative_to(ROOT).as_posix()
+        if p.suffix == ".py":
+            try:
+                norm = ast.unparse(_strip_docstrings(ast.parse(src)))
+            except SyntaxError:
+                norm = src
+                print(f"  ⚠ build_key: {rel} 解析不了，用原始字节"
+                      f"（意味着注释也算进去）")
+        else:
             norm = src
-            print(f"  ⚠ build_key: {p.relative_to(ROOT)} 解析不了，用原始字节"
-                  f"（意味着注释也算进去）")
-        _mix(h, p.relative_to(ROOT).as_posix(), hashlib.sha256(
-            norm.encode("utf-8")).hexdigest())
+        _mix(h, rel, hashlib.sha256(norm.encode("utf-8")).hexdigest())
     return h.hexdigest()
 
 
@@ -187,7 +208,9 @@ def compute(spec: dict, arch: str, epoch: int, dep_keys: list[tuple[str, str]]) 
         "recipe": recipe_hash(spec["_dir"]),
         "epoch": str(epoch),
         "buildenv": buildenv_id(arch),
-        "driver": driver_hash(),
+        # ★ 名字从 `driver` 改成 `tooling`：它现在同时含驱动和打包脚本。
+        #   而名字改对很重要 —— 原来是"driver"，会让人以为 scripts/ 已经在了。
+        "tooling": tooling_hash(),
         # 依赖按名字排序 —— 闭包的顺序由依赖图决定，而那是另一个变量，
         # 不该影响"这个包的内容是什么"
         "deps": {n: k for n, k in sorted(dep_keys)},

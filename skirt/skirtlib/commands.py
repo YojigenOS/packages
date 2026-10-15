@@ -212,7 +212,15 @@ def cmd_build(args) -> None:
             k = f"unknown（{dep_rel} 盘上没有 build_key）"
         dep_keys.append((dep, k))
     bk = compute_key(spec, arch, epoch, dep_keys)
-    log("身份", f"build_key {bk['key'][:16]}…   （skirt stale 看它和盘上那份一不一样）")
+    # ★ 把【构建环境】也打出来。
+    #
+    #   为什么：那个键里有一项是构建环境镜像的内容 Id，而它变了会让**所有**
+    #   包的键都变（于是全部重建）。而那是对的 —— 实测过换环境产物就不同
+    #   （GCS 位那次）。但"全部重建"这件事必须能一眼看出原因，不然它看起来
+    #   就像随机行为。`skirt stale` 会说出是哪一项变的，而这行让人平时就看得见。
+    env = str(bk["parts"].get("buildenv", "?"))
+    log("身份", f"build_key {bk['key'][:16]}…   构建环境 {env[:19]}…")
+    log("身份", "          （skirt stale 看它和盘上那份一不一样）")
 
     run_in_container(srcrel, srcname, arch, spec, epoch, unpack=unpack)
 

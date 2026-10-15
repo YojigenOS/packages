@@ -75,10 +75,28 @@ class Test配方哈希(unittest.TestCase):
         self.assertNotEqual(a, b)
 
 
-class Test驱动哈希(unittest.TestCase):
+class Test工具集哈希(unittest.TestCase):
+    """驱动 + 打包脚本。它们都决定产物，所以都得进那个键。"""
 
     def test_同一次调用一致(self):
-        self.assertEqual(buildkey.driver_hash(), buildkey.driver_hash())
+        self.assertEqual(buildkey.tooling_hash(), buildkey.tooling_hash())
+
+    def test_pack_sh_也算进去(self):
+        """★ 这条是补一个真缺口：原来只哈希 skirt/**/*.py。
+
+        `scripts/pack.sh` 决定「包里放什么」（跑 apk mkpkg、恢复能力位、补 ELF
+        依赖）—— 改了它产物就变，而 key 不动。**少一样比没有键更危险。**
+        """
+        files = sorted(
+            p.relative_to(buildkey.ROOT).as_posix()
+            for p in list((buildkey.ROOT / "skirt").rglob("*.py"))
+            + list((buildkey.ROOT / "scripts").rglob("*.sh"))
+            if "__pycache__" not in p.parts
+        )
+        self.assertIn("scripts/pack.sh", files,
+                      "pack.sh 决定产物，它必须在那个哈希里")
+        self.assertTrue(any(f.startswith("skirt/") for f in files))
+        self.assertTrue(any(f.endswith(".sh") for f in files))
 
     def test_注释不算(self):
         """文档里写着「只改注释不用升 release」—— 那就别让改注释触发全量重建。"""
@@ -91,13 +109,11 @@ class Test驱动哈希(unittest.TestCase):
 
     def test_文档字符串不算(self):
         import ast
-        f = lambda: None                                    # noqa: E731
         a = ast.unparse(buildkey._strip_docstrings(ast.parse(
             'def f():\n    """第一版说明。"""\n    return 1\n')))
         b = ast.unparse(buildkey._strip_docstrings(ast.parse(
             'def f():\n    """改过的、完全不同的说明。"""\n    return 1\n')))
         self.assertEqual(a, b, "文档字符串剥掉之后两个函数是一样的")
-        del f
 
     def test_剥完不能是空的(self):
         """整个文件只有一句文档字符串时，剥掉之后得有 pass —— 否则 unparse 出语法错。"""
@@ -122,8 +138,11 @@ class Test键的合成(unittest.TestCase):
         import os
         os.environ["SKIRT_BUILDENV"] = "yojigenos/绝不存在"
         bk = buildkey.compute(self._spec(), "x86_64", 12345, [("a", "k1")])
-        for k in ("arch", "recipe", "epoch", "buildenv", "driver", "deps"):
+        # ★ 这份名单要和人脑里那份一致 —— 少一样，那个包就不会因为那一样变而重建，
+        #   而产物其实变了。所以这条测试列全，加了新成分就得改这里。
+        for k in ("arch", "recipe", "epoch", "buildenv", "tooling", "deps"):
             self.assertIn(k, bk["parts"], f"成分里少了 {k} —— 少一样比没有键更危险")
+        self.assertEqual(len(bk["parts"]), 6, "成分的数量也要钉住")
         self.assertEqual(len(bk["key"]), 64)
 
     def test_依赖的key算进去(self):
