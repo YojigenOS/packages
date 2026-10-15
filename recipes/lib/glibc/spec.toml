@@ -15,7 +15,7 @@ version     = "2.44"
 # ★ release 2：provides 里多了 27 个 so: 名字（libc.so.6、libm.so.6、
 #   ld-linux-aarch64.so.1 之类）。
 #
-#   那是打包时扫 ELF 自动生成的（见 scripts/elf-deps.py）。payload 一个字节
+#   那是打包时扫 ELF 自动生成的（见 skirt/skirtlib/elfdeps.py）。payload 一个字节
 #   都没变，但【包变了】——所以版本号必须跟着走。
 #
 #   ★ 不 bump 的后果是实打实的：本地和线上会各有一个 glibc-2.44-r1，内容
