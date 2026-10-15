@@ -68,6 +68,29 @@ ln -sfn /proc/self/fd/0 /dev/stdin
 ln -sfn /proc/self/fd/1 /dev/stdout
 ln -sfn /proc/self/fd/2 /dev/stderr
 
+# ★ 而这几行【要说自己成没成】——和上面 /dev/pts 那段同一个道理。
+#
+#   建这几个链接是"安静的"：成不成都不影响后面几步，所以要等【很久以后】
+#   某个脚本用进程替换时报错才发现。而那时人早就不在场了。
+#   而它在 build/CI 那条路上【永远不会报】——因为那里没人跑 bash 进程替换。
+#
+#   所以这里自检一遍，失败就说出来：
+for _l in fd stdin stdout stderr; do
+    if [ ! -L "/dev/$_l" ]; then
+        echo "  ⚠ /dev/$_l 没建出来——用进程替换的脚本（bash 的 <(…) 和 >(…)）会报"
+        echo "     /dev/fd/N: No such file or directory"
+    fi
+done
+unset _l
+
+# 而正面那条也要说：这几个链接【能不能真读】取决于 /proc 挂没挂上。
+# （/proc 是上面挂的；这里只查一次，成了就一行，不吵。）
+if [ -r /proc/self/fd/0 ]; then
+    echo "  /dev/fd 那组符号链接就位（进程替换可用）"
+else
+    echo "  ⚠ /proc 没挂上——/dev/fd 指向的 /proc/self/fd 读不到"
+fi
+
 # --- 问候 ---------------------------------------------------------------
 echo
 echo "  欢迎来到 Yojigen OS"
