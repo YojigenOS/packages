@@ -238,7 +238,7 @@ jobs:
       #   没有拿回 payload**，而 skirt 合并依赖时找的是 var/output/<arch>/<名字>/payload/。
       #
       #   `.apk` 是 ADB 格式，`tar -tzf` 解不出来（实测 0 条目），只有
-      #   `apk extract --allow-untrusted` 解得开。见 scripts/restore-payloads.sh。
+      #   `apk extract --allow-untrusted` 解得开。见 `skirt restore`（skirtlib/restore.py）。
       #
       # ★ 为什么放在循环【之前】就够了：跳过只发生在循环开始前就已经在
       #   var/pkgs 里的包上——而那些正是这一步还原的。循环里新建的包，payload
@@ -252,7 +252,7 @@ jobs:
       #
       #   这一步是幂等的、很便宜（目录已经在了就跳过），所以无条件跑。
       - name: 把 .apk 还原成 payload
-        run: ./scripts/restore-payloads.sh "${{ inputs.arch }}"
+        run: ./skirt/skirt restore --arch "${{ inputs.arch }}"
 
       # ── 构建环境：我们自己的 ────────────────────────────────────────────
       #

@@ -9,6 +9,7 @@
     skirt/skirt list                      列出所有包
     skirt/skirt deps <包名>               查看依赖解析结果（不构建）
     skirt/skirt stale [包名…]             哪些包该重建（比 build_key，退出码 0=该重建）
+    skirt/skirt restore [--arch x86_64]   把 var/pkgs 里的 .apk 还原成 payload
     skirt/skirt clean [包名]              清理构建目录 / 该包的产物
 
 依赖机制:

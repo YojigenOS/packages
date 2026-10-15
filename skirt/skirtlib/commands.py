@@ -71,12 +71,17 @@ def _shown(path: Path) -> Path:
 def cmd_paths(_args) -> None:
     """打印各个工作目录，给 shell 脚本用。
 
-    【为什么需要它】scripts/run-vm.sh 和 scripts/smoke.sh 要找到产物、源码
-    缓存这些东西。原来它们各自写死了 `output/$ARCH/`、`cache/`——于是这些
-    路径就有了【两份真相】：驱动里一份（common.py 的常量），脚本里一份。
+    【为什么需要它】scripts/smoke.sh 要找到产物、源码缓存这些东西。原来它
+    自己写死了 `output/$ARCH/`、`cache/`——于是这些路径就有了【两份真相】：
+    驱动里一份（common.py 的常量），脚本里一份。
 
     2026-10-11 把产物集中到 var/ 下时，这个毛病当场发作了：驱动改了，脚本
     没改，冒烟测试报"缺产物"。
+
+    ★ 这里原来写的是「scripts/run-vm.sh 和 scripts/smoke.sh」。run-vm.sh
+      已经不在这个仓库里了——它搬去 distro 之后又被删掉（它第一段注释就写着
+      "只是 `pantsu vm` 的一个壳"，2026-10-15 删的就是那个壳）。smoke.sh 还在，
+      所以上面那条理由仍然成立，只是只剩它一个调用方。
 
     所以路径只该有一处。脚本这样拿：
 
@@ -332,6 +337,23 @@ def cmd_deps(args) -> None:
         print()
 
 
+def cmd_restore(args) -> None:
+    """把 var/pkgs/<架构>/*.apk 还原成 var/output/<架构>/ 里的 payload。
+
+    ★ 为什么需要它：播种和跳过都只拿回 .apk，没拿回 payload —— 于是会出现
+      "包明明在仓库里、`skirt build` 却说依赖还没构建"。细节见 restore.py 顶上
+      那段（原来是 scripts/restore-payloads.sh）。
+    """
+    from .restore import restore
+
+    arch = resolve_arch(args.arch)
+    print()
+    ok, skip, fail = restore(arch)
+    print()
+    if fail:
+        die(f"{fail} 个包没解开（上面标 ✗ 的那些）——它们的 payload 还是缺的")
+
+
 def cmd_provides(args) -> None:
     """输出一组目标【及其依赖闭包】的包名，一行一个。
 
@@ -543,6 +565,11 @@ def main() -> None:
 
     p = sub.add_parser("list", help="列出所有包")
     p.set_defaults(func=cmd_list)
+
+    p = sub.add_parser("restore",
+                       help="把 var/pkgs/<架构>/*.apk 还原成 payload（播种/跳过缺的那一步）")
+    p.add_argument("--arch", help="目标架构（默认当前架构）")
+    p.set_defaults(func=cmd_restore)
 
     p = sub.add_parser("stale", help="哪些包该重建（比 build_key，退出码 0=该重建）")
     p.add_argument("targets", nargs="*", help="默认全部配方")

@@ -17,6 +17,10 @@ OUTPUT_DIR = ROOT / "var" / "output"
 BUILD_DIR = ROOT / "var" / "work"
 #: 每个包的完整构建日志。放这里是因为失败时要能翻——见 commands.py 里的说明。
 LOG_DIR = ROOT / "var" / "logs"
+#: 打好的 .apk。pack.sh 往这儿写；`skirt restore` / `skirt repo` 从这儿读。
+PKGS_DIR = ROOT / "var" / "pkgs"
+#: 收好的 apk 仓库（索引 + 包）。`skirt repo` 往这儿写；scripts/deploy.sh 传它。
+REPO_DIR = ROOT / "var" / "repo"
 HOST_PROVIDES_FILE = ROOT / "bootstrap" / "provides.txt"
 #: 构建环境镜像。默认是 Debian 底的那个（bootstrap 构建出来的）。
 #:
