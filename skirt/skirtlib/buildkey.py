@@ -86,13 +86,60 @@ def recipe_hash(recipe_dir: Path) -> str:
     删文件、改内容，都会变。
 
     跳过 `__pycache__`：它是解释器的产物，不是配方的一部分。
+
+    【`spec.toml` 特殊对待：按语义哈希，不按字节】
+
+    其余文件都是原始字节，而 `spec.toml` 先经 `tomllib` 解析、再按规范化 JSON
+    哈希。于是**改它的注释和排版不会进这个哈希**。
+
+    为什么值得这么麻烦：这个项目的配方**注释占大头**（实测 openssh 那个配方
+    245 行里 180 行是注释，73%）。而约定文档里写着「**只改注释**不用升
+    `release`（产物一个字节都不变）」—— 按字节哈希的话，那句话就变成了假的：
+    改一行注释要白建一次。
+
+    ★ 而这里用 `tomllib` 是真解析器，不是"用正则剥 `#`"——**不会少算**。
+      这是它和下面 `steps.sh` 那个选择的关键区别。
+
+    【而 `steps.sh` 保持原始字节】
+
+    剥 shell 的注释要懂 heredoc、引号里的 `#`、续行 —— 而**剥错的后果是漏掉
+    一次真实改动**，那比多算几次严重得多。所以那边选保守那头：改注释也会
+    重建一次，产物字节一样。
+
+    ★ 于是"只改注释不用重建"这句话，对 `spec.toml` 成立，对 `steps.sh` 不成立。
+      精确的说法写进 `docs/约定/配方约定.md` 了 —— 一句话两半对两半错的时候，
+      该把它拆成两句，而不是留一句听起来对的。
     """
     h = hashlib.sha256()
     for p in sorted(recipe_dir.rglob("*")):
         if p.is_dir() or "__pycache__" in p.parts:
             continue
-        _mix(h, p.relative_to(recipe_dir).as_posix(), sha256_of(p))
+        rel = p.relative_to(recipe_dir).as_posix()
+        if p.name == "spec.toml":
+            _mix(h, rel, _toml_semantic(p))
+        else:
+            _mix(h, rel, sha256_of(p))
     return h.hexdigest()
+
+
+def _toml_semantic(path: Path) -> str:
+    """TOML 按语义哈希：解析出来、规范序列化。注释和排版都不参与。
+
+    解析不了就退回原始字节，并且**说出来** —— 那意味着这一个文件会比它实际
+    需要的变化得更频繁。（而 `skirt` 自己也会因为同一个原因报错，所以这条
+    路正常走不到。）
+    """
+    src = path.read_text(encoding="utf-8")
+    try:
+        import tomllib
+        data = tomllib.loads(src)
+    except Exception as exc:                                    # noqa: BLE001
+        print(f"  ⚠ build_key: {path.name} 解析不了（{type(exc).__name__}），"
+              f"退回原始字节 —— 意味着改它的注释也会触发重建")
+        return hashlib.sha256(src.encode("utf-8")).hexdigest()
+    canon = json.dumps(data, sort_keys=True, ensure_ascii=False,
+                       separators=(",", ":"), default=str)
+    return hashlib.sha256(canon.encode("utf-8")).hexdigest()
 
 
 def _strip_docstrings(tree: ast.AST) -> ast.AST:

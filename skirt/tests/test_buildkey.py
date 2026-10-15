@@ -53,6 +53,42 @@ class Test配方哈希(unittest.TestCase):
         b = buildkey.recipe_hash(_配方({"files/x/a": "2"}))
         self.assertNotEqual(a, b)
 
+    def test_spec_toml_只改注释不算(self):
+        """★ 这个项目的配方注释占大头（openssh 那个 245 行里 180 行是注释）。
+
+        而约定里写着「只改注释不用升 release」—— 按字节哈希的话那句话是假的。
+        所以 spec.toml 按语义哈希（tomllib 解析后规范化），注释和排版都不参与。
+        """
+        a = buildkey.recipe_hash(_配方({"spec.toml": '[package]\nname = "x"\n'}))
+        b = buildkey.recipe_hash(_配方({"spec.toml": '# 新加一行注释\n[package]\nname = "x"\n'}))
+        self.assertEqual(a, b, "spec.toml 的注释不该进哈希")
+
+    def test_spec_toml_排版也不算(self):
+        a = buildkey.recipe_hash(_配方({"spec.toml": '[package]\nname = "x"\nrelease = 1\n'}))
+        b = buildkey.recipe_hash(_配方({"spec.toml": '[package]\nname   =   "x"\nrelease=1\n'}))
+        self.assertEqual(a, b, "空格对不对齐不该触发重建")
+
+    def test_spec_toml_内容变了要算(self):
+        a = buildkey.recipe_hash(_配方({"spec.toml": '[package]\nname = "x"\nversion = "1.0"\n'}))
+        b = buildkey.recipe_hash(_配方({"spec.toml": '[package]\nname = "x"\nversion = "1.1"\n'}))
+        self.assertNotEqual(a, b, "★ 语义哈希不等于不哈希 —— 内容变了必须变")
+
+    def test_spec_toml_解析不了就退回字节(self):
+        """解析不了要退回原始字节，而且要说出来（那条路正常走不到）。"""
+        a = buildkey.recipe_hash(_配方({"spec.toml": "这不是 = = toml"}))
+        b = buildkey.recipe_hash(_配方({"spec.toml": "这不是 = = toml  # 而注释不同"}))
+        self.assertNotEqual(a, b, "解析不了的时候按字节算，保守那头")
+
+    def test_steps_sh_保持字节(self):
+        """★ 和 spec.toml 相反：shell 的注释【也】算进去。
+
+        剥 shell 注释要懂 heredoc、引号里的 `#`、续行 —— 剥错的后果是漏掉
+        一次真实改动，那比多算几次严重得多。
+        """
+        a = buildkey.recipe_hash(_配方({"steps.sh": "#!/bin/sh\necho hi\n"}))
+        b = buildkey.recipe_hash(_配方({"steps.sh": "#!/bin/sh\n# 注释\necho hi\n"}))
+        self.assertNotEqual(a, b, "shell 那边选保守那头，而这是有意的")
+
     def test_pycache_不算(self):
         d = _配方({"spec.toml": "x"})
         a = buildkey.recipe_hash(d)
