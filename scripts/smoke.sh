@@ -46,7 +46,7 @@ cd "$(dirname "$0")/.."
 
 ARCH=${ARCH:-$(uname -m)}
 [ "$ARCH" = "arm64" ] && ARCH=aarch64
-BUILDENV=${SKIRT_BUILDENV:-yojigenos/base-devel}
+BUILDENV=${SKIRT_BUILDENV:-yojigenos/devel}
 PROBE=hello
 
 FAILED=""
@@ -193,7 +193,7 @@ if [ -z "$SAMPLE" ]; then
 else
     NAMES=$(basename "$SAMPLE")
     # ★ 用 alpine 而不是 ${BUILDENV}：我们要有一个【带 apk-tools 的】环境，
-    #   而 base-devel 里没有 apk（实测：`command -v apk` 空）—— 那正是文档里
+    #   而 devel 里没有 apk（实测：`command -v apk` 空）—— 那正是文档里
     #   「盘里没有 apk」记过的那个坑的同族。`scripts/pack.sh` 用的也是
     #   alpine:latest，所以这里跟它一致。
     D=$(docker run --rm -v "$SAMPLE:/p.apk:ro" alpine:latest sh -c '

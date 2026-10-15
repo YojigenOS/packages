@@ -11,12 +11,12 @@ name: bootstrap
 # 必须有一条从 Debian 出发的路，这就是它。
 #
 # 引导跑通、包发布、devel 镜像组装出来之后，同一个 workflow 还有第二个用途：
-# 把 buildenv 填成 yojigenos/base-devel 再跑一遍，就是【自举验证】——用我们自己的
+# 把 buildenv 填成 yojigenos/devel 再跑一遍，就是【自举验证】——用我们自己的
 # 系统建我们自己的系统。那一步是 docs/决策记录/0011 那条界的验收。
 #
 # ── 为什么这一版不再建镜像 ───────────────────────────────────────────────
 #
-# 上一版（buildenv-{aarch64,x86_64}.yml）会自己拼出 base-devel 镜像并推送。
+# 上一版（buildenv-{aarch64,x86_64}.yml）会自己拼出 devel 镜像并推送。
 # 那件事搬到 distro 去了：镜像从 apk 仓库组装，风味定义在 distro 里。
 #
 #     packages/   配方 → .apk → apk 仓库        （生产）
@@ -28,15 +28,15 @@ name: bootstrap
 # ★ 而 2026-10-15 撞到过它自己的反例：上面那句「名字只出现在 distro 一次」写着
 #   的同时，这个文件里就把名字写了两遍，而 `release.yml` 里还有第三处。
 #   更糟的是那三处有两个不同的值 —— 这里当时写着 `yojigenos/devel`，而
-#   **那个镜像不存在**（Docker Hub 上 `devel` 是 401，`base-devel` 才有 tag）。
+#   **那个镜像不存在**（Docker Hub 上 `devel` 是 401，`devel` 才有 tag）。
 #
 #   名字的真出处是 `distro/variants/<风味>.toml` —— distro 发布时用的是
 #   `yojigenos/${{ inputs.flavor }}`，**镜像名就是变体名**。所以对的是
-#   `base-devel`（`distro/variants/base-devel.toml`），不是 `devel`。
+#   `devel`（`distro/variants/devel.toml`），不是 `devel`。
 #
-#   而 `base-devel → devel` 那个改名【没有发生】：distro 里没有 `devel.toml`，
+#   而 `devel → devel` 那个改名【没有发生】：distro 里没有 `devel.toml`，
 #   Docker Hub 上没有 `yojigenos/devel`，`0003-镜像命名与标签.md` 说的是
-#   `base-devel`。所以这里改回真的那个。
+#   `devel`。所以这里改回真的那个。
 #
 #   ★ 而真想改名的话，那是一次要跨两个仓库的改动（变体文件、0003 那张命名表、
 #     这边两处、release.yml 一处）——而 0003 是不可变的，所以它得先有一篇新的
@@ -69,7 +69,7 @@ on:
         options: [aarch64, x86_64, both]
         default: both
       buildenv:
-        description: '构建环境镜像，【不含 tag】。留空 = 从 Debian 底的临时环境出发（第一次引导）；填 yojigenos/base-devel = 用我们自己的（自举验证）'
+        description: '构建环境镜像，【不含 tag】。留空 = 从 Debian 底的临时环境出发（第一次引导）；填 yojigenos/devel = 用我们自己的（自举验证）'
         type: string
         default: ''
       deploy:

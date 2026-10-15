@@ -7,7 +7,7 @@
 # bootstrap.yml 用的是 FROM debian:stable-slim 的构建环境——那是【借来的
 # 起点】，用来做第一次引导（那时我们还没有自己的系统）。
 #
-# 这个 workflow 不同：它用 yojigenos/base-devel，那是用我们自己那套建出来的
+# 这个 workflow 不同：它用 yojigenos/devel，那是用我们自己那套建出来的
 # glibc 系统。所以它是「用我们自己的系统建我们自己的包」这条路上的一步。
 #
 # 拉的是 Docker Hub 上已发布的镜像（由 distro 从 apk 仓库组装后推上去的）。
@@ -20,10 +20,10 @@
 # ── 建哪些包 ──────────────────────────────────────────────────────────────
 #
 # 由输入决定，默认 hello。它是个探针：构建依赖只有 gettext / gcc / make，
-# 而这三样 base-devel 里都有——所以【不需要先建任何东西】，十几秒就好。
+# 而这三样 devel 里都有——所以【不需要先建任何东西】，十几秒就好。
 #
 # ★ 不是 bootstrap 全量。建 50 个包要两小时，而且其中大部分（gcc、python3、
-#   linux、cmake）是【建 base-devel 镜像】需要的，不是这里需要的。
+#   linux、cmake）是【建 devel 镜像】需要的，不是这里需要的。
 #   「要建哪些包」的答案是「看要交付什么」，不是「全建一遍」。
 #
 # ── 可以分批跑，一轮失败不用从头再来 ──────────────────────────────────────
@@ -45,7 +45,7 @@
 #   「这一轮让我建的包都产出了」。
 #
 #   全部建齐之后再跑一次（那时所有包都会被跳过，几秒钟），带上
-#   check_flavor=base-devel 做完整验收。
+#   check_flavor=devel 做完整验收。
 #
 # ── 签名为什么必须在这里 ──────────────────────────────────────────────────
 #
@@ -257,16 +257,16 @@ jobs:
       # ── 构建环境：我们自己的 ────────────────────────────────────────────
       #
       # ★ 不是 `docker build bootstrap`（那是 Debian 底的）。
-      #   这是用我们自己那套建出来的 base-devel 镜像。
+      #   这是用我们自己那套建出来的 devel 镜像。
       - name: 拉我们自己的构建环境
         run: |
           set -euo pipefail
-          SRC="yojigenos/base-devel:edge-${{ inputs.arch }}"
+          SRC="yojigenos/devel:edge-${{ inputs.arch }}"
           docker pull "$SRC"
-          docker tag "$SRC" "yojigenos/base-devel:${{ inputs.arch }}"
+          docker tag "$SRC" "yojigenos/devel:${{ inputs.arch }}"
 
           echo "── 它是什么 ──"
-          docker run --rm "yojigenos/base-devel:${{ inputs.arch }}" \
+          docker run --rm "yojigenos/devel:${{ inputs.arch }}" \
             /usr/bin/bash -c 'echo "  bash $BASH_VERSION"; /usr/bin/gcc --version | head -1'
 
       # ── 建包：用现有的 devel，不从零 ──────────────────────────────────
@@ -277,7 +277,7 @@ jobs:
       #                          provides = bootstrap/provides.txt（4 项 + 断环）
       #
       #     普通构建（用 devel） ★ 就是这里 ★
-      #                          构建环境 = yojigenos/base-devel
+      #                          构建环境 = yojigenos/devel
       #                          provides = ★ 那个环境里有什么 ★
       #
       # 后者是这里的场景：devel 是我们自己那 39 个包拼出来的，依赖【已经在了】，
@@ -285,7 +285,7 @@ jobs:
       #
       # 【provides 为什么从 distro 读，而不是在这里写一份】
       #
-      # 因为"devel 里有什么"的定义在 distro/variants/base-devel.toml 里。
+      # 因为"devel 里有什么"的定义在 distro/variants/devel.toml 里。
       # 在这里抄一份就是"同一个东西两个出处"——项目里已经为这个吃过亏。
       - name: 读出 devel 提供了哪些包
         run: |
@@ -306,7 +306,7 @@ jobs:
           # 闭包才是镜像里真正有的东西（镜像里有 46 个，列表上只有 40 个）。
           LIST=$(python3 -c "
           import tomllib, pathlib
-          v = tomllib.loads(pathlib.Path('.distro/variants/base-devel.toml').read_text())['variant']
+          v = tomllib.loads(pathlib.Path('.distro/variants/devel.toml').read_text())['variant']
           print(' '.join(v['packages']))")
 
           CLOSURE=$(./skirt/skirt provides $LIST)
@@ -325,7 +325,7 @@ jobs:
           #   一个看不出原因的方式失败。
           #
           #   实测撞上的：x86_64 是 10-11 建的镜像，而 pkgconf 是后来才加进
-          #   base-devel.toml 的。于是
+          #   devel.toml 的。于是
           #
           #       ── 建 pkgconf ──      建了 ✓
           #       ── 建 shadow ──       configure.ac:245: error:
@@ -343,7 +343,7 @@ jobs:
 
       - name: 建包
         env:
-          SKIRT_BUILDENV: yojigenos/base-devel
+          SKIRT_BUILDENV: yojigenos/devel
         run: |
           set -euo pipefail
           # 依赖由上面的 SKIRT_PROVIDES 声明为"已提供"，所以只有目标本身会被建。

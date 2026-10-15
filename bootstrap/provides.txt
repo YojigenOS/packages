@@ -6,7 +6,7 @@
 # ★ 先说清楚一件事：**这份文件只是【兜底】。**
 #
 #   构建环境是【我们自己的】yojigen-os 镜像时，基线不从这里读——CI 会把
-#   distro 那边 base-devel 风味的包列表通过 SKIRT_PROVIDES 传进来
+#   distro 那边 devel 风味的包列表通过 SKIRT_PROVIDES 传进来
 #   （见 deps.py 的 load_host_provides()）。那时基线 = 那个环境的全部包。
 #
 #   这份文件是**没有那个环境时**用的：一个借来的起点（比如 Debian）提供了
@@ -90,7 +90,7 @@ binutils
 # 依赖解析里去掉，glibc → make → glibc 立刻成环。
 #
 # 它退出基线的条件不是"我们构建了它"，而是"构建环境换成了我们自己的镜像"
-# ——★ 而那个条件**已经满足了**：CI 里的构建环境就是 yojigenos/base-devel，
+# ——★ 而那个条件**已经满足了**：CI 里的构建环境就是 yojigenos/devel，
 #   基线由 SKIRT_PROVIDES 从 distro 那边的风味定义传进来。
 #
 #   所以下面这几项不影响发布那条路（那时这份文件根本不读）。

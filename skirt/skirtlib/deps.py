@@ -20,7 +20,7 @@ def load_host_provides() -> set[str]:
     ★ SKIRT_PROVIDES —— 环境变量的内容，逗号或空白分隔。
 
       用在「构建环境是我们自己的 devel」时：那个环境里有的是
-      variants/base-devel.toml 里那 39 个包，而不是 bootstrap/provides.txt
+      variants/devel.toml 里那 39 个包，而不是 bootstrap/provides.txt
       里那四项。那四项是给【借来的 Debian 起点】写的。
 
       为什么不写死一个文件：因为 devel 的定义在 distro 仓库里（风味定义），

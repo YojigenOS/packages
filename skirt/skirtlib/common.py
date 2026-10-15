@@ -20,8 +20,8 @@ LOG_DIR = ROOT / "var" / "logs"
 HOST_PROVIDES_FILE = ROOT / "bootstrap" / "provides.txt"
 #: 构建环境镜像。默认是 Debian 底的那个（bootstrap 构建出来的）。
 #:
-#: 用 SKIRT_BUILDENV 可以换掉它——这正是自举的验证方式：把 base-devel 拼出来
-#: 导入成镜像，然后 `SKIRT_BUILDENV=yojigenos/base-devel ./skirt/skirt build ...`。
+#: 用 SKIRT_BUILDENV 可以换掉它——这正是自举的验证方式：把 devel 拼出来
+#: 导入成镜像，然后 `SKIRT_BUILDENV=yojigenos/devel ./skirt/skirt build ...`。
 #: 跑得通，就说明我们的系统能构建我们自己的东西；跑不通，第一个报错就是答案。
 BUILDENV_IMAGE = os.environ.get("SKIRT_BUILDENV", "yojigenos/buildenv")
 
@@ -48,7 +48,7 @@ CCACHE_DIR = Path(os.environ.get("SKIRT_CCACHE", ROOT.parent / "ccache"))
 #: 缓存在容器里看到的目录。宿主的 CCACHE_DIR 挂到这里。
 #:
 #: 驱动会把它显式传进容器（`-e CCACHE_DIR=...`），不靠镜像的 ENV——
-#: base-devel 是 docker import 出来的，那种镜像不带 ENV。
+#: devel 是 docker import 出来的，那种镜像不带 ENV。
 CCACHE_MOUNT = "/ccache"
 
 #: 缓存上限。16 GB 是按最坏情况定的：gcc 一个包的中间产物就有几个 GB。

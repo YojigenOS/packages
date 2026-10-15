@@ -22,7 +22,7 @@
 [package]
 name        = "linux"
 version     = "7.2.9"
-release     = 1
+release     = 3
 date        = 2026-10-11T13:00:00Z
 description = "Linux 内核（可启动镜像）"
 section     = "core"

@@ -4,7 +4,7 @@
 # 它不是你发行版的一部分。
 #
 # ★ 而「被 YojigenOS 自己的系统取代」这件事【已经发生了】：
-#   现在 CI 里的构建环境是 yojigenos/base-devel —— 我们自己的镜像，
+#   现在 CI 里的构建环境是 yojigenos/devel —— 我们自己的镜像，
 #   里面每个包都是我们建的（它自称 NAME="YojigenOS"）。
 #   基线也随之换了来源（SKIRT_PROVIDES ← distro 那边的风味定义）。
 #

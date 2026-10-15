@@ -496,7 +496,7 @@ def run_in_container(srcrel: str, srcname: str, arch: str, spec: dict, epoch: in
         "cleanup() {\n"
         '  find /in/dest \\( -perm -4000 -o -perm -2000 \\) -type f > /tmp/.setid 2>/dev/null || true\n'
         #   ★ 而这一句必须【找到那个工具】才有效 —— 第一版我写的是裸的 `getcap`，
-        #     而 base-devel 里没有它（libcap 只是构建依赖，合并进来的是它的库，
+        #     而 devel 里没有它（libcap 只是构建依赖，合并进来的是它的库，
         #     命令行工具在 /usr/sbin 而那里不在默认 PATH 上）。于是那句
         #     `… || true` 静默地什么都没做，能力位照样丢。
         #
@@ -863,9 +863,9 @@ def run_in_container(srcrel: str, srcname: str, arch: str, spec: dict, epoch: in
         "-e", "LD_LIBRARY_PATH=/usr/lib",
         "-e", "LIBRARY_PATH=/usr/lib",
         # ccache 的两个设置也显式传，不靠镜像的 ENV——理由同上面那段 PATH：
-        # base-devel 是 docker import 出来的，那种镜像不带 ENV。
+        # devel 是 docker import 出来的，那种镜像不带 ENV。
         #
-        # 实测过一次：导入的 base-devel 里 CCACHE_DIR 是空的。后果有两层——
+        # 实测过一次：导入的 devel 里 CCACHE_DIR 是空的。后果有两层——
         # 缓存写进容器内临时的 ~/.cache/ccache（白挂载），而且包装脚本末尾
         # 那句 `du -sh "$CCACHE_DIR"` 在 set -u 下会直接把构建搞崩。
         "-e", f"CCACHE_DIR={CCACHE_MOUNT}",
