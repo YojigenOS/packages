@@ -35,12 +35,43 @@ sha256 = "e6738e29597f733270731aa90600f37ffdc045079dfc27ec7e8192cc81085c3e"
 [dependencies]
 # binutils 必须是运行时依赖：gcc 自己不汇编也不链接，它调用 `as` 和 `ld`。
 #
-# 这个漏声明是被自举试出来的。换掉构建环境之后，同一个配方产出的 hello 二进制
-# 多了一个 GCS 位（BTI, PAC, GCS 而不是 BTI, PAC）。查下去才发现：声明里没有
-# binutils，所以构建 sysroot 里没有它，gcc 只好用构建环境镜像自带的那份——
-# Debian 的 as 2.44。我们自己的 binutils 2.47 根本没用上，而且没有任何地方报错。
+# ★ 真正的理由是【汇编器版本门槛】：本 gcc 16.2 用 AEABI 构建属性声明分支保护，
+#   它生成的汇编里有这几行
 #
-# 加上它之后，Debian 环境里构建也会用我们自己的 as，两边就一致了。
+#       .aeabi_subsection aeabi_feature_and_bits, optional, ULEB128
+#       .aeabi_attribute Tag_Feature_BTI, 1
+#       .aeabi_attribute Tag_Feature_PAC, 1
+#       .aeabi_attribute Tag_Feature_GCS, 1
+#
+#   而 2.46 之前的 as 不认这两条伪指令（实测：2.44 不认、2.47 认，中间那几版
+#   没逐版验）——【硬失败】，不是"少一个位"：
+#
+#       Error: unknown pseudo-op: `.aeabi_subsection'
+#       Error: unknown pseudo-op: `.aeabi_attribute'
+#
+#   所以构建 sysroot 里没有我们自己的 binutils 时，这个 gcc 在 Debian 那种环境里
+#   连一个目标文件都产不出来。实测：把 `runtime` 里的 `binutils` 去掉、用 Debian
+#   底的环境建 hello，configure 当场倒在 "C compiler cannot create executables"。
+#   声明上它，两边用的都是我们的 as/ld。
+#
+# ── 这段注释原来把【理由】写错了（2026-10-15 实测更正）────────────────────
+#
+# 原文是「漏声明 → 用上 Debian 的 as 2.44 → 产物多一个 GCS 位（BTI,PAC,GCS 而
+# 不是 BTI,PAC）」。方向对（差异确实来自环境），因果错。两个实验：
+#
+#   ① GCS 位不是 as 决定的：把【Debian 的 gcc 14.2】的输出分别交给 Debian 的
+#      as 2.44 和我们的 as 2.47 汇编，两个 .o 逐字节相同（1512 字节，段表一致）。
+#      GCS 位来自源码里的 `Tag_Feature_GCS` —— 那是【我们的 gcc 16.2】生成的；
+#      Debian 的 gcc 14.2 只生成 .note.gnu.property（BTI|PAC）。
+#   ② 而最终二进制上那个位是【链接期对全部输入取"与"】：我们 gcc 编出来的 hello
+#      对象都带 GCS，但只要 crt 来自 Debian 的 glibc（它不带），产物就是 BTI|PAC；
+#      换成我们自己那份 glibc 的 crt，才是 BTI|PAC|GCS。
+#      → GCS 位是**整个环境（连 glibc 一起）的产物**，不是某一个工具的开关。
+#
+# 所以：结论（要声明 binutils）不变，理由换成上面那个版本门槛 —— 而"理由错了"
+# 比"漏了一行"更该修：理由会被下一个人拿去推别的结论。这一条以后不用再查了；
+# 差异本身是"环境变了产物就变"的正常表现，见 docs/待办.md 1.5.B 与
+# docs/约定/客观性.md。
 runtime = ["glibc", "binutils", "gmp", "mpfr", "mpc"]
 build   = ["make", "gmp", "mpfr", "mpc"]
 
