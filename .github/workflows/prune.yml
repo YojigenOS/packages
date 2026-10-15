@@ -66,7 +66,10 @@ jobs:
           chmod 600 "$RUNNER_TEMP/signing.rsa"
           echo "SIGNING_KEY_FILE=$RUNNER_TEMP/signing.rsa" >> "$GITHUB_ENV"
 
-      - name: 清理（默认干跑）
+      # ★ 步骤名要说【这一次真的会做什么】—— 它原来写死成「默认干跑」，
+      #   而 go=true 真删的时候也这么显示。那是一条「看起来正常而实际是错的」
+      #   日志：翻历史的人会以为那几次都只是干跑。
+      - name: 清理（${{ inputs.go && '真的删' || '干跑，不动线上' }}）
         env:
           S3_AK: ${{ secrets.S3_AK }}
           S3_SK: ${{ secrets.S3_SK }}
