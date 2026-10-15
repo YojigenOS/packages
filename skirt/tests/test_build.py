@@ -362,3 +362,42 @@ class Test配方里的键都是真的(unittest.TestCase):
             if extra:
                 bad.append(f"{name}: [build] 里多余的键 {extra}")
         self.assertFalse(bad, "这些键写错了，而写错【不会报错】只会被静默忽略：\n  " + "\n  ".join(bad))
+
+
+class Test不许有改了不生效的配置(unittest.TestCase):
+    """★ `steps.sh` 重定义了 `build()` 时，spec 里的 `[build] configure` 是【死代码】。
+
+    机理（`build.py` 生成的 `run.sh`）：
+
+        build() { <spec 里那份 configure> }        ← 先定义
+        if [ -f "$WORK/steps.sh" ]; then . "$WORK/steps.sh"; fi    ← 再 source
+        "# steps.sh 若存在，可以通过重定义上面任意函数来覆盖默认行为"
+
+    所以 `steps.sh` 里的 `build()` 整个把它盖掉。**危险的不是重复，是
+    「改在这一份上不会生效而没有任何提示」** —— 而 `procps/steps.sh` 里
+    自己就写着一句"写两处会不一致"。
+
+    2026-10-15 有四个配方是这个形状（chrony / procps / strace / lsof），
+    spec 里那份全删了（删之前逐条比对过，两边内容一致）。
+    """
+
+    def test_重定义了_build_就不该在_spec_里留_configure(self):
+        import pathlib as _p
+        import re
+        import tomllib
+        from skirtlib.common import RECIPES_DIR
+
+        坏 = []
+        for spec in sorted(_p.Path(RECIPES_DIR).rglob("spec.toml")):
+            steps = spec.parent / "steps.sh"
+            if not steps.is_file():
+                continue
+            正文 = re.sub(r"^\s*#.*$", "", steps.read_text(), flags=re.M)
+            if not re.search(r"^\s*build\s*\(\)\s*\{", 正文, re.M):
+                continue
+            d = tomllib.loads(spec.read_text())
+            if "configure" in (d.get("build") or {}):
+                坏.append(spec.parent.name)
+        self.assertFalse(坏, "这些配方的 steps.sh 重定义了 build()，"
+                             "而 spec 里还留着一份永远不会生效的 configure：\n  "
+                             + "\n  ".join(坏))

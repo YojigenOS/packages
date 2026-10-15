@@ -32,20 +32,11 @@ build   = ["make", "gcc", "autoconf", "automake", "libtool"]
 [build]
 type       = "autotools"
 autoreconf = true
-configure  = [
-    "--prefix=/usr",
-
-    # ★ 用 --without-libtirpc 把它钉死，而不是留给 auto。
-    #
-    #   上游的默认是 auto：有 libtirpc 就用（多支持 NFS 的 RPC），
-    #   没有就退回自带的 stub。
-    #
-    #   我们这里选"明确不要"，理由和 iproute2 的 SBINDIR 那条一样 ——
-    #   **取决于构建环境里碰巧有什么，等于同一个配方在不同机器上产出不同**。
-    #   而那正是 e2fsprogs 那次撞过的东西（x86_64 96 个文件 vs aarch64 143 个，
-    #   差别只在于镜像里有没有 pkg-config）。
-    #
-    #   代价是不支持 NFS 的 RPC 解析。对我们现在的用途（本地排障）没有影响，
-    #   而且这个代价是显式记录下来的，不是碰运气碰出来的。
-    "--without-libtirpc",
-]
+# ★ 这一段 `configure` 2026-10-15 删掉了 —— 它是【死代码】。
+#   这个配方的 `steps.sh` 重定义了 `build()`，而 `steps.sh` 是在
+#   `run.sh` 定义完默认实现【之后】被 source 的，所以它整体覆盖 ——
+#   驱动代码里那句注释写得很清楚：
+#       "# steps.sh 若存在，可以通过重定义上面任意函数来覆盖默认行为"
+#
+#   危险的地方不是重复，是**改在这一份上不会生效而没有任何提示**。
+#   真正在用的那份在 `steps.sh` 里（删之前逐条比对过，两边一致）。

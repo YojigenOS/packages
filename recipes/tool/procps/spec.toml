@@ -37,39 +37,11 @@ build   = ["make", "gcc", "autoconf", "automake", "libtool", "gettext", "pkgconf
 type      = "autotools"
 # 上游是 git 树，没有 configure —— 只有 configure.ac。现场生成。
 autoreconf = true
-configure = [
-    "--prefix=/usr",
-    "--sysconfdir=/etc",
-    # ★ 它默认会去看 systemd 在不在，在的话装 systemd 单元。
-    #   我们还没有 systemd，而且就算有，这个包也不该管那件事。
-    "--with-systemd=no",
-    # 不要 8-bit 的 watch（那是给老终端的）。
-    "--without-watch8bit",
-    "--disable-static",
-
-    # ── NLS（gettext 翻译）关掉 ──
-    #
-    # ★ 这一条我一开始写错了成因，留着这段是因为错的那版很典型：
-    #
-    #   我原来写的是「gettext 的构建需要 autopoint 先跑一遍，而我们没跑」。
-    #   **那是错的** —— 日志里明明写着：
-    #
-    #       Copying file po/Makefile.in.in            ← autopoint 跑了，生成了
-    #       checking whether NLS is requested... no   ← --disable-nls 生效了
-    #       config.status: creating po/Makefile.in    ← 也生成了
-    #
-    #   真正的成因在 procps 自己的 Makefile.am 里：
-    #
-    #       SUBDIRS = local po-man po testsuite
-    #
-    #   `po` 是【无条件】列着的。NLS 一关，gettext 生成的那份 po/Makefile
-    #   就没有 all 目标，顶层 make 走进去就断
-    #   （Making all in po / No rule to make target 'all'）。
-    #
-    #   修法在 steps.sh 里（把 po 从 SUBDIRS 摘掉）。
-    #
-    # ★ 而 NLS 关掉本身还有一层代价要记住：**它是"程序输出显示什么语言"的
-    #   机制**。关掉意味着这些工具的报错信息是英文——这与「中文优先」是有
-    #   张力的。修法在 0006（apk 自己的 i18n）那条线上。
-    "--disable-nls",
-]
+# ★ 这一段 `configure` 2026-10-15 删掉了 —— 它是【死代码】。
+#   这个配方的 `steps.sh` 重定义了 `build()`，而 `steps.sh` 是在
+#   `run.sh` 定义完默认实现【之后】被 source 的，所以它整体覆盖 ——
+#   驱动代码里那句注释写得很清楚：
+#       "# steps.sh 若存在，可以通过重定义上面任意函数来覆盖默认行为"
+#
+#   危险的地方不是重复，是**改在这一份上不会生效而没有任何提示**。
+#   真正在用的那份在 `steps.sh` 里（删之前逐条比对过，两边一致）。

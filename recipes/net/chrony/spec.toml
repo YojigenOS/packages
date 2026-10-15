@@ -52,29 +52,11 @@ build   = ["make", "gcc", "autoconf", "automake", "libtool", "libcap"]
 #
 #   所以走 custom，configure 和 make 都由 steps.sh 明说。
 type = "custom"
-configure  = [
-    "--prefix=/usr",
-    "--sysconfdir=/etc",
-    "--localstatedir=/var",
-    "--sbindir=/usr/sbin",
-
-    # ★ 关掉的这几样都要【我们没有的库】。每一条都是具体的：
-    #
-    #   --without-readline / --without-editline   命令行编辑要 libedit/readline
-    #   --disable-nts                             NTS 要 nettle 或 gnutls
-    #   --disable-sechash                         NTS 的 SipHash 也来自 nettle
-    #
-    # ★ 而 linuxcaps 是【留着】的 —— libcap 我们有（这一批刚建过），
-    #   它能换来"起步之后把 root 权限丢掉"。那是个实打实的安全属性，
-    #   不是可选项。
-    "--without-readline",
-    "--without-editline",
-    "--disable-nts",
-    "--disable-sechash",
-
-    # ★ 不用 seccomp 过滤。它要 libseccomp，而我们没有 ——
-    #   而 chrony 会【静默】降级，所以显式关掉，让"没有"是一个决定。
-    "--disable-scfilter",
-
-    "--disable-nls",
-]
+# ★ 这一段 `configure` 2026-10-15 删掉了 —— 它是【死代码】。
+#   这个配方的 `steps.sh` 重定义了 `build()`，而 `steps.sh` 是在
+#   `run.sh` 定义完默认实现【之后】被 source 的，所以它整体覆盖 ——
+#   驱动代码里那句注释写得很清楚：
+#       "# steps.sh 若存在，可以通过重定义上面任意函数来覆盖默认行为"
+#
+#   危险的地方不是重复，是**改在这一份上不会生效而没有任何提示**。
+#   真正在用的那份在 `steps.sh` 里（删之前逐条比对过，两边一致）。
