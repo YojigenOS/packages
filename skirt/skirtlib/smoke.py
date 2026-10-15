@@ -106,13 +106,17 @@ def parse_collisions(text: str) -> int:
         return 0
 
 
-def payload_shape(payload: Path) -> tuple[int, bool]:
+def payload_shape(payload: Path, probe: str = PROBE) -> tuple[int, bool]:
     """产物形态： (文件+符号链接的条数, 那个可执行文件在不在)。
 
     「收集成功」不等于「收到了东西」—— 空产物曾经也报成功。
+
+    ★ `probe` 是从上面传下来的（`--probe` 可以换掉它）。写死成 `PROBE` 的话，
+      换一个探针包时"可执行位"那一格查的就还是 hello —— 而它会**报成功**，
+      因为 hello 确实在。那种"查了别的东西还说好"的错最贵。
     """
     count = sum(1 for p in payload.rglob("*") if p.is_file() or p.is_symlink())
-    binary = (payload / "usr/bin" / PROBE)
+    binary = payload / "usr/bin" / probe
     return count, (binary.is_file() and os.access(binary, os.X_OK))
 
 
@@ -350,7 +354,7 @@ def smoke(arch: str, *, probe: str = PROBE, buildenv: str | None = None,
     if payload is None:
         rep.fail("没有产物目录", "payload")
     else:
-        count, binary_ok = payload_shape(payload)
+        count, binary_ok = payload_shape(payload, probe)
         if count == 0:
             rep.fail("产物是空的——「收集成功」不等于「收到了东西」", "empty")
         else:

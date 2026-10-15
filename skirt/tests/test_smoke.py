@@ -91,6 +91,20 @@ class Test第三项_产物形态(unittest.TestCase):
         self.assertEqual(count, 1)
         self.assertTrue(ok)
 
+    def test_探针名是传下来的_不是写死的(self):
+        """★ 写死的话，换成别的探针包时这一格查的还是 hello —— 而它会报成功。"""
+        binary = self.payload / "usr/bin" / "glibc"
+        binary.parent.mkdir(parents=True, exist_ok=True)
+        binary.write_text("#!/bin/sh\n")
+        binary.chmod(0o755)
+
+        count, ok = smoke.payload_shape(self.payload, probe="glibc")
+
+        self.assertEqual(count, 1)
+        self.assertTrue(ok)
+        # 而默认那个探针不在这儿 —— 不能算它过
+        self.assertFalse(smoke.payload_shape(self.payload)[1])
+
     def test_存在但不可执行要报出来(self):
         """★ 「在」和「能跑」是两件事（那一格原来就是"缺了个执行位"）。"""
         self._binary(0o644)
