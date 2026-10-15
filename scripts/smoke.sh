@@ -30,6 +30,8 @@
 #   ③ 产物形态     对应「产出了一个空包也算成功」。
 #   ④ 它能跑       对应「产物在容器里存在，但在真实根文件系统里跑不起来」。
 #   ⑤ 中文能显示   对应「中文优先」这个承诺——它实现得好好的，但从没被验证过。
+#   ⑥ 可复现归一化 对应「.apk 的可复现只挂在 SOURCE_DATE_EPOCH 这一个开关上，
+#                   而链上没有第二处归一化，也没有检查守着」。见客观性.md。
 #
 # ⑤ 用的是 hello 自己的设计意图。它的配方注释里写着：
 #
@@ -166,6 +168,50 @@ else
         pass "繁体输出正确（${TW}）"
     else
         fail "繁体没出来：[$TW]" "zh_TW"
+    fi
+fi
+
+# ── ⑥ 可复现的归一化 ──────────────────────────────────────────────────────
+#
+# ★ 守的是什么（2026-10-15 记的那条欠账）：
+#
+#   `.apk` 里所有条目的 mtime 都由 `apk mkpkg` 统一重设成 `SOURCE_DATE_EPOCH`
+#   ——**这是整条链上唯一的归一化**。而它一旦不生效（没人传那个变量、或者将来
+#   某个包不走 `pack.sh` 自己打包），第②步留下的墙钟会**直接进包**，而没有任何
+#   别的地方会告诉你。
+#
+#   所以这里读一个已经打好的包，看那件事到底发生没有。
+#
+# ★ 而判据是 `apk adbdump` —— **不是"解开看时间戳"**。解包器不恢复符号链接和
+#   目录的时间戳（apk-tools 的 fs_fsys.c 里，那处 utimensat 只对非符号链接调用），
+#   所以"解出来时间不对"会假阳性。实测：同一个包解两次、隔 80 秒，符号链接的
+#   时间跟着走，而真实文件不变。
+echo "  ⑥ 可复现的归一化"
+SAMPLE=$(ls -t "$PWD"/var/pkgs/*/*.apk 2>/dev/null | head -1 || true)
+if [ -z "$SAMPLE" ]; then
+    note "跳过：var/pkgs 里没有 .apk（那要有一次 pack.sh 才产得出来）"
+else
+    NAMES=$(basename "$SAMPLE")
+    # ★ 用 alpine 而不是 ${BUILDENV}：我们要有一个【带 apk-tools 的】环境，
+    #   而 base-devel 里没有 apk（实测：`command -v apk` 空）—— 那正是文档里
+    #   「盘里没有 apk」记过的那个坑的同族。`scripts/pack.sh` 用的也是
+    #   alpine:latest，所以这里跟它一致。
+    D=$(docker run --rm -v "$SAMPLE:/p.apk:ro" alpine:latest sh -c '
+        apk adbdump /p.apk 2>/dev/null | grep -oE "mtime: [0-9]+" | awk "{print \$2}" | sort -u
+    ' 2>/dev/null)
+    N=$(printf "%s" "$D" | grep -c . || true)
+    if [ "$N" -eq 0 ]; then
+        fail "读不出这个包的 mtime（adbdump 有问题？）" "$NAMES"
+    elif [ "$N" -gt 1 ]; then
+        fail "一个包里出现了 $N 种 mtime —— 归一化没生效" "$NAMES: $(printf "%s" "$D" | tr "\n" " ")"
+    else
+        # 而它【不该】是刚才那会儿 —— 是的话说明它抄的是墙钟，不是 SOURCE_DATE_EPOCH。
+        NOW=$(date +%s); AGE=$((NOW - D))
+        if [ "$AGE" -lt 3600 ]; then
+            fail "那个 mtime 就在一小时之内（${D}）—— 它抄的是墙钟，不是 SOURCE_DATE_EPOCH" "$NAMES"
+        else
+            pass "只有一个 mtime（$(date -r "$D" "+%Y-%m-%d %H:%M" 2>/dev/null || echo "$D")），来自 $NAMES"
+        fi
     fi
 fi
 

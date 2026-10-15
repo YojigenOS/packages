@@ -159,8 +159,17 @@ else:
         _ts = str(int(datetime.datetime.fromisoformat(_old).timestamp()))
         print("    ⚠ 这份 meta.json 只有旧的 built_at（%s）—— 它的时间戳本来就不确定" % _old)
     except Exception:
-        _ts = "0"
-        print("    ⚠ 这份 meta.json 里没有可用的时间戳 —— 用 0")
+        # ★ 不"用 0"糊过去 —— 那是【静默地产出一个时间戳全错的可复现性破口】。
+        #
+        #   而为什么值得为它停下来：.apk 的可复现**只有这一个开关**（`apk mkpkg`
+        #   会把所有条目的 mtime 重设成它，链上没有第二处归一化）。所以拿不到
+        #   它的那个包，字节就一定不可复现，而没有任何别的地方会告诉你。
+        #
+        #   实测过这一点（2026-10-15，控制变量）：设了 SOURCE_DATE_EPOCH 的四个
+        #   只差 mtime 的树产出【完全相同】的 .apk；不设则四个互不相同。
+        print("    ✗ 这份 meta.json 里没有可用的时间戳（source_date_epoch / built_at 都没有）")
+        print("      —— 拿不到它就没法保证可复现，所以这个包不打了。")
+        raise SystemExit(1)
 
 (pathlib.Path(out_script).parent / "epoch").write_text(_ts)
 

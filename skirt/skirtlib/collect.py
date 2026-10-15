@@ -102,6 +102,28 @@ def _write_package(out: Path, destdir: Path, wanted: set[str]) -> None:
             if dst.is_symlink() or dst.exists():
                 dst.unlink()
             dst.symlink_to(os.readlink(src))
+            # ★ 符号链接【自己】的 mtime 也要带过来。
+            #
+            #   `os.symlink()` 建出来的链接，时间戳是"此刻"—— 而真实文件走的是
+            #   `copy2`，它连时间戳一起带。于是同一个 payload 里，符号链接和目录
+            #   带着墙钟，而文件带的是确定值。
+            #
+            #   ★ 而那【不影响产物】：`apk mkpkg` 会把所有条目的 mtime 统一重设
+            #     成 SOURCE_DATE_EPOCH（实测：设了它，四个只差 mtime 的树产出
+            #     完全相同的 .apk）。这一行是为了让**工作树自己**也是确定的 ——
+            #     否则任何"比对 var/output 两次构建"的检查都会假阳性。
+            #
+            #   ★★ 而 `follow_symlinks=False` 不是可选的：默认的 `os.utime`
+            #      改的是**链接指向的那个文件**，链接自己不动。实测差别是
+            #      2020 vs now。这和 build.py 里"chown 顺手清掉 setuid"是同一族
+            #      的坑：**默认行为作用在另一个对象上。**
+            try:
+                st = src.lstat()
+                os.utime(dst, ns=(st.st_atime_ns, st.st_mtime_ns),
+                         follow_symlinks=False)
+            except (OSError, NotImplementedError):
+                # 有些平台/文件系统不支持。**而它不影响产物**（见上），所以不拦。
+                pass
         elif src.is_dir():
             dst.mkdir(parents=True, exist_ok=True)
             # ★ 目录的模式也要带过来。
