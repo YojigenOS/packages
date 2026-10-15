@@ -58,7 +58,7 @@ package() {
     # 真目录 sbin 是那个 bug 的指纹。它回来了就说明 SBINDIR 没传进去。
     [ -d "$PKGDEST/sbin" ] && {
         echo "  ✗ 包里出现了真目录 sbin —— SBINDIR 没生效："
-        ls -la "$PKGDEST/sbin" | head -5 | sed 's/^/      /'
+        ls -la "$PKGDEST/sbin" | head -5 | sed 's/^/      /' || true
         exit 1
     }
     echo "  ✓ 包里没有真目录 sbin"

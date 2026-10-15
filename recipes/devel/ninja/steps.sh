@@ -16,19 +16,34 @@ package() {
   install -Dm755 ninja "$PKGDEST/usr/bin/ninja"
 
   # bash 补全和手册页，有就带上（上游把它们放在 misc/ 里）。
-  [ -f misc/ninja.bash-completion ] && \
-      install -Dm644 misc/ninja.bash-completion \
-          "$PKGDEST/usr/share/bash-completion/completions/ninja" || true
-  [ -f misc/ninja.zsh-completion ] && \
-      install -Dm644 misc/ninja.zsh-completion \
-          "$PKGDEST/usr/share/zsh/site-functions/_ninja" || true
-  [ -f misc/ninja.1 ] && \
-      install -Dm644 misc/ninja.1 "$PKGDEST/usr/share/man/man1/ninja.1" || true
+  #
+  # ★ 这四处原来都是光秃秃的 `... || true` —— 而 `配方约定.md` 里那一条
+  #   （「让每一步说话」，四个实测事故换来的）说的就是这个：让「没跑成」和
+  #   「跑成了但没有东西」长得一模一样。
+  #
+  #   这里的风险是具体的：上游哪天把 `misc/` 挪走或者改名，补全、手册页、
+  #   还有 `ninja_syntax.py` 会【静默少掉】—— 而后者是给别的构建脚本 import 的
+  #   （meson 之外的一些工具用它）。没有一句话会说这件事。
+  #
+  #   所以每一处都加一句"没有就说话"。**不是让它在缺文件时失败** —— 上游确实
+  #   可能合法地去掉它们；是让缺的时候【有人知道】。
+  _带上() {
+      # $1 = 源文件   $2 = 目标路径（$PKGDEST 之下）
+      if [ -f "$1" ]; then
+          install -Dm644 "$1" "$PKGDEST$2"
+      else
+          echo "  ⚠ 上游没有 $1 —— 这一项没带上（$2）" >&2
+      fi
+  }
+
+  _带上 misc/ninja.bash-completion /usr/share/bash-completion/completions/ninja
+  _带上 misc/ninja.zsh-completion  /usr/share/zsh/site-functions/_ninja
+  _带上 misc/ninja.1               /usr/share/man/man1/ninja.1
 
   # 上游还有个 ninja_syntax.py，是给写 build.ninja 的 Python 脚本用的。
   # 有些项目（包括 meson 之外的一些工具）会 import 它。
-  [ -f misc/ninja_syntax.py ] && \
-      install -Dm644 misc/ninja_syntax.py \
-          "$(python3 -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])' \
-             | sed "s|^|$PKGDEST|")/ninja_syntax.py" || true
+  _带上 misc/ninja_syntax.py \
+      "$(python3 -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])' \
+         | sed "s|^|/|")/ninja_syntax.py"
+  unset -f _带上
 }

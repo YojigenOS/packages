@@ -36,10 +36,17 @@ package() {
 
     # ── 2. 权限分离的沙箱目录 ───────────────────────────────────────────
     #
-    # ★ 只设权限，不设属主：package() 是以【宿主用户】降权跑的（构建阶段
-    #   降权是驱动故意的），改属主会被拒：
-    #       install: cannot change owner and permissions of '.../var/empty'
-    #   属主由打包统一归零（tar 用 --owner=0 --group=0），不需要在这里管。
+    # ★ 只设权限，不设属主 —— 而理由在 2026-10-14 15:44 变过一次：
+    #
+    #   写这行的时候（00:24）package() 是以【宿主用户】降权跑的，`chown` 会
+    #   被拒（`install: cannot change owner and permissions of '.../var/empty'`）。
+    #   而 20 分钟后驱动改了：**package() 现在以 root 跑**（那次改动的第一个
+    #   动机就是本文件下面那个 `/root/.ssh` 的属主）。
+    #
+    #   所以 `-o root` 现在【做得到】。这里仍然不设，是因为不需要：
+    #   属主由打包统一归零（`skirt pack` 里 `chown -R 0:0`，tar 再走
+    #   `--owner=0 --group=0`）。**而这一行留着是对的** —— 它是那套归零的
+    #   一道独立保险，而不是对某种限制的让步。
     install -d -m 711 "$PKGDEST/var/empty"
 
     # ── 3. 首启钩子 ─────────────────────────────────────────────────────
@@ -86,20 +93,31 @@ package() {
     #   ★ 而 20-sshd 那个钩子早就知道这一类（它专门写过"只 chmod 是不够的"），
     #     但它只兜了 /root 和 /var/empty，没兜 .ssh —— 而它是【启动】钩子，
     #     运行中升级根本不会跑它。所以包本身必须是对的。
-    # ★★ 而 -o root 在这里【做不到】，因为构建是降权跑的（驱动里 setpriv）。
-    #   非 root 改不了属主，install 会直接失败：
+    # ★★ 这一段在 2026-10-15 改写过一次 —— 它原来的判断【已经作废】。
     #
-    #       install: cannot change owner and permissions of '/build/dest/root/.ssh':
-    #                Operation not permitted
+    #   它原来写的是「`-o root` 在这里【做不到】，因为构建是降权跑的（驱动里
+    #   setpriv）」。**那句话写下的 20 分钟之后就不再成立了**：驱动改成
+    #   package() 以 root 跑，而那次改动的第一个动机就是这个目录。
     #
-    #   所以试着设，失败了不影响 —— 真正的修正交给 20-sshd 那个启动钩子。
+    #   所以现在 `install -o root` 是【做得到】的：
     #
-    #   ★ 这不是绕过：整套东西就是这样设计的（驱动里
-    #     `chown -R "$HOSTUID:$HOSTGID" "$WORK"`），于是【所有包】的属主
-    #     都是构建用户。pantsu 拼 rootfs 时会归一成 root，所以镜像里是对的；
-    #     运行中 apk 装包保留真实 uid —— 两条路的结果不一样。
+    #       install -o root -g root -d -m 700 "$PKGDEST/root/.ssh"
     #
-    #   钩子就是为这个存在的。它原来修了 /root 和 /var/empty，漏了 .ssh。
+    #   ——也就是说这一处可以直接写对，不必绕。
+    #
+    # ★ 而 20-sshd 那个钩子【仍然必要】，只是理由不同了：
+    #
+    #       apk 装包     →  按包里的属主落盘（现在是 root ✓）
+    #       apk 升级     →  **保留已装文件的真实 uid** —— 而一台机器上
+    #                        /root/.ssh 可能是别的属主
+    #
+    #   所以钩子管的是【升级那条路】，不是"包做不到"。它原来修了 /root 和
+    #   /var/empty、漏了 .ssh，那是它自己的缺口。
+    #
+    #   ★ 而为什么曾经会不一样：驱动里 `chown -R "$HOSTUID:$HOSTGID" "$WORK"`
+    #     把【所有包】的属主都归成构建用户。pantsu 拼 rootfs 时归一成 root，
+    #     所以镜像里一直是对的；而运行中 apk 装包保留真实 uid。两条路的结果
+    #     不一样 —— 那才是这个钩子存在的原因。
     # ★★★ 而【不装成 /root/.ssh/authorized_keys】—— 这是这一版真正的改动。
     #
     #   装成那个路径的后果实测撞了两次（第 3 轮一次、刚才一次），而两次都是

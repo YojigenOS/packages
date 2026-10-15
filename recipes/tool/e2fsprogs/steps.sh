@@ -5,7 +5,7 @@
 
 package() {
     # ★ 重定义 package() 就等于把默认那一步接管过来，所以这行不能少。
-    #   驱动给 autotools 的默认步骤就是这一条（build.py:158）。
+    #   驱动给 autotools 的默认步骤就是这一条（build.py 里 autotools 那道默认步骤）。
     #
     #   我第一版【没有】这一行，于是进入包里的东西一个都没有——而报出来的错是
     #   "找不到 resize2fs"，看起来像路径问题，实际是根本没装。
@@ -141,7 +141,7 @@ package() {
         done
         if [ -z "$found" ]; then
             echo "  ✗ 找不到 ${f}——首启扩盘（resize2fs）和开机 fsck（e2fsck）都指着它" >&2
-            echo "    在 \$PKGDEST 下扫了一遍：$(find "$PKGDEST" -name "$f" 2>/dev/null | head -3)" >&2
+            echo "    在 \$PKGDEST 下扫了一遍：$(find "$PKGDEST" -name "$f" 2>/dev/null | head -3 || true)" >&2
             exit 1
         fi
         echo "  · $found"

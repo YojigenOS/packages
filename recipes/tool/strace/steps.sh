@@ -39,7 +39,7 @@ build() {
     if [ ! -f ./bootstrap ]; then
         echo "  ✗ ./bootstrap 不在上面那张表里"
         echo "    当前目录的内容（前 20 项）："
-        ls -la | head -20 | sed 's/^/      /'
+        ls -la | head -20 | sed 's/^/      /' || true
         exit 1
     fi
 

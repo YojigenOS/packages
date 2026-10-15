@@ -6,7 +6,7 @@ import os
 import shutil
 from pathlib import Path
 
-from .common import BUILD_DIR, HOST_PROVIDES_FILE, OUTPUT_DIR, RECIPES_DIR, ROOT, die, log, rmtree_force
+from .common import BUILD_DIR, HOST_PROVIDES_FILE, OUTPUT_DIR, ROOT, die, log, rmtree_force
 
 from .spec import direct_deps, latest_date, load_spec, package_rel, recipe_of
 
@@ -20,7 +20,9 @@ def load_host_provides() -> set[str]:
     ★ SKIRT_PROVIDES —— 环境变量的内容，逗号或空白分隔。
 
       用在「构建环境是我们自己的 devel」时：那个环境里有的是
-      variants/devel.toml 里那 39 个包，而不是 bootstrap/provides.txt
+      variants/devel.toml 里列的那些包，而不是 bootstrap/provides.txt
+    （★ 这里原来写着「那 39 个包」—— 2026-10-15 核的时候 devel 已经是 43 个了。
+     所以数字去掉了：**它算得出来，就不该靠人记得**。）
       里那四项。那四项是给【借来的 Debian 起点】写的。
 
       为什么不写死一个文件：因为 devel 的定义在 distro 仓库里（风味定义），

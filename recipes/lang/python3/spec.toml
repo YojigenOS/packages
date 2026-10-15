@@ -23,9 +23,14 @@
 #
 # ## 没有的模块
 #
-#   _ssl      要 openssl（还没建）
-#   readline  要 readline（还没建）
-#   curses    要 ncurses（还没建）
+#   _ssl      要 openssl（建了，但【还没进 devel 风味】）
+#   readline  要 readline（**确实还没配方**）
+#   curses    要 ncurses（建了，但【还没进 devel 风味】）
+#
+# ★ 这三行的说法 2026-10-15 按实改过。原文前两个都写着「还没建」，而
+#   `recipes/lib/openssl` 和 `recipes/lib/ncurses` 早建出来了 ——
+#   openssh / curl / apk-tools / tmux / vim / less / procps 都在用。
+#   准确的现状是「建了，但构建环境（`distro/variants/devel.toml`）里没有」。
 #
 # 三个都是可选的，python 会自己跳过并列出没编成的模块。glibc 的构建脚本
 # 只需要解释器本身。等 minimal 那条线走到 ncurses/readline/openssl 时，

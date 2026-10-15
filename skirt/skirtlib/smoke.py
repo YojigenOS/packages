@@ -66,13 +66,12 @@ from __future__ import annotations
 
 import os
 import re
-import shutil
 import subprocess
 import sys
 import time
 from pathlib import Path
 
-from .common import OUTPUT_DIR, BUILD_DIR, PKGS_DIR, ROOT, die, rmtree_force
+from .common import OUTPUT_DIR, BUILD_DIR, PKGS_DIR, ROOT, rmtree_force
 
 #: 探针包。它小、它有自己的中文设计意图（见模块顶上 ⑤）。
 PROBE = "hello"

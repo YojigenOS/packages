@@ -57,7 +57,7 @@ SHIM
     # 不验的话，失败会延后到 make 里那句看不清的 127。
     printf '.so ./SENTINEL\n底下的行\n' > /tmp/_soelim_test
     echo "应该被展开的内容" > ./SENTINEL
-    got=$(soelim < /tmp/_soelim_test | head -1)
+    got=$(soelim < /tmp/_soelim_test | head -1 || true)
     rm -f /tmp/_soelim_test ./SENTINEL
     [ "$got" = "应该被展开的内容" ] || { echo "  ✗ soelim 替身没展开（拿到的是：${got}）"; exit 1; }
     echo "  ✓ 替身验过：能读 stdin、能展开 .so"

@@ -78,7 +78,12 @@ from pathlib import Path
 from .common import OUTPUT_DIR, PKGS_DIR, die
 
 #: build_key 的旁路文件后缀。带 `.apk` 的完整文件名 + 它（见 ① 上面的解释）。
-BUILDKEY_SUFFIX = ".buildkey"
+# ★ 这个名字【只有一份出处】——在 `pack.py` 里（2026-10-15 收的）。
+#
+#   这里原来自己写了一份 `.buildkey`，并自己拼 `<apk 名>.buildkey`。两份常量
+#   漂开的表现正是 `pack.py` 注释里记着的那次事故：名字差几个字符 → 找不到 →
+#   说"盘上没有 key" → 每次都全量重建。**而它是静默的。**
+from .pack import BUILDKEY_SUFFIX, sidecar_name  # noqa: F401
 
 #: 从 `<名字>-<版本>-r<发布号>.apk` 的 stem 里剥出名字。
 #: 名字自己可能带连字符（glibc-dev），所以从右往左剥。
@@ -218,7 +223,7 @@ def plan(pkgs_dir: Path, output_dir: Path,
             # 子包走这条路是设计好的；其它名字走这条路是"猜"——要说出来。
             guessed = name not in subpackages
         jobs.append(Job(apk=apk, rel=rel,
-                        buildkey=pkgs_dir / (apk.name + BUILDKEY_SUFFIX),
+                        buildkey=pkgs_dir / sidecar_name(apk.name),
                         skip=(output_dir / rel / "payload").is_dir(),
                         guessed=guessed))
     return jobs

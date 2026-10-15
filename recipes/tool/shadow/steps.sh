@@ -23,13 +23,18 @@ package() {
   # ★ 为什么是 shadow 让路，不是 util-linux：
   #
   #     风味         util-linux   shadow
-  #     base            ✓           ✗
+  #     base            ✗           ✗
   #     minimal         ✓           ✗
-  #     devel      ✓           ✗
+  #     devel           ✓           ✗
   #
-  #   **三个风味都要 util-linux，都不要 shadow。** 让 util-linux 去掉它，
-  #   base 和 minimal 当场就没有 nologin 了——那是把一个还没发生的冲突换成
-  #   一个立刻发生的功能缺失。
+  #   ★ 而这张表 2026-10-15 核过一遍，**`base` 那行原来是错的**（写着 ✓）——
+  #     按 `distro/variants/*.toml` 实数是：base 15 个包里既没有 util-linux
+  #     也没有 shadow；minimal 20 个和 devel 43 个才有 util-linux。
+  #     表格错位也一起修了（`devel` 那行原来和上面两行对不齐）。
+  #
+  #   **冲突只在 minimal 和 devel 上。** 而那两个风味里都要 util-linux ——
+  #   让 util-linux 去掉 nologin，它们当场就没有 nologin 了，那是把一个还没
+  #   发生的冲突换成一个立刻发生的功能缺失。
   #
   #   （util-linux 有 --disable-nologin，但那是给它自己用的开关，不是给这里用的。）
   #

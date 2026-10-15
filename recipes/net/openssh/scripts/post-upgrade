@@ -4,7 +4,9 @@
 # 逻辑在 /usr/libexec/yojigen-os/ensure-authorized-keys —— 一份，不是三份。
 # 这里只是个入口。见那个文件的注释。
 #
-# ★ 而这个名字（post-install）就是 apk 的脚本类型 —— collect.py 把配方的
-#   scripts/ 收到产物目录，pack.sh 按名字递给 `apk mkpkg --script`。
+# ★ 而这个名字（post-upgrade）就是 apk 的脚本类型 —— `collect.py` 把配方的
+#   `scripts/` 收到产物目录，`skirtlib/pack.py` 按名字递给 `apk mkpkg --script`。
+#   ★ 原文这里写的是「post-install」，而**这个文件叫 post-upgrade** —— 那句话
+#     的要点正是「名字即脚本类型」，写错了正好把要点写没。
 #   打错字会在 mkpkg 那里明确报 "invalid script type"，不会静默失效。
 exec /usr/libexec/yojigen-os/ensure-authorized-keys

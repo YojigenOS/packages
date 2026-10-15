@@ -27,7 +27,6 @@ from __future__ import annotations
 
 from collections import deque
 
-from .common import RECIPES_DIR
 from .deps import load_host_provides
 from .spec import direct_deps, load_spec, recipe_of
 

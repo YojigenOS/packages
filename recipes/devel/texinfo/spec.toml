@@ -9,8 +9,15 @@ url         = "https://www.gnu.org/software/texinfo/"
 license     = "GPL-3.0-or-later"
 
 [[source]]
-# 上游站点。镜像备选由驱动自动补（见 tools/skirtlib/common.py 的 GNU_MIRRORS）
-# ——不用在这里写一串镜像，那样换镜像时得改每个配方。
+# 上游站点。★ 而这段注释 2026-10-15 改过 —— 它原来写着「镜像备选由驱动自动补
+# （见 tools/skirtlib/common.py 的 GNU_MIRRORS）」，三处都过期了：
+#
+#     路径        tools/skirtlib/ 早改成 skirt/skirtlib/ 了
+#     GNU_MIRRORS 已经没有调用方（`test_common_constants.py` 的说明里写着
+#                 「备选源改成了写在配方里」）
+#     而且下面四行【就是】手写的镜像 —— 注释和它紧挨着的那段代码说的是反的
+#
+# 真约定在 `docs/约定/配方约定.md` 的「备用源」一节：**备用源写在配方里**。
 url    = "https://ftp.gnu.org/gnu/texinfo/texinfo-$VERSION.tar.xz"
 # 备用源：同一份字节的镜像（sha256 会校验，所以换源不降低信任）。
 # 顺序按实测速度。选源标准和完整说明见 docs/约定/配方约定.md「备用源」一节。

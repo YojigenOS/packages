@@ -4,7 +4,7 @@
 
 package() {
     # ★ 重定义 package() 就等于把默认那一步接管过来，所以这行不能少。
-    #   驱动给 autotools 的默认步骤就是这一条（build.py:158）。
+    #   驱动给 autotools 的默认步骤就是这一条（build.py 里 autotools 那道默认步骤）。
     make DESTDIR="$PKGDEST" install
 
     # 首启钩子。放在这里而不是 yojigen-os-init 里——**它是 dhcpcd 的功能**，

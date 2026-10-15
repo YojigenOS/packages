@@ -505,7 +505,6 @@ def run_in_container(srcrel: str, srcname: str, arch: str, spec: dict, epoch: in
         'GC=$(command -v getcap 2>/dev/null || true)\n'
         '[ -x "$GC" ] || GC=/usr/sbin/getcap\n'
         'if [ -x "$GC" ]; then "$GC" -r /in/dest > /tmp/.caps 2>/dev/null || true; fi\n'
-        'if [ ! -s /tmp/.caps ] && find /in/dest -perm -4000 -type f 2>/dev/null | grep -q .; then :; fi\n'
         'SC=$(command -v setcap 2>/dev/null || true)\n'
         '[ -x "$SC" ] || SC=/usr/sbin/setcap\n'
         '  chown -R "$HOSTUID:$HOSTGID" /in 2>/dev/null || true\n'
@@ -665,8 +664,10 @@ def run_in_container(srcrel: str, srcname: str, arch: str, spec: dict, epoch: in
         'GC=$(command -v getcap 2>/dev/null || true); [ -x "$GC" ] || GC=/usr/sbin/getcap\n'
         'if [ -x "$GC" ]; then echo "[产物] 能力位:" >&2; "$GC" -r "$WORK/dest" 2>/dev/null | sed "s|^$WORK/dest||;s|^|  ★ |" >&2; fi\n'
         'if [ ! -x "$GC" ]; then echo "[产物] ⚠ getcap 不在（连绝对路径都试过）—— 能力位这一格查不了" >&2; fi\n'
-        'GC2=$(command -v getcap 2>/dev/null || true); [ -x "$GC2" ] || GC2=/usr/sbin/getcap\n'
-        'if [ -x "$GC2" ]; then\n'
+        # ★ 这里原来又叫一次 `command -v getcap`、存进 GC2 —— 和三行之隔的
+        #   GC 一模一样。两处一样的东西，下次改动只会改其中一处（GC 管打印、
+        #   GC2 管写清单，改一个另一个静默保留旧行为）。用同一个变量。
+        'if [ -x "$GC" ]; then\n'
         # ★★ 而它要写【到 payload 自己里面】。
         #
         #   为什么：`/in` 在 build 时是 var/work，而在 skirt pack 里是

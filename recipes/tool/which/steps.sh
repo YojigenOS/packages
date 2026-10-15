@@ -15,7 +15,7 @@ package() {
     done
     if [ -d "$PKGDEST/usr/local" ]; then
         echo "  ✗ 有东西装进了 /usr/local —— 前缀错了"
-        find "$PKGDEST/usr/local" -type f | head -5 | sed 's/^/      /'
+        find "$PKGDEST/usr/local" -type f | head -5 | sed 's/^/      /' || true
         exit 1
     fi
     echo "  ✓ usr/bin/which 和它的 man 页都在，而且没有东西跑到 /usr/local"

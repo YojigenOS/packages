@@ -17,7 +17,7 @@ package() {
   #            owned by cpio-2.15-r1.
   #     2 errors; 906.9 MiB in 49 packages
   #
-  # 这是【发布前的自检】在 x86_64 上抓到的。它装的是 devel 那 49 个包，
+  # 这是【发布前的自检】在 x86_64 上抓到的。它装的是 devel 风味列的那些包
   # 而 tar 和 cpio 都在里面。
   #
   # rmt 是「remote magnetic tape」——让 tar/cpio 通过 rsh 读写远端磁带机的

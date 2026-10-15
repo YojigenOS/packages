@@ -535,7 +535,7 @@ def cmd_list(args) -> None:
     if not RECIPES_DIR.is_dir():
         print("(还没有 recipes/ 目录)")
         return
-    from .spec import all_recipe_names, kind_of
+    from .spec import all_recipe_names
     names = all_recipe_names()
     if not names:
         print("(还没有任何包)")

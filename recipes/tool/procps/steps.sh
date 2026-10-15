@@ -25,8 +25,10 @@ build() {
     #     **它不是精确的手术，但它把"未知个数的回合"变成"一次"。**
     #     真需要精确时（比如某个文件因为别的理由不能带这个头）再改成补丁。
     #
-    #   （步骤见 decisions/0001：这个项目里给包打补丁是常规手段，
-    #     gzip 和 shadow 都有。这里选 -include 是权衡后的决定，不是不知道有补丁。）
+    #   （这个项目里给包打补丁是常规手段 —— `recipes/tool/gzip/` 和
+    #     `recipes/tool/shadow/` 都有。这里选 `-include` 是权衡后的决定，
+    #     不是不知道有补丁。★ 原文引的是 `decisions/0001`，而那个路径在这个
+    #     工作区里不存在；0001 是《库路径布局》，里面没有补丁这件事。）
     export CFLAGS="${CFLAGS:-} -include stdbool.h"
 
     ./configure \

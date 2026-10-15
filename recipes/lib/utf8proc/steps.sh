@@ -10,11 +10,11 @@ package() {
 
     # ★ 不写死 .so 的名字。它的 ABI 版本会随着上游变（MAJOR.MINOR.PATCH），
     #   写死了下次升级就炸。查"有没有 libutf8proc.so*"这件事本身。
-    so=$(ls "$PKGDEST"/usr/lib/libutf8proc.so* 2>/dev/null | head -1)
+    so=$(ls "$PKGDEST"/usr/lib/libutf8proc.so* 2>/dev/null | head -1 || true)
     if [ -z "$so" ]; then
         echo "  ✗ /usr/lib 下没有 libutf8proc.so* —— prefix/libdir 那两个变量多半没生效"
         echo "     实际装出来的："
-        find "$PKGDEST" -name "libutf8proc*" 2>/dev/null | head -6 | sed "s|^|       |"
+        find "$PKGDEST" -name "libutf8proc*" 2>/dev/null | head -6 | sed "s|^|       |" || true
         exit 1
     fi
     echo "  ✓ 装出了 $(basename "$so")"
