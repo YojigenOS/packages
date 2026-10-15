@@ -33,7 +33,7 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - name: 取 packages（要 scripts/deploy.sh）
+      - name: 取 packages（发布那条路是 `skirt deploy`）
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       - name: 报告 runner 在哪

@@ -449,7 +449,7 @@ class Test真的建索引(unittest.TestCase):
 
         text = repo._dump(self.repo_dir)
         self.assertIn("# sig v00", text, "索引里没有签名块 —— 它没被签")
-        # 记号给 deploy.sh 看（它没法自己从索引里读出来）
+        # 记号给 `skirt deploy` 看（它没法自己从索引里读出来）
         self.assertEqual((self.tmp / "var/.repo-signed-aarch64").read_text(),
                          "yojigen-test.rsa\n")
         self.assertTrue(index.is_file())

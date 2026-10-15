@@ -380,6 +380,19 @@ def cmd_pack(args) -> None:
         die(f"{fail} 个包没打出来（上面标 ✗ 的那些）")
 
 
+def cmd_deploy(args) -> None:
+    """把 var/repo/ 的内容传到线上（默认干跑，--go 才真传）。
+
+    ★ 原来是 scripts/deploy.sh。判据都在 deploy.py 里：只 copy 不 sync、先传包
+      后传索引、具名 remote 才读那些 RCLONE_CONFIG_* 环境变量、没装 rclone 时
+      退化成容器里的那份。
+    """
+    from .deploy import deploy
+
+    arch = resolve_arch(args.arch)
+    sys.exit(deploy(arch=arch, remote=args.remote, go=args.go))
+
+
 def cmd_repo(args) -> None:
     """把一个架构的 .apk 收成一个 apk 软件仓库（索引 + 包）。
 
@@ -678,6 +691,15 @@ def main() -> None:
     p.add_argument("--sign-key",
                    help="用它签名（包建出来就是签好的；不传就不签。SIGN_KEY 环境变量同理）")
     p.set_defaults(func=cmd_pack)
+
+    p = sub.add_parser("deploy",
+                       help="把 var/repo/<架构>/ 传到线上（默认干跑，--go 才真传）")
+    p.add_argument("remote", nargs="?",
+                   help="rclone 的 <remote>:<桶路径>；没给就用环境变量拼（yojigen:<S3_BUCKET>）")
+    p.add_argument("--arch", help="目标架构（默认当前架构）")
+    p.add_argument("--go", action="store_true",
+                   help="真的传（默认只打印会传什么）")
+    p.set_defaults(func=cmd_deploy)
 
     p = sub.add_parser("repo",
                        help="把 var/pkgs/<架构>/*.apk 收成 apk 软件仓库（索引 + 包）")

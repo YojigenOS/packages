@@ -19,7 +19,7 @@ BUILD_DIR = ROOT / "var" / "work"
 LOG_DIR = ROOT / "var" / "logs"
 #: 打好的 .apk。`skirt pack` 往这儿写；`skirt restore` / `skirt repo` 从这儿读。
 PKGS_DIR = ROOT / "var" / "pkgs"
-#: 收好的 apk 仓库（索引 + 包）。`skirt repo` 往这儿写；scripts/deploy.sh 传它。
+#: 收好的 apk 仓库（索引 + 包）。`skirt repo` 往这儿写；`skirt deploy` 传它。
 REPO_DIR = ROOT / "var" / "repo"
 HOST_PROVIDES_FILE = ROOT / "bootstrap" / "provides.txt"
 #: 构建环境镜像。默认是 Debian 底的那个（bootstrap 构建出来的）。

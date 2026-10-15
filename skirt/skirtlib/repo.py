@@ -40,9 +40,15 @@
 
 ── 为什么不用 sync --delete ─────────────────────────────────────────────
 
-包仓库是【只增不减】的：manifest 钉住版本，半年后还要能按同样的版本重建。
-所以上传用 `rclone copy`，不能用 `rclone sync`（那会删掉旧版本）。
-（上传那一步在 scripts/deploy.sh，不在这个模块里。）
+构件（包和索引）上传用 `rclone copy`，不能用 `rclone sync` —— 后者会把目标端
+多出来的文件删掉，而那是**另一个动作**：删哪些、什么时候删，是决策，不是上传的
+副作用。（上传那一步在 `skirt deploy` / `skirtlib/deploy.py`，不在这个模块里；
+"减"那一步在 `skirt prune`。）
+
+★ 这一节原文给的理由是「包仓库是【只增不减】的：manifest 钉住版本，半年后还要
+  能按同样的版本重建」。**那个理由 2026-10-15 被推翻了**（决策记录 0020）：
+  manifest 是【记录】不是【承诺】。而"用 copy 不用 sync"这条机制没变 —— 变的
+  是它的理由，以及"减"现在有个地方可去。
 
 ── 它是从 shell 搬过来的（2026-10-15）──────────────────────────────────
 
@@ -73,7 +79,7 @@ from .common import ROOT, die
 #: 索引文件名。名字叫 .tar.gz，而里面是 ADB 格式（apk v3）——不是 gzip tar。
 INDEX_NAME = "APKINDEX.tar.gz"
 
-#: 签名记号（给 deploy.sh 看的）。它记的是"用哪个密钥签的"。
+#: 签名记号（给 `skirt deploy` 看的）。它记的是"用哪个密钥签的"。
 SIGNED_MARK = ".repo-signed"
 
 #: mkndx 的一条已知警告：没有 datahash 的包。它不影响索引，不要刷屏。
@@ -123,8 +129,8 @@ def rclone(args: list[str], env: dict | None = None, *,
            ) -> subprocess.CompletedProcess:
     """在容器里跑一次 rclone。`args` 是给 rclone 的参数，不含镜像名。
 
-    ★ 凭据走 RCLONE_CONFIG_* 环境变量，不写 rclone.conf、不落盘（deploy.sh
-      也是这么干的，那份在 scripts/deploy.sh 里）。
+    ★ 凭据走 RCLONE_CONFIG_* 环境变量，不写 rclone.conf、不落盘（`skirt deploy`
+      也是这么干的，那份在 skirtlib/deploy.py 里）。
 
     ★ `--user`（宿主 uid/gid）不是可选的：拉下来的文件属主必须是调用方，
       否则下一步 cp 覆盖它们时 Permission denied —— 见 sync_from_s3 里那段。
@@ -310,27 +316,38 @@ def make_index(repo_dir: Path, arch: str, *, desc: str,
     return index
 
 
-def mark_signed(root: Path, arch: str, key_name: str) -> Path:
-    """留个记号给 deploy.sh：这个架构的索引是用哪个密钥签的。
+def mark_signed_path(root: Path, arch: str) -> Path:
+    """签名记号落在哪 —— `var/.repo-signed-<架构>`。
 
-    ★ 为什么不让 deploy.sh 自己去看索引：索引是 ADB 格式，不是 gzip tar，
+    ★ 路径只该有一处：写它的（`skirt repo`）和读它的（`skirt deploy`）都走这里。
+      复制第二份的表现是"记号写在这儿、读的是那儿"，而那是静默的 —— 部署那边
+      会永远报「没有签名」，而实际是签了的（旧脚本查的就是一个从来不存在的文件）。
+    """
+    return root / "var" / f"{SIGNED_MARK}-{arch}"
+
+
+def mark_signed(root: Path, arch: str, key_name: str) -> Path:
+    """留个记号给 deploy：这个架构的索引是用哪个密钥签的。
+
+    ★ 为什么不让 deploy 自己去看索引：索引是 ADB 格式，不是 gzip tar，
       `tar -tzf` 什么都解不出来；而里面的签名标记没有可 grep 的原始字节
       （`# sig v00 …` 是 apk adbdump 的【渲染】，不是文件里的字符串；要读它
       就只能起容器）。
-      deploy.sh 原来查的是 "$SRC/yojigenos.rsa.pub"——那个文件从来不存在，
+      `skirt deploy` 的前身（scripts/deploy.sh）查的是 "$SRC/yojigenos.rsa.pub"
+      ——那个文件从来不存在，
       于是它永远报「没有签名」，而实际是签了的。
 
     与其在部署那边重新推导一遍"签没签"，不如让【签名的那一方】记下来。
     放在 var/ 而不是 var/repo/：后者会被 rclone 整个传上去。
     """
-    path = root / "var" / f"{SIGNED_MARK}-{arch}"
+    path = mark_signed_path(root, arch)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(key_name + "\n", encoding="utf-8")
     return path
 
 
 def unmark_signed(root: Path, arch: str) -> None:
-    (root / "var" / f"{SIGNED_MARK}-{arch}").unlink(missing_ok=True)
+    mark_signed_path(root, arch).unlink(missing_ok=True)
 
 
 # ------------------------------------------------------------------ 读回来（查产物）

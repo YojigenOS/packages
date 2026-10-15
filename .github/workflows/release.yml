@@ -716,7 +716,7 @@ jobs:
           S3_SK: ${{ secrets.S3_SK }}
           S3_BASE_URL: ${{ secrets.S3_BASE_URL }}
           S3_BUCKET: ${{ secrets.S3_BUCKET }}
-        run: ./scripts/deploy.sh --arch "${{ inputs.arch }}" --go
+        run: ./skirt/skirt deploy --arch "${{ inputs.arch }}" --go
 
       - name: 没有勾 deploy
         if: ${{ !inputs.deploy }}
