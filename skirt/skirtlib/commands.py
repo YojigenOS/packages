@@ -383,8 +383,54 @@ def cmd_list(args) -> None:
             print(f"    └ {sub['name']:<14} {'':<7} {sub.get('description', '')}")
 
 
+def _staleness(order: list[str], arch: str, host_provides: set[str],
+               ) -> dict[str, list[str]]:
+    """整条闭包里，谁该重建 —— 含**被依赖带出来的**那些。
+
+    `order` 必须是拓扑序（`dep_closure` 给的就是），因为这里只往前走一遍：
+    **看一个包的时候，它的依赖全都已经判过了。**
+
+    【为什么要递归看闭包】
+
+    一个包的 build_key 里，"依赖"那一项取的是**依赖盘上的 key**。于是有这么
+    一个形状：
+
+        你改了 openssl 的配方，而没重建它
+        → openssl 盘上的 key 还是旧的
+        → 用它的 curl，算出来的 key 也是旧的（因为它读的就是那个旧值）
+        → **curl 报"不用重建"** ✗
+
+    而实际上，openssl 一旦重建，它的 key 就变了，curl 的 key 也会跟着变 ——
+    所以 curl 该重建。
+
+    **换句话说：那个键的"依赖"那一项，该比的是【依赖现在算的 key】，
+    而不是【依赖盘上的 key】。** 而这里用另一种写法得到同一件事：拓扑序往前走，
+    谁该重建就把它带出来的后果一起记上。
+
+    ★ 而"被带出来"也要说清是哪一条 —— 不然你只看见"curl 该重建"，
+      而看不出来原因在 openssl 上。
+    """
+    verdict: dict[str, list[str]] = {}
+    for name in order:
+        spec = load_spec(recipe_of(name) or name)
+        sub = dep_closure(spec, arch, host_provides)
+
+        dep_keys = [(d, stored_key_of(output_dir(d, arch)[0]) or "unknown") for d in sub]
+        now = compute_key(spec, arch, source_date_epoch(spec, arch, host_provides), dep_keys)
+        need, why = needs_rebuild(now, stored_parts(output_dir(name, arch)[0]))
+
+        # ★ 依赖该重建 → 这个也跟着该重建（哪怕它自己算出来的 key 没变）。
+        carried = [d for d in sub if verdict.get(d)]
+        if carried:
+            need = True
+            why = list(why) + [f"依赖 {d} 该重建" for d in carried]
+
+        verdict[name] = list(why) if need else []
+    return verdict
+
+
 def cmd_stale(args) -> None:
-    """回答一个问题：这个包该不该重建。
+    """回答一个问题：这些包该不该重建。
 
     ★ 为什么要有它 —— 这是「改了配方要升 release」那条欠账的解法。
 
@@ -392,33 +438,33 @@ def cmd_stale(args) -> None:
     .apk」，也就是靠人记得升那个号。现在改成比 build_key：**两边都是算出来的**，
     不需要 git 历史，也不需要人记得任何事。
 
-    退出码：**0 = 该重建，1 = 不用**（像 grep）。可脚本化。
+    ★ 而它**递归看闭包**：依赖该重建的话，用它的包也算该重建。理由写在
+      `_staleness` 的 docstring 里。
+
+    退出码：**0 = 该重建，1 = 都不用**（像 grep）。可脚本化。
     """
     arch = resolve_arch(getattr(args, "arch", None))
     targets = list(args.targets) or all_recipe_names()
+    host_provides = load_host_provides()
 
-    need_list, ok_list, unknown_list = [], [], []
+    need_list, ok_list = [], []
     for target in targets:
         spec = _recipe_spec(target)
         name = spec["package"]["name"]
-        pkg_dir, rel = output_dir(name, arch)
+        _, rel = output_dir(name, arch)
 
-        host_provides = load_host_provides()
+        # 拓扑序：依赖在前。加上目标自己是最后一个 —— 而目标有可能已经在里面
+        # （它是别的目标的依赖），所以先去重再保持顺序。
         order = dep_closure(spec, arch, host_provides)
-        dep_keys: list[tuple[str, str]] = []
-        for dep in order:
-            d, dep_rel = output_dir(dep, arch)
-            dep_keys.append((dep, stored_key_of(d) or f"unknown（{dep_rel}）"))
+        chain = list(dict.fromkeys(order + [name]))
+        verdict = _staleness(chain, arch, host_provides)
 
-        now = compute_key(spec, arch, source_date_epoch(spec, arch, host_provides), dep_keys)
-        before = stored_parts(pkg_dir)
-        need, why = needs_rebuild(now, before)
-
-        if need:
-            need_list.append((name, rel, why))
-            blur = "、".join(why)
+        why = verdict.get(name, [])
+        if why:
+            need_list.append(name)
             print(f"  该重建  {name:<18} {rel}")
-            print(f"          {blur}")
+            for w in why:
+                print(f"          {w}")
         else:
             ok_list.append(name)
             print(f"  不用    {name:<18} {rel}   build_key 没变")
