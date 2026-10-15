@@ -194,10 +194,24 @@ def tooling_hash() -> str:
     剥不掉或解析不了的文件一律退回原始字节，并且**说出来** —— 那意味着这一个
     文件会比它实际需要的变化得更频繁。
     """
+    # ★ 而 `skirt/tests/` 要【排除】—— 2026-10-15 补的。
+    #
+    #   测试**不参与构建**，所以它们改了产物不会变。原先它们在 39 个文件里占
+    #   22 个，于是"改一行测试"会让**每个包**的 build_key 都变 → 一次无谓的
+    #   全量重建。
+    #
+    #   实测确认过：
+    #       改一个测试文件里的【注释】   → key 不动（ast 剥掉了）
+    #       改一个测试文件里的【代码行】 → key 变 ✗
+    #   所以这不是"注释被剥了所以无所谓"—— 它是真的在算。
+    #
+    #   ★ 而上面那句「方向选保守那头」讲的是**一个文件内部**要剥多少（剥多了
+    #     会漏掉真实改动）。这一条讲的是**哪些文件该进来**，是另一回事：
+    #     测试不在产物那条因果链上，进来就是误报。
     files = sorted(
         p for p in list((ROOT / "skirt").rglob("*.py"))
         + list((ROOT / "scripts").rglob("*.sh"))
-        if "__pycache__" not in p.parts
+        if "__pycache__" not in p.parts and "tests" not in p.parts
     )
     h = hashlib.sha256()
     for p in files:

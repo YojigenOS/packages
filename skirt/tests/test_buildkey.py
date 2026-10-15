@@ -304,3 +304,63 @@ class Test存和读(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Test工具集哈希收哪些文件(unittest.TestCase):
+    """★ `skirt/tests/` 不该在里面 —— 2026-10-15 补的。
+
+    测试不参与构建，所以它们改了产物不会变。而原先它们在 39 个文件里占 22 个，
+    于是「改一行测试」会让**每个包**的 build_key 都变 → 一次无谓的全量重建。
+
+    ★ 而这条会红的形状要挑对：**改一个测试文件里的代码行**。
+      改注释是不会红的（`tooling_hash` 用 ast 把注释和文档字符串剥掉了）——
+      所以照"改个注释看看"那样验的话，会验出一个假的"没事"。
+    """
+
+    def _收到哪些文件(self):
+        import pathlib as _p
+        from skirtlib.common import ROOT
+        return sorted(
+            p for p in list((ROOT / "skirt").rglob("*.py"))
+            + list((ROOT / "scripts").rglob("*.sh"))
+            if "__pycache__" not in p.parts and "tests" not in p.parts
+        )
+
+    def test_测试目录不在里面(self):
+        from skirtlib.common import ROOT
+        收了 = [p.relative_to(ROOT).as_posix() for p in self._收到哪些文件()]
+        混进来的 = [f for f in 收了 if "tests" in f.split("/")]
+        self.assertFalse(混进来的, "工具的哈希把测试也算进去了 —— "
+                                   "那会让改一行测试触发全量重建：\n  " + "\n  ".join(混进来的))
+
+    def test_驱动本体和打包脚本都在里面(self):
+        """反过来那一头：真的参与构建的东西一个都不能漏。"""
+        from skirtlib.common import ROOT
+        收了 = {p.relative_to(ROOT).as_posix() for p in self._收到哪些文件()}
+        for 必须有 in ("skirt/skirtlib/build.py", "skirt/skirtlib/pack.py",
+                       "skirt/skirtlib/buildkey.py", "skirt/skirtlib/common.py"):
+            self.assertIn(必须有, 收了, f"{必须有} 不在工具集哈希里 —— 改了它产物会变而 key 不动")
+
+    def test_改一个测试文件里的代码不动这个键(self):
+        """★ 直接验行为，不只看文件名单。"""
+        import pathlib as _p
+        import tempfile
+        from skirtlib import buildkey
+        from skirtlib.common import ROOT
+
+        目标 = None
+        for p in (ROOT / "skirt" / "tests").glob("*.py"):
+            目标 = p
+            break
+        self.assertIsNotNone(目标, "找不到测试文件")
+
+        前 = buildkey.tooling_hash()
+        原 = 目标.read_text()
+        try:
+            目标.write_text(原 + "\n_一个新的顶层名字 = 1\n")
+            后 = buildkey.tooling_hash()
+        finally:
+            目标.write_text(原)
+        self.assertEqual(前, 后, "改了一个测试文件，工具集哈希变了 —— "
+                                 "那会让每个包的 build_key 都变")
+        self.assertEqual(前, buildkey.tooling_hash(), "没还原干净")
