@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import sys
+
 import argparse
 import shutil
 from pathlib import Path
@@ -9,14 +11,16 @@ from pathlib import Path
 from .common import (BUILD_DIR, LOG_DIR, OUTPUT_DIR, RECIPES_DIR, ROOT,
                      die, log, resolve_arch, rmtree_force)
 
-from .spec import direct_deps, load_spec, recipe_of, subpackages
+from .spec import all_recipe_names, direct_deps, load_spec, recipe_of, subpackages
 
-from .deps import build_sysroot, dep_closure, dep_payload, load_host_provides, source_date_epoch
+from .deps import (build_sysroot, dep_closure, dep_payload, load_host_provides,
+                   output_dir, source_date_epoch)
 
 from .source import fetch, srcrel_of
 
 from .build import make_build_script, run_in_container
 
+from .buildkey import compute as compute_key, stored_parts, stored_key_of, needs_rebuild
 from .collect import collect
 
 
@@ -195,12 +199,24 @@ def cmd_build(args) -> None:
     # 引号、变量展开都不必经过任何转义——脚本就是脚本。
     (BUILD_DIR / "run.sh").write_text(make_build_script(spec, arch), encoding="utf-8")
 
+    # ★ build_key —— 在构建【之前】算。它的成分和"这次构建结果如何"无关，
+    #   所以放前面不会漏掉什么。（见 buildkey.py 顶上那段。）
     print()
-    run_in_container(srcrel, srcname, arch, spec,
-                     source_date_epoch(spec, arch, host_provides),
-                     unpack=unpack)
+    epoch = source_date_epoch(spec, arch, host_provides)
+    dep_keys: list[tuple[str, str]] = []
+    for dep in order:
+        d, dep_rel = output_dir(dep, arch)
+        k = stored_key_of(d)
+        if k is None:
+            # 拿不准就说拿不准 —— 也正因为如此，上面那个包会被判为"该重建"
+            k = f"unknown（{dep_rel} 盘上没有 build_key）"
+        dep_keys.append((dep, k))
+    bk = compute_key(spec, arch, epoch, dep_keys)
+    log("身份", f"build_key {bk['key'][:16]}…   （skirt stale 看它和盘上那份一不一样）")
 
-    results = collect(spec, arch)
+    run_in_container(srcrel, srcname, arch, spec, epoch, unpack=unpack)
+
+    results = collect(spec, arch, bk)
     print()
     for out, count in results:
         log("完成", f"{_shown(out)}/  （{count} 项）")
@@ -367,6 +383,51 @@ def cmd_list(args) -> None:
             print(f"    └ {sub['name']:<14} {'':<7} {sub.get('description', '')}")
 
 
+def cmd_stale(args) -> None:
+    """回答一个问题：这个包该不该重建。
+
+    ★ 为什么要有它 —— 这是「改了配方要升 release」那条欠账的解法。
+
+    以前判断"要不要重建"靠的是「var/pkgs 里有没有同名同版本同 release 的
+    .apk」，也就是靠人记得升那个号。现在改成比 build_key：**两边都是算出来的**，
+    不需要 git 历史，也不需要人记得任何事。
+
+    退出码：**0 = 该重建，1 = 不用**（像 grep）。可脚本化。
+    """
+    arch = resolve_arch(getattr(args, "arch", None))
+    targets = list(args.targets) or all_recipe_names()
+
+    need_list, ok_list, unknown_list = [], [], []
+    for target in targets:
+        spec = _recipe_spec(target)
+        name = spec["package"]["name"]
+        pkg_dir, rel = output_dir(name, arch)
+
+        host_provides = load_host_provides()
+        order = dep_closure(spec, arch, host_provides)
+        dep_keys: list[tuple[str, str]] = []
+        for dep in order:
+            d, dep_rel = output_dir(dep, arch)
+            dep_keys.append((dep, stored_key_of(d) or f"unknown（{dep_rel}）"))
+
+        now = compute_key(spec, arch, source_date_epoch(spec, arch, host_provides), dep_keys)
+        before = stored_parts(pkg_dir)
+        need, why = needs_rebuild(now, before)
+
+        if need:
+            need_list.append((name, rel, why))
+            blur = "、".join(why)
+            print(f"  该重建  {name:<18} {rel}")
+            print(f"          {blur}")
+        else:
+            ok_list.append(name)
+            print(f"  不用    {name:<18} {rel}   build_key 没变")
+
+    print()
+    print(f"  该重建 {len(need_list)} 个 · 不用 {len(ok_list)} 个")
+    sys.exit(0 if need_list else 1)
+
+
 def cmd_clean(args) -> None:
     if BUILD_DIR.exists():
         rmtree_force(BUILD_DIR)
@@ -428,6 +489,11 @@ def main() -> None:
 
     p = sub.add_parser("list", help="列出所有包")
     p.set_defaults(func=cmd_list)
+
+    p = sub.add_parser("stale", help="哪些包该重建（比 build_key，退出码 0=该重建）")
+    p.add_argument("targets", nargs="*", help="默认全部配方")
+    p.add_argument("--arch", default=None)
+    p.set_defaults(func=cmd_stale)
 
     p = sub.add_parser("clean", help="清理构建目录 / 指定包的产物")
     p.add_argument("package", nargs="?")

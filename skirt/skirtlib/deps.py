@@ -118,7 +118,7 @@ def source_date_epoch(spec: dict, arch: str, host_provides: set[str]) -> int:
     return latest_date(spec, deps)
 
 
-def _output_dir(name: str, arch: str) -> tuple[Path, str]:
+def output_dir(name: str, arch: str) -> tuple[Path, str]:
     """把包名解析成它在 var/output/ 里的目录。
 
     名字可以是普通包，也可以是子包——两者的目录长得一样，都是
@@ -136,13 +136,13 @@ def built_payload(name: str, arch: str) -> Path | None:
     """若该包已构建过则返回其 payload，否则返回 None（不报错）。"""
     if recipe_of(name) is None:
         return None
-    payload = _output_dir(name, arch)[0] / "payload"
+    payload = output_dir(name, arch)[0] / "payload"
     return payload if payload.is_dir() else None
 
 
 def dep_payload(name: str, arch: str) -> tuple[Path, str]:
     """找到依赖包已构建的 payload。"""
-    out, rel = _output_dir(name, arch)
+    out, rel = output_dir(name, arch)
     payload = out / "payload"
     if not payload.is_dir():
         die(

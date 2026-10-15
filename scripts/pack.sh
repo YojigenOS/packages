@@ -360,6 +360,22 @@ print(f\"{m['name']}-{m['version']}-r{m['release']}.apk\")")
     #   文件根本没生成，而脚本报了 ✓。让错误传上来还不够，还要检查结果。
     if [ -s "$OUT/$APK" ]; then
         printf '✓ %s 字节\n' "$(wc -c < "$OUT/$APK" | tr -d ' ')"
+        # ★ build_key 的旁路文件，和 .apk 并排放。
+        #
+        #   为什么不能放进 .apk：`apk mkpkg --info` 只收它认识的字段，实测
+        #   `--info build_key:abc` 报 "ERROR: invalid info field: build_key"。
+        #
+        #   而为什么它要跟着 .apk 走：CI 恢复的是 var/pkgs 里那批 .apk（见
+        #   release.yml 的缓存），meta.json 不跟着走。没有这份，跳过判断就只能
+        #   说"我不知道它上次是什么样"—— 于是每次都重建，这个机制就白做了。
+        if [ -f "$d/.buildkey" ]; then
+            cp -f "$d/.buildkey" "$OUT/$APK.buildkey"
+        else
+            # 没有旁路文件 = 这个包是 build_key 出现【之前】建的。
+            # **说出来，别假装有** —— 而顺手删掉旧的，免得留下一份对不上的。
+            printf '      ⚠ 没有 .buildkey（这包是 build_key 之前建的）—— 跳过判断会当它未知\n'
+            rm -f "$OUT/$APK.buildkey"
+        fi
         N_OK=$((N_OK+1))
     else
         printf '✗\n'

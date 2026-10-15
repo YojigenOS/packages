@@ -107,6 +107,11 @@ docker run --rm \
         # apk extract 解到当前目录，所以先 cd 进去。
         if (cd "$dest" && apk extract --allow-untrusted "$f" >/dev/null 2>&1); then
             ok=$((ok+1))
+            # ★ build_key 也一起还回 var/output/ —— 否则 skirt stale 会说
+            #   "盘上没有它上次的 build_key"，于是每次都重建。见 pack.sh 那段。
+            if [ -f "/pkgs/$base.buildkey" ]; then
+                cp -f "/pkgs/$base.buildkey" "/out/$rel/.buildkey"
+            fi
         else
             rmdir "$dest" 2>/dev/null || true
             fail=$((fail+1))

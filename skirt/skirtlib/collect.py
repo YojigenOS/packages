@@ -19,6 +19,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from .common import BUILD_DIR, OUTPUT_DIR, die, rmtree_force, sha256_of
+from .buildkey import write_sidecar
 from .spec import spec_path
 
 from .spec import deps_for, package_rel, subpackages
@@ -123,8 +124,13 @@ def _write_package(out: Path, destdir: Path, wanted: set[str]) -> None:
             shutil.copy2(src, dst, follow_symlinks=False)
 
 
-def collect(spec: dict, arch: str) -> list[tuple[Path, int]]:
-    """收集一个配方的全部产出，返回 [(目录, 文件数), ...]，主包在前。"""
+def collect(spec: dict, arch: str,
+            build_key: dict | None = None) -> list[tuple[Path, int]]:
+    """收集一个配方的全部产出，返回 [(目录, 文件数), ...]，主包在前。
+
+    `build_key` 是 `buildkey.compute()` 算出来的那个 dict（{"key", "parts"}）。
+    它写进 meta.json，也在产物目录里留一份旁路文件 —— 为什么见 buildkey.py。
+    """
     pkg = spec["package"]
     destdir = BUILD_DIR / "dest"
     subs = subpackages(spec)
@@ -251,8 +257,25 @@ def collect(spec: dict, arch: str) -> list[tuple[Path, int]]:
             meta["provides"] = list(provides)
         if priority is not None:
             meta["provider_priority"] = priority
+
+        # ★ build_key —— 这个包的身份，从内容算出来。见 buildkey.py 顶上那段。
+        #
+        #   两个地方都写：
+        #     meta.json        给人看、给 pack.sh 用
+        #     .buildkey        旁路文件，跟着 var/pkgs 的缓存跨 CI 运行走
+        #
+        #   为什么需要旁路文件：`apk mkpkg --info` 不收自定义字段
+        #   （实测 "ERROR: invalid info field: build_key"），所以 key 进不了
+        #   .apk。而 CI 恢复的是 var/pkgs 里的 .apk，meta.json 不跟着走。
+        if build_key is not None:
+            meta["build_key"] = build_key["key"]
+            meta["build_key_parts"] = build_key["parts"]
+
         (out / "meta.json").write_text(
             json.dumps(meta, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+        if build_key is not None:
+            write_sidecar(out, build_key)
 
         # ── 安装脚本（post-install / post-upgrade / …）──────────────────────
         #

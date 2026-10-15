@@ -8,6 +8,7 @@
     skirt/skirt build --arch x86_64 <包名>
     skirt/skirt list                      列出所有包
     skirt/skirt deps <包名>               查看依赖解析结果（不构建）
+    skirt/skirt stale [包名…]             哪些包该重建（比 build_key，退出码 0=该重建）
     skirt/skirt clean [包名]              清理构建目录 / 该包的产物
 
 依赖机制:
@@ -28,6 +29,7 @@
     source.py    下载、校验、解压
     build.py     构建脚本生成、容器内执行
     collect.py   产物收集与 meta.json
+    buildkey.py  一个包的身份 —— 从内容算出来（见 docs/约定/客观性.md）
     commands.py  子命令
 
 首次使用前需要准备构建环境:

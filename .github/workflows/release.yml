@@ -401,27 +401,47 @@ jobs:
 
           # ★ force 里的包一律重建。
           #
-          #   为什么需要它：跳过的判据是「var/pkgs 里有同名 .apk」，而那分不出
-          #   【旧】——包的版本号在配方改动后不变，所以改完配方再跑，它照样被
-          #   跳过，改动永远不生效。
+          #   2026-10-15 之前它是【必需的】，因为跳过的判据是「var/pkgs 里有同名
+          #   .apk」，而那分不出【旧】—— 包的版本号在配方改动后不变，所以改完
+          #   配方再跑，它照样被跳过，改动永远不生效。实测卡过：修好
+          #   provider-priority 之后要重建 openssl，而 openssl 在缓存里 → 跳过。
           #
-          #   实测就卡在这儿：修好 provider-priority 之后要重建 openssl，而
-          #   openssl 在缓存里 → 跳过 → 白跑一轮。而用 seed_run 关掉跳过会让
-          #   【全部】重建（连 linux 那 30 分钟也重来）。
-          #
-          #   force 是那个中间档：点名重建这几个，其余照常跳过。
+          #   现在判据换成了 build_key（见下面那段），所以这条不再是绕坑的工具，
+          #   而是「我就要重建这几个」的直接表达。留着。
           FORCE=" ${{ inputs.force }} "
 
           built=0 skipped=0
           for p in ${{ inputs.packages }}; do
+            # ★★ 判据：build_key，而不是"有没有同名 .apk"。
+            #
+            #   `skirt stale` 拿【现在算的】build_key 和【盘上那份】比。退出码
+            #   0 = 该重建，1 = 不用。而它比的是六样东西的哈希：配方内容、
+            #   SOURCE_DATE_EPOCH、构建环境、驱动本身、架构、依赖的 build_key。
+            #
+            #   于是「改了配方忘了升 release」这件事从结构上没了 —— 配方内容一
+            #   变哈希就变，不管人有没有记得改那个号。而因为依赖那一项是递归的，
+            #   "改了依赖但 packages= 里漏了它"也一起治了。
+            #
+            #   ★ 拿不准的时候它说"该重建"（环境取不到、盘上没有 key、依赖缺
+            #     key 都是这个方向）。**Fail-safe：宁可白建一次，不发布旧东西。**
+            #
+            #   ★ 所以下面只在 STALE 明确等于 1 时才跳过。别的任何值都去建。
+            set +e
+            WHY=$(./skirt/skirt stale "$p" --arch "$ARCH" 2>&1)
+            STALE=$?
+            set -e
+
             if [ "$SKIP_OK" = 1 ] && [ "${FORCE#* $p }" = "$FORCE" ] \
-               && ls "$OUT/$p-"*.apk >/dev/null 2>&1; then
-              echo "── 跳过 $p（已经有了）──"
+               && ls "$OUT/$p-"*.apk >/dev/null 2>&1 \
+               && [ "$STALE" = 1 ]; then
+              echo "── 跳过 $p（build_key 没变）──"
               skipped=$((skipped+1))
               continue
             fi
             case "$FORCE" in *" $p "*) echo "── 建 $p（force：点名要重建）──" ;; esac
             echo "── 建 $p ──"
+            # 说清【为什么】要建 —— 只有一个哈希的话查不了。
+            [ "$STALE" = 0 ] && echo "$WHY" | sed 's/^/    /'
             ./skirt/skirt build "$p"
             built=$((built+1))
           done
