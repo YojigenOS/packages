@@ -215,15 +215,49 @@ def _readelf(path: Path) -> tuple[list[str], str | None] | None:
     return parse_readelf(proc.stdout)
 
 
+def _version_after_so(filename: str, soname: str) -> str:
+    """文件名 + SONAME → `so:` provides 里那个版本后缀。
+
+    ★ 规则是**文件名里 `.so.` 之后的那一整段**，不是"文件名减掉 SONAME"。
+
+    这条是 2026-10-15 从 Alpine 的真产物里读出来的（四个形状都验了）：
+
+        libz.so.1.3.2          →  so:libz.so.1=1.3.2
+        libxml2.so.2.13.9      →  so:libxml2.so.2=2.13.9
+        libcrypto.so.3         →  so:libcrypto.so.3=3
+        libc.musl-x86_64.so.1  →  so:libc.musl-x86_64.so.1=1
+
+    而这里原来用的是「文件名减掉 SONAME」——那算出的是 `.3.2` 再剥掉点、
+    得到 `3.2`。**它和上面那个注释里"从 Alpine 看来的"自相矛盾**：那句话说的
+    是 Alpine 的做法，而代码做的不是。
+
+    所以已发布的包里 `provides` 全都少了一段（`=3.2` 而该是 `=1.3.2`）。
+    apk 拿名字匹配依赖，版本部分只用于【带约束的】`so:` 依赖——而那种写法很少见，
+    所以它一直没咬人。但值是错的，而这正是"看起来正常而实际是错的"。
+
+    ★ 而它与本文件顶上那句"提供方 provides: so:libz.so.1=1.3.2"现在一致了。
+    """
+    i = filename.find(".so.")
+    if i < 0 or soname not in filename:
+        # 没有 `.so.`（比如就叫 libfoo.so），或者 SONAME 和文件名对不上 ——
+        # 那时候给一个版本号是【编的】，不如不给。
+        return ""
+    return filename[i + len(".so."):]
+
+
 def scan(payload: Path) -> tuple[list[str], dict[str, str]]:
     """扫一个 payload。
 
     返回 (依赖的 soname 列表, {提供的 soname: 版本后缀})。
 
     ★ 版本后缀：libz.so.1.3.2 的 SONAME 是 libz.so.1，而 apk 的 provides 写作
-      `so:libz.so.1=1.3.2`——等于号后面是【完整文件名去掉 so: 名字】的那部分。
+      `so:libz.so.1=1.3.2`——等于号后面是【文件名里 `.so.` 之后的那一整段】。
       这个格式是从 Alpine 的产物里看来的（zlib 的 provides 就是
       `so:libz.so.1=1.3.2`）。apk 靠它做版本比较。
+
+      ★ 而这句话原来写的是"完整文件名去掉 so: 名字"，那算出来是 `3.2` ——
+        **描述和做法都对不上，而且两个都不是 Alpine 的做法**。见
+        `_version_after_so()` 里那段。
     """
     needed: set[str] = set()
     provided: dict[str, str] = {}
@@ -246,9 +280,7 @@ def scan(payload: Path) -> tuple[list[str], dict[str, str]]:
             # ★ 只收 .so 文件，不收可执行文件。可执行文件也可以有 SONAME，
             #   但那个名字不该被别的包当库来依赖。
             if ".so" in path.name:
-                full = path.name
-                suffix = full[len(s):].lstrip(".") if full.startswith(s) else ""
-                provided[s] = suffix
+                provided[s] = _version_after_so(path.name, s)
 
     return sorted(needed), provided
 

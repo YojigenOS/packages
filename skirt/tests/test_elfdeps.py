@@ -287,7 +287,12 @@ class Test扫一棵_payload(_TempTree):
         needed, provided = elfdeps.scan(self.payload)
 
         self.assertEqual(needed, ["libc.so.6", "libz.so.1"])
-        self.assertEqual(provided, {"libz.so.1": "3.2", "libfoo.so.2": ""})
+        # ★ 这两个期望在 2026-10-15 被改正过。原来是 {"libz.so.1": "3.2",
+        #   "libfoo.so.2": ""} —— 而那是按"文件名减掉 SONAME"算出来的，
+        #   不是 Alpine 的做法。真规则见 _version_after_so() 的 docstring：
+        #   文件名里 `.so.` 之后的那一整段。所以 libz.so.1.3.2 → 1.3.2，
+        #   而 libfoo.so.2（SONAME 后面没有额外的）→ 2。
+        self.assertEqual(provided, {"libz.so.1": "1.3.2", "libfoo.so.2": "2"})
 
     def test_符号链接不算(self):
         """libz.so.1 → libz.so.1.3.2：两条都扫会重复；而更糟的是【名字变了】。
@@ -301,7 +306,7 @@ class Test扫一棵_payload(_TempTree):
 
         _, provided = elfdeps.scan(self.payload)
 
-        self.assertEqual(provided, {"libz.so.1": "3.2"})
+        self.assertEqual(provided, {"libz.so.1": "1.3.2"})
 
     def test_可执行文件的_SONAME_不算提供(self):
         """名字里没有 `.so` 的，就算有 SONAME 也不进 provides。"""
@@ -310,7 +315,9 @@ class Test扫一棵_payload(_TempTree):
 
         _, provided = elfdeps.scan(self.payload)
 
-        self.assertEqual(provided, {"libreal.so.1": ""})
+        # 同上：`libreal.so.1` 里 `.so.` 之后是 `1` —— 和 Alpine 的
+        # `libcrypto.so.3=3` 是同一个形状。
+        self.assertEqual(provided, {"libreal.so.1": "1"})
 
     def test_非_ELF_和空目录都不影响结果(self):
         _write(self.payload / "usr/share/doc/readme.txt", b"hello\n")
@@ -320,7 +327,8 @@ class Test扫一棵_payload(_TempTree):
         needed, provided = elfdeps.scan(self.payload)
 
         self.assertEqual(needed, [])
-        self.assertEqual(provided, {"libx.so.1": "0"})
+        # `libx.so.1.0` 里 `.so.` 之后是 `1.0`（原来按"减掉 SONAME"算是 `0`）。
+        self.assertEqual(provided, {"libx.so.1": "1.0"})
 
     def test_空目录(self):
         self.payload.mkdir(parents=True)
@@ -353,7 +361,7 @@ class Test命令行(_TempTree):
         code, out = self._run(["elfdeps", "sonames", str(payload)])
 
         self.assertEqual(code, 0)
-        self.assertEqual(out, "so:libz.so.1=3.2\n")
+        self.assertEqual(out, "so:libz.so.1=1.3.2\n")
 
     def test_用错就报用法(self):
         code, _ = self._run(["elfdeps", "whatever", str(self.tmp)])
@@ -513,3 +521,40 @@ class Test拿真的_readelf_验手搓的_ELF(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Test版本后缀对着_Alpine_的真产物(unittest.TestCase):
+    """★ 这条测试的来源是【四个真包】，不是推理。
+
+    2026-10-15 从 Alpine 官方仓库下了几个 `.apk`，读它们 `.PKGINFO` 里的
+    `provides`，和包里的 `.so` 文件名对上：
+
+        libz.so.1.3.2          →  so:libz.so.1=1.3.2
+        libxml2.so.2.13.9      →  so:libxml2.so.2=2.13.9
+        libcrypto.so.3         →  so:libcrypto.so.3=3
+        libc.musl-x86_64.so.1  →  so:libc.musl-x86_64.so.1=1
+
+    前两个是"SONAME 后面还带一段"，后两个是"SONAME 就是整个带版本的名字"。
+    而规则在四种形状上是同一个：**文件名里 `.so.` 之后的那一整段**。
+
+    我们原来的算法（文件名减掉 SONAME）在前两个上会少一段（`3.2` 而不是
+    `1.3.2`）、在后两个上会给空串。而那两处都已经发布出去了。
+    """
+
+    def test_四种形状(self):
+        cases = [
+            ("libz.so.1.3.2", "libz.so.1", "1.3.2"),
+            ("libxml2.so.2.13.9", "libxml2.so.2", "2.13.9"),
+            ("libcrypto.so.3", "libcrypto.so.3", "3"),
+            ("libc.musl-x86_64.so.1", "libc.musl-x86_64.so.1", "1"),
+        ]
+        for fn, so, want in cases:
+            with self.subTest(文件名=fn):
+                self.assertEqual(elfdeps._version_after_so(fn, so), want)
+
+    def test_SONAME_和文件名对不上就不给版本(self):
+        """那时候给一个版本号是【编的】—— 不如不给。"""
+        self.assertEqual(elfdeps._version_after_so("libx.so.1.2.3", "lib别的.so.9"), "")
+
+    def test_名字里没有_so_也不给(self):
+        self.assertEqual(elfdeps._version_after_so("libz.so", "libz.so"), "")
