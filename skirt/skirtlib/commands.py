@@ -399,6 +399,32 @@ def cmd_repo(args) -> None:
     print()
 
 
+def cmd_prune(args) -> None:
+    """把仓库里过期的包清掉（默认干跑，--go 才真删）。
+
+    ★ 三种范围：`--scope last-version`（默认，每个包名只留最新的）、
+      `--scope last-release`（同一个上游版本下只留最新那个修订）、
+      `--package <名字>`（只清一个包，应急用）。
+      决策记录 0020 把"为什么"写全了；实现和测试在 skirtlib/prune.py。
+
+    ★ 它需要 S3 凭据（列线上要它）。本机没有是正常的——凭据只在 CI 的
+      secret 里，所以干跑也在 CI 里跑。
+    """
+    import os
+    from .prune import Remote, run
+
+    arch = resolve_arch(args.arch)
+    remote = Remote.from_env(arch)
+    sign_key = args.sign_key or os.environ.get("SIGN_KEY") or None
+    if sign_key is not None:
+        sign_key = Path(sign_key)
+        if not sign_key.is_file():
+            die(f"找不到签名密钥: {sign_key}")
+
+    run(arch=arch, remote=remote, scope=args.scope, package=args.package,
+        go=args.go, sign_key=sign_key, desc=args.desc)
+
+
 def cmd_provides(args) -> None:
     """输出一组目标【及其依赖闭包】的包名，一行一个。
 
@@ -627,6 +653,20 @@ def main() -> None:
     p.add_argument("targets", nargs="*", help="默认全部配方")
     p.add_argument("--arch", default=None)
     p.set_defaults(func=cmd_stale)
+
+    p = sub.add_parser("prune",
+                       help="清掉仓库里过期的包（默认干跑，--go 才真删）")
+    p.add_argument("--arch", help="目标架构（默认当前架构）")
+    p.add_argument("--scope", default="last-version",
+                   choices=("last-version", "last-release"),
+                   help="last-version=每个包名只留最新（默认）· "
+                        "last-release=同一个上游版本下只留最新那个修订")
+    p.add_argument("--package", help="只清这一个包名（应急用）")
+    p.add_argument("--go", action="store_true",
+                   help="真的删（默认只打印会删什么）")
+    p.add_argument("--sign-key", help="重建索引时用它签（和 skirt repo 一样）")
+    p.add_argument("--desc", help="重建索引时的仓库描述（默认沿用线上那份）")
+    p.set_defaults(func=cmd_prune)
 
     p = sub.add_parser("clean", help="清理构建目录 / 指定包的产物")
     p.add_argument("package", nargs="?")

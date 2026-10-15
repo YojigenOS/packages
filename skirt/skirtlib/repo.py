@@ -118,6 +118,64 @@ def has_s3_credentials(env: dict | None = None) -> bool:
     return all(env.get(k) for k in S3_VARS)
 
 
+def rclone(args: list[str], env: dict | None = None, *,
+           mounts: list[tuple] = (), image: str = "rclone/rclone"
+           ) -> subprocess.CompletedProcess:
+    """在容器里跑一次 rclone。`args` 是给 rclone 的参数，不含镜像名。
+
+    ★ 凭据走 RCLONE_CONFIG_* 环境变量，不写 rclone.conf、不落盘（deploy.sh
+      也是这么干的，那份在 scripts/deploy.sh 里）。
+
+    ★ `--user`（宿主 uid/gid）不是可选的：拉下来的文件属主必须是调用方，
+      否则下一步 cp 覆盖它们时 Permission denied —— 见 sync_from_s3 里那段。
+
+    ★ `mounts` 是给 `:local:` 这类远端用的（测试拿本地目录当远端，就不需要
+      真凭据）；线上那条路只挂 repo_dir。
+    """
+    env = os.environ if env is None else env
+    cmd = ["docker", "run", "--rm", "--user", f"{os.getuid()}:{os.getgid()}"]
+    for host, where in mounts:
+        cmd += ["-v", f"{host}:{where}"]
+    cmd += [
+        "-e", "RCLONE_CONFIG_YOJIGEN_TYPE=s3",
+        "-e", "RCLONE_CONFIG_YOJIGEN_PROVIDER=Other",
+        "-e", f"RCLONE_CONFIG_YOJIGEN_ENDPOINT={env.get('S3_BASE_URL', '')}",
+        "-e", f"RCLONE_CONFIG_YOJIGEN_ACCESS_KEY_ID={env.get('S3_AK', '')}",
+        "-e", f"RCLONE_CONFIG_YOJIGEN_SECRET_ACCESS_KEY={env.get('S3_SK', '')}",
+        "-e", "RCLONE_CONFIG_YOJIGEN_FORCE_PATH_STYLE=true",
+        "-e", "RCLONE_CONFIG_YOJIGEN_REGION=us-east-1",
+        image, *args,
+    ]
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True)
+    except FileNotFoundError:
+        die("没有 docker —— 列包/传包都要靠容器里的 rclone")
+
+
+def pull_apks(remote: str, repo_dir: Path, env: dict | None = None,
+              image: str = "rclone/rclone",
+              mounts: list[tuple] = ()) -> subprocess.CompletedProcess:
+    """把 `<远端>/` 下的 .apk 拉进 repo_dir（只拉包，不拉索引）。
+
+    ★ 只拉 .apk、不拉索引：索引要重新生成（它得包含这次的包）。清理那一步
+      （`skirt prune`）拉的是同一批东西 —— 它重建索引也要【全套】在本地。
+
+    ★ `mounts` 是远端自己的挂载（`:local:` 那种远端要用；线上那条路是空的）。
+    """
+    return rclone(["copy", remote, "/repo", "--include", "*.apk", "--no-traverse"],
+                  env, mounts=list(mounts) + [(repo_dir, "/repo")], image=image)
+
+
+#: 远端那个 rclone 名字。凭据在环境变量里，所以它只是个记号。
+REMOTE_NAME = "yojigen"
+
+
+def remote_path(arch: str, env: dict | None = None) -> str:
+    """`<remote>:<桶>/<架构>` —— 线上仓库在哪。"""
+    env = os.environ if env is None else env
+    return f"{REMOTE_NAME}:{env.get('S3_BUCKET', '')}/{arch}"
+
+
 def sync_from_s3(repo_dir: Path, arch: str, env: dict | None = None) -> bool:
     """把【线上已有的包】拉回 repo_dir。返回是否真的拉过。
 
@@ -159,24 +217,7 @@ def sync_from_s3(repo_dir: Path, arch: str, env: dict | None = None) -> bool:
 
     print()
     print("  拉回线上已有的包…")
-    cmd = [
-        "docker", "run", "--rm",
-        "-v", f"{repo_dir}:/repo",
-        "--user", f"{os.getuid()}:{os.getgid()}",
-        "-e", "RCLONE_CONFIG_YOJIGEN_TYPE=s3",
-        "-e", "RCLONE_CONFIG_YOJIGEN_PROVIDER=Other",
-        "-e", f"RCLONE_CONFIG_YOJIGEN_ENDPOINT={env['S3_BASE_URL']}",
-        "-e", f"RCLONE_CONFIG_YOJIGEN_ACCESS_KEY_ID={env['S3_AK']}",
-        "-e", f"RCLONE_CONFIG_YOJIGEN_SECRET_ACCESS_KEY={env.get('S3_SK', '')}",
-        "-e", "RCLONE_CONFIG_YOJIGEN_FORCE_PATH_STYLE=true",
-        "-e", "RCLONE_CONFIG_YOJIGEN_REGION=us-east-1",
-        "rclone/rclone", "copy", f"yojigen:{env['S3_BUCKET']}/{arch}", "/repo",
-        "--include", "*.apk", "--no-traverse",
-    ]
-    try:
-        proc = subprocess.run(cmd, capture_output=True, text=True)
-    except FileNotFoundError:
-        die("没有 docker —— 拉回线上的包要靠容器里的 rclone")
+    proc = pull_apks(remote_path(arch, env), repo_dir, env)
 
     for line in proc.stdout.splitlines() + proc.stderr.splitlines():
         if line.strip() and "NOTICE:" not in line:
@@ -365,6 +406,61 @@ def parse_package_dump(text: str) -> tuple[str, str] | None:
     return (name, version)
 
 
+def parse_pkgname_spec(text: str) -> str | None:
+    """索引里那行 `pkgname-spec: <架构>/${name}-${version}.apk`。
+
+    ★ 它是【索引里存的下载路径】，也就是 mkndx 拼文件名用的模板。所以
+      "远程那个文件叫什么名字"这件事不用猜——换掉那两个占位符就是它
+      （prune 靠这个把索引条目对到线上的文件名上）。
+    """
+    for line in text.splitlines():
+        if line.startswith("pkgname-spec: "):
+            return line[len("pkgname-spec: "):].strip()
+    return None
+
+
+def filename_for(spec: str, name: str, version: str) -> str:
+    """把 pkgname-spec 里的 ${name}/${version} 换掉，得到仓库里的文件名。"""
+    return spec.replace("${name}", name).replace("${version}", version)
+
+
+def parse_index_description(text: str) -> str | None:
+    """索引渲染里那行 `description: …`（有就返回，没有就 None）。
+
+    顶层那行（没有缩进）才是仓库描述 —— 别拿包条目里的 `description:`。
+    """
+    for line in text.splitlines():
+        if line.startswith("description: "):
+            return line[len("description: "):].strip()
+    return None
+
+
+def _run_script(repo_dir: Path, script: str, image: str) -> str:
+    """把一段脚本挂进容器、cwd 在 /repo（只读）跑一遍，返回它的输出。"""
+    with tempfile.TemporaryDirectory(prefix="skirt-repo-") as td:
+        script_file = Path(td) / "dump.sh"
+        script_file.write_text(script, encoding="utf-8")
+        try:
+            proc = subprocess.run(
+                ["docker", "run", "--rm", "-v", f"{repo_dir}:/repo:ro",
+                 "-v", f"{td}:/work:ro", image, "sh", "/work/dump.sh"],
+                capture_output=True, text=True)
+        except FileNotFoundError:
+            die("没有 docker —— 读索引要靠容器里的 apk adbdump")
+    if proc.returncode != 0:
+        die(f"读索引失败（容器退出码 {proc.returncode}）：\n{proc.stdout}{proc.stderr}")
+    return proc.stdout
+
+
+def dump_index(repo_dir: Path, image: str = "alpine:latest") -> str:
+    """只渲染索引（`apk adbdump APKINDEX.tar.gz`）。
+
+    prune 的干跑要的只是这个：那一步还没有把包拉下来，不需要逐个去读包。
+    """
+    return _run_script(repo_dir, f"apk adbdump /repo/{INDEX_NAME} </dev/null 2>&1\n",
+                       image)
+
+
 def _dump(repo_dir: Path, image: str = "alpine:latest") -> str:
     """容器里把索引和每个包的 name/version 渲染出来。一次容器，一把读完。
 
@@ -380,19 +476,7 @@ def _dump(repo_dir: Path, image: str = "alpine:latest") -> str:
         "    printf '@@pkg\\t%s\\n' \"$(basename \"$f\")\"\n"
         "    apk adbdump \"$f\" </dev/null 2>&1 | head -20\n"
         "done\n")
-    with tempfile.TemporaryDirectory(prefix="skirt-repo-") as td:
-        script_file = Path(td) / "dump.sh"
-        script_file.write_text(script, encoding="utf-8")
-        try:
-            proc = subprocess.run(
-                ["docker", "run", "--rm", "-v", f"{repo_dir}:/repo:ro",
-                 "-v", f"{td}:/work:ro", image, "sh", "/work/dump.sh"],
-                capture_output=True, text=True)
-        except FileNotFoundError:
-            die("没有 docker —— 读索引要靠容器里的 apk adbdump")
-    if proc.returncode != 0:
-        die(f"读索引失败（容器退出码 {proc.returncode}）：\n{proc.stdout}{proc.stderr}")
-    return proc.stdout
+    return _run_script(repo_dir, script, image)
 
 
 def _split_report(text: str) -> tuple[str, dict[str, str]]:

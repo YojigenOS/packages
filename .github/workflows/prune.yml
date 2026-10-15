@@ -1,0 +1,84 @@
+# 清掉仓库里过期的包（`skirt prune`）。
+#
+# ── 为什么是【手触发】而不是 schedule ─────────────────────────────────────
+#
+# 决策记录 `docs/决策记录/0020-软件包的清理策略.md` 把清理这件事定了，但
+# 「多久清一次、谁来触发」写的是【还没定】。先做成手工触发、默认干跑 ——
+# 跑几次看清规模之后再决定要不要挂 `schedule`。
+#
+# 而"挂上去之前先想清楚"那件事也写在 0020 里：
+#
+#     一次自动的运行，会把"删错了"变成一个【没人看着】的后果。
+#
+# ── 干跑 / 真删 ───────────────────────────────────────────────────────────
+#
+#   go 不打勾（默认）  只打印会删什么、省多少 —— 线上一个字节都不动
+#   go 打勾            真的删：删文件 → 用剩下的重建索引 → 传索引
+#
+# ★ 真删那一步是【不可逆】的（要重建那个版本的包，而那个版本可能正是有问题
+#   的那个）。第一次跑请看输出，看清楚了再打勾。
+#
+# ★ 它需要 S3 凭据：**列线上**就要（"那个目录里有什么"是列目录，不是读一个
+#   文件）。那四个 secret 只在 CI 里有 —— 所以这个 workflow 也是"干跑在哪跑"
+#   的那个答案。
+name: prune
+
+on:
+  workflow_dispatch:
+    inputs:
+      arch:
+        description: 架构
+        type: choice
+        options: [aarch64, x86_64]
+        default: aarch64
+      scope:
+        description: 范围
+        type: choice
+        options: [last-version, last-release]
+        default: last-version
+      package:
+        description: 只清这一个包名（留空=全部）
+        type: string
+        default: ""
+      go:
+        description: 真的删（不打勾=干跑）
+        type: boolean
+        default: false
+
+jobs:
+  prune:
+    # aarch64 用 arm runner（和 probe-storage 一样的选法：网络位置不同）
+    runs-on: ${{ inputs.arch == 'aarch64' && 'ubuntu-26.04-arm' || 'ubuntu-26.04' }}
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      # 重建索引要签（和发布那条路同一个密钥）—— 只在真删那步用得上
+      - name: 落签名密钥
+        if: ${{ inputs.go }}
+        env:
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          [ -n "$SIGNING_KEY" ] || { echo "::error::SIGNING_KEY 是空的 —— 重建索引要它"; exit 1; }
+          printf '%s\n' "$SIGNING_KEY" > "$RUNNER_TEMP/signing.rsa"
+          chmod 600 "$RUNNER_TEMP/signing.rsa"
+          echo "SIGNING_KEY_FILE=$RUNNER_TEMP/signing.rsa" >> "$GITHUB_ENV"
+
+      - name: 清理（默认干跑）
+        env:
+          S3_AK: ${{ secrets.S3_AK }}
+          S3_SK: ${{ secrets.S3_SK }}
+          S3_BASE_URL: ${{ secrets.S3_BASE_URL }}
+          S3_BUCKET: ${{ secrets.S3_BUCKET }}
+        run: |
+          set -euo pipefail
+          ARGS=(--arch "${{ inputs.arch }}" --scope "${{ inputs.scope }}")
+          if [ -n "${{ inputs.package }}" ]; then
+            ARGS+=(--package "${{ inputs.package }}")
+          fi
+          if [ "${{ inputs.go }}" = "true" ]; then
+            ARGS+=(--go --sign-key "$SIGNING_KEY_FILE")
+          fi
+          ./skirt/skirt prune "${ARGS[@]}"
