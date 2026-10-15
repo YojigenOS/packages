@@ -36,3 +36,13 @@ jobs:
       #   （一次 9 秒，跑两遍不心疼；而"失败被管道吞掉"这件事很难再发现第二次。）
       - name: 再跑一遍，这次要退出码
         run: python3 -m unittest discover -s skirt/tests
+
+      # ★ 还有一组测试**默认不跑**：`test_pack.py::Test真的打包` —— 它真的调
+      #   `apk mkpkg` 打一个包，而那个容器里要 `apk add`（libcap + rsync），
+      #   于是它连着网络。网络好的时候一次十几秒，不好的时候同一个调用五分钟
+      #   （apk 自己在重试超时）。所以它挂在 `SKIRT_TEST_PACK=1` 上，由人显式打开：
+      #
+      #       SKIRT_TEST_PACK=1 python3 -m unittest skirt.tests.test_pack -v
+      #
+      #   这里【故意不加】那个开关：一条会被网络拖住、还会偶发失败的检查，
+      #   在 push 时每次跑，很快就没人看它的红灯了。
