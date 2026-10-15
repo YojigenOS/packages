@@ -201,6 +201,22 @@ jobs:
           # 所以这里不让它中断，改成记下结论、后面再失败。
           ./skirt/skirt bootstrap --report || echo "bootstrap_failed=1" >> "$GITHUB_OUTPUT"
 
+      # ★ 往后跑一次测试 —— 因为【有几条测试要有产物才会执行】。
+      #
+      #   `test_kind.py::test_kind_和产物一致` 检查"配方目录名和产物形态对不对
+      #   得上"（lib 要有 .so、tool/net 要有可执行文件、kernel 要有 vmlinuz…）。
+      #   它看不到产物时走 `skipTest` —— 而 `test.yml` 是 checkout 完直接跑的，
+      #   `var/output/` 永远是空的，所以**这条检查从来没执行过**。
+      #
+      #   ★ 而"跳过"和"过了"长得一样 —— 这正是这个项目反复在修的那一类。
+      #     放在这里是因为这是唯一批量建出全部产物的那一步。
+      - name: 跑测试（这一步有产物，能跑到平时跳过的那几条）
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s skirt/tests -p "test_kind.py" -v 2>&1 | tail -30
+          # ★ 上面那个 tail 会吃掉退出码 —— 再跑一遍，不要管道。
+          python3 -m unittest discover -s skirt/tests -p "test_kind.py"
+
       # ★ 失败那一刻就把日志拿到手。
       #
       # 以前只能等整个 job 结束再用 gh api 取日志，而 cmd_bootstrap 只打印

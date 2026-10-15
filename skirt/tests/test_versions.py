@@ -37,7 +37,7 @@ class Test配方里的版本号是apk认的(unittest.TestCase):
     def test_字母后缀跟数字时要先有下划线(self):
         bad = []
         for spec in sorted(RECIPES.glob("*/*/spec.toml")):
-            d = tomllib.load(open(spec, "rb"))
+            d = tomllib.loads(spec.read_text())
             name = d["package"]["name"]
             ver = d["package"]["version"]
             # 找 <字母><数字> 且不是 <_><字母><数字> 的地方
@@ -57,7 +57,7 @@ class Test配方里的版本号是apk认的(unittest.TestCase):
     def test_版本号里没有apk的保留字符(self):
         bad = []
         for spec in sorted(RECIPES.glob("*/*/spec.toml")):
-            d = tomllib.load(open(spec, "rb"))
+            d = tomllib.loads(spec.read_text())
             ver = d["package"]["version"]
             for ch in ver:
                 if not (ch.isalnum() or ch in "._+-"):

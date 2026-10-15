@@ -350,7 +350,7 @@ class Test配方里的键都是真的(unittest.TestCase):
         self.assertGreater(len(recipes), 40, "配方数量不对，路径大概错了")
         bad = []
         for sp in recipes:
-            spec = tomllib.load(open(sp, "rb"))
+            spec = tomllib.loads(sp.read_text())
             b = spec.get("build", {})
             kind = b.get("type", "custom")
             name = sp.parent.relative_to(sp.parents[2])

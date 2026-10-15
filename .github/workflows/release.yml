@@ -342,6 +342,10 @@ jobs:
             fi
           done
 
+      # ★ 这一步之后 var/output/ 里才有产物 —— 而 `test_kind.py` 那条检查
+      #   （配方目录名和产物形态对不对得上）**必须看到产物**才会执行，否则走
+      #   `skipTest`。`test.yml` 是 checkout 完直接跑的，那里永远是空的。
+      #   所以放在这一步【后面】。bootstrap.yml 里也有同样一步。
       - name: 建包
         env:
           SKIRT_BUILDENV: yojigenos/devel
@@ -532,6 +536,15 @@ jobs:
       #
       # ★ 签名必须在打包这一步——包建出来就是签好的。不然后面 mkndx 建索引
       #   时会逐个验证，全部报 UNTRUSTED signature，然后拒绝建索引。
+      # ★ 见上面那段：`test_kind` 要有产物才会执行。
+      #   这一步只建了一部分包，所以它只覆盖那一部分 —— 那也比"永远跳过"好。
+      - name: 跑测试（这一步有产物，能跑到平时跳过的那几条）
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s skirt/tests -p "test_kind.py" -v 2>&1 | tail -30
+          # ★ 上面那个 tail 会吃掉退出码 —— 再跑一遍，不要管道。
+          python3 -m unittest discover -s skirt/tests -p "test_kind.py"
+
       - name: 打包并签名
         # ★ 同上：建成的那些要能被打成 .apk 并签名。
         if: ${{ !cancelled() }}

@@ -119,6 +119,15 @@ class TestKindMatchesArtifacts(unittest.TestCase):
                 bad.append(f"{name}: lang 但 bin/ 里没有可执行文件")
             elif kind == "tool" and not exe:
                 bad.append(f"{name}: tool 但 bin/ 里没有可执行文件")
+            elif kind == "net" and not exe:
+                # ★ 这一条是 2026-10-15 补的。`net` 那 7 个包
+                #   （chrony curl dbus dhcpcd iproute2 iputils openssh）
+                #   **一直在所有分支之外** —— 下面那串 elif 没有 `net`，
+                #   于是它们掉进"什么都不查"里。
+                #
+                #   而它们该有的形态是明确的：都是【能跑的东西】（守护进程或
+                #   客户端命令）。所以和 tool 同一条判据。
+                bad.append(f"{name}: net 但 bin/ 里没有可执行文件")
             elif kind == "lib" and not so:
                 bad.append(f"{name}: lib 但没有 .so/.a")
             elif kind == "data" and so:

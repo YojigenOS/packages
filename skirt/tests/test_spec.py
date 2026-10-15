@@ -23,6 +23,7 @@ import re
 import os
 import sys
 import tempfile
+import tomllib
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -32,6 +33,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from skirtlib import build as build_mod
 from skirtlib import collect as collect_mod
 from skirtlib import spec as spec_mod
+from skirtlib.common import RECIPES_DIR as RECIPES
 from skirtlib import deps as deps_mod
 from skirtlib.build import run_in_container
 from skirtlib.common import RECIPES_DIR, build_jobs
@@ -189,3 +191,88 @@ class TestSubpackageParsing(unittest.TestCase):
         """子包和主包同名会让两者互相覆盖，而且是静默的。"""
         with self.assertRaises(SystemExit):
             subpackages(self._spec(name="x"))
+
+
+class Test每个配方的字段都合法(unittest.TestCase):
+    """★ `配方约定.md` 里许诺过这些检查（"测试会验证：…"），而 2026-10-15 核的时候
+    一条都不存在 —— 真正会在意它们的地方只有 `source.py` 的下载那一步，也就是
+    **要真去建那个包**才走得到。
+
+    所以填错一个 sha256 会一直躺在仓库里，直到某天有人建它、而且建的是填错的那个。
+    这一组把它挪到"任何一次跑测试"就能发现的位置。
+    """
+
+    def test_sha256_是_64_位十六进制(self):
+        import re as _re
+        bad = []
+        for sp in sorted(RECIPES.rglob("spec.toml")):
+            d = tomllib.loads(sp.read_text())
+            for s2 in (d.get("source") or []):
+                h = s2.get("sha256")
+                if h and not _re.fullmatch(r"[0-9a-f]{64}", h):
+                    bad.append(f"{sp.parent.name}: {h!r}")
+        self.assertFalse(bad, "sha256 格式不对（要 64 位小写十六进制）：\n  "
+                              + "\n  ".join(bad))
+
+    def test_release_是整数(self):
+        bad = []
+        for sp in sorted(RECIPES.rglob("spec.toml")):
+            d = tomllib.loads(sp.read_text())
+            r = (d.get("package") or {}).get("release")
+            if r is not None and not isinstance(r, int):
+                bad.append(f"{sp.parent.name}: {r!r}")
+        self.assertFalse(bad, "release 要是整数（apk 拿它比大小）：\n  " + "\n  ".join(bad))
+
+    def test_url_形式的源必须有_sha256(self):
+        """★ 但【git 形式的不需要】—— 而这条我第一版写错了。
+
+        第一版写的是"有源就必须有 sha256"，于是它红了 31 个配方。**而那不是
+        配方的问题**：那 31 个用的是 `git = "…" + commit = "…"`,而 `source.py`
+        里明写着——
+
+            git 形式【不需要 sha256】……commit hash 就是那棵树的内容哈希，
+            比 sha256 更强（sha256 钉的是一份【字节】，而不同托管生成的归档
+            字节可以不一样，于是单个 sha256 根本盖不住多个镜像）。
+
+        所以规则是：**`url` 形式要给 sha256，`git` 形式给 commit。**
+        """
+        import re as _re
+        missing, bad_git = [], []
+        for sp in sorted(RECIPES.rglob("spec.toml")):
+            d = tomllib.loads(sp.read_text())
+            for s2 in (d.get("source") or []):
+                if "url" in s2 and not s2.get("sha256"):
+                    missing.append(sp.parent.name)
+                if "git" in s2 and not _re.fullmatch(r"[0-9a-f]{40}", s2.get("commit") or ""):
+                    bad_git.append(f"{sp.parent.name}: {s2.get('commit')!r}")
+        self.assertFalse(missing, "这些配方用 url 形式的源但没有 sha256：\n  "
+                                  + "\n  ".join(missing))
+        self.assertFalse(bad_git, "这些配方的 git commit 不是 40 位十六进制：\n  "
+                                  + "\n  ".join(bad_git))
+
+    def test_两种源不会混着写(self):
+        """一段 `[[source]]` 要么 url+sha256、要么 git+commit。
+
+        混着写的表现是"其中一个字段被静默忽略" —— 而 `source.py` 读的是
+        `sources[0]`，所以它只会在真去建那个包的时候才现形。
+        """
+        bad = []
+        for sp in sorted(RECIPES.rglob("spec.toml")):
+            d = tomllib.loads(sp.read_text())
+            for i, s2 in enumerate(d.get("source") or []):
+                has_url, has_git = "url" in s2, "git" in s2
+                if has_url == has_git:
+                    bad.append(f"{sp.parent.name} 第 {i+1} 段："
+                               f"{'两个都有' if has_url else '两个都没有'}")
+        self.assertFalse(bad, "这些源的写法混了：\n  " + "\n  ".join(bad))
+
+    def test_没源码的那几个确实没有(self):
+        """反过来那一头：`filesystem` / `yojigen-os-init` / `pip` 是自己写的，不该有源。
+
+        ★ 而这一条现在写死了三个名字 —— 加第四个"没源"的包时它会红，
+          而那正是该来改这条测试的时候（不是坏事）。
+        """
+        无源 = {sp.parent.name for sp in RECIPES.rglob("spec.toml")
+                if not (tomllib.loads(sp.read_text()).get("source") or [])}
+        self.assertEqual(无源, {"filesystem", "yojigen-os-init", "pip"},
+                         "没源码的包变了 —— 是新增了一个，还是某个配方的 source 掉了？")

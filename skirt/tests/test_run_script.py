@@ -41,7 +41,7 @@ class Test生成的脚本是合法shell(unittest.TestCase):
         specs = sorted(RECIPES.glob("*/*/spec.toml"))
         self.assertTrue(specs, "一个配方都没找到——路径不对")
         for spec in specs:
-            d = tomllib.load(open(spec, "rb"))
+            d = tomllib.loads(spec.read_text())
             for arch in ("x86_64", "aarch64"):
                 try:
                     s = make_build_script(d, arch)
@@ -65,7 +65,7 @@ class Test生成的脚本是合法shell(unittest.TestCase):
         报的是「Reversed (or previously applied) patch detected」，
         看起来像"补丁过期"，其实那个补丁完全正确。
         """
-        d = tomllib.load(open(RECIPES / "tool/gzip/spec.toml", "rb"))
+        d = tomllib.loads((RECIPES / "tool/gzip/spec.toml").read_text())
         s = make_build_script(d, "x86_64")
         self.assertIn('if [ "${1:-all}" != "package" ]; then', s,
                       "gzip 有补丁，构建准备那段应该被阶段判断包住")
