@@ -6,7 +6,7 @@ import argparse
 import shutil
 from pathlib import Path
 
-from .common import (BUILD_DIR, CACHE_DIR, LOG_DIR, OUTPUT_DIR, RECIPES_DIR, ROOT,
+from .common import (BUILD_DIR, LOG_DIR, OUTPUT_DIR, RECIPES_DIR, ROOT,
                      die, log, resolve_arch, rmtree_force)
 
 from .spec import direct_deps, load_spec, recipe_of, subpackages
@@ -78,17 +78,17 @@ def cmd_paths(_args) -> None:
 
         eval "$(./skirt/skirt paths --shell)"
 
-    然后就能用 $OUTPUT_DIR / $CACHE_DIR / $BUILD_DIR / $LOG_DIR。
+    然后就能用 $OUTPUT_DIR / $BUILD_DIR / $LOG_DIR。
     """
     if getattr(_args, "shell", False):
         for name, path in (
             ("VAR_DIR", ROOT / "var"), ("OUTPUT_DIR", OUTPUT_DIR),
-            ("CACHE_DIR", CACHE_DIR), ("BUILD_DIR", BUILD_DIR), ("LOG_DIR", LOG_DIR),
+            ("BUILD_DIR", BUILD_DIR), ("LOG_DIR", LOG_DIR),
         ):
             print(f'{name}="{path}"')
     else:
         for name, path in (
-            ("var", ROOT / "var"), ("output", OUTPUT_DIR), ("cache", CACHE_DIR),
+            ("var", ROOT / "var"), ("output", OUTPUT_DIR),
             ("work", BUILD_DIR), ("logs", LOG_DIR),
         ):
             print(f"  {name:<10} {path}")

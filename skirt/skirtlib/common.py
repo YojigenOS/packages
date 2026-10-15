@@ -14,7 +14,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent.parent
 RECIPES_DIR = ROOT / "recipes"
 OUTPUT_DIR = ROOT / "var" / "output"
-CACHE_DIR = ROOT / "var" / "cache"
 BUILD_DIR = ROOT / "var" / "work"
 #: 每个包的完整构建日志。放这里是因为失败时要能翻——见 commands.py 里的说明。
 LOG_DIR = ROOT / "var" / "logs"

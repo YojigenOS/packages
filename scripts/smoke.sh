@@ -66,9 +66,13 @@ echo
 eval "$(./skirt/skirt paths --shell)"
 
 echo "  ① 源码解压的完整性"
-KERNEL_TAR=$(ls "$CACHE_DIR"/linux-*.tar.xz 2>/dev/null | head -1 || true)
+# ★ 内核 tarball 现在【没有固定的存放处】—— 源码缓存已经移除了（见 source.py
+#   顶部那段）。所以要么用 KERNEL_TAR 指定一份，要么这一项跳过。
+#
+#   为什么不在这里自动下：它一百多 MB，而 smoke.sh 的定位是「大约 1 分钟」。
+KERNEL_TAR="${KERNEL_TAR:-$(ls var/work/download/linux-*.tar.xz 2>/dev/null | head -1 || true)}"
 if [ -z "$KERNEL_TAR" ]; then
-    note "跳过：$CACHE_DIR 里没有内核 tarball（它太大了，不一定留着）"
+    note "跳过：没有内核 tarball（用 KERNEL_TAR=/路径/linux-x.y.tar.xz 指定一份）"
 else
     N=$(docker run --rm -v "$KERNEL_TAR:/src.tar:ro" "$BUILDENV:$ARCH" bash -c '
         mkdir -p /x && tar -xf /src.tar -C /x

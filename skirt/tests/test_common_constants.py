@@ -3,7 +3,7 @@
 
 【为什么值得一条测试】2026-10-11 发现这个文件里有一段被复制了三遍：
 
-    第  17-34 行   OUTPUT_DIR  CACHE_DIR  BUILD_DIR  HOST_PROVIDES_FILE ...
+    第  17-34 行   OUTPUT_DIR  BUILD_DIR  HOST_PROVIDES_FILE ...
     第  51-68 行   同一批，一模一样
     第 106-123 行  同一批，一模一样
 
@@ -76,7 +76,7 @@ class TestCommonConstants(unittest.TestCase):
         # **写错的是我的假设，不是代码。** 所以现在只断言真正稳定的那件事：
         # 它们都在仓库里（这样 ls 一眼能分清源码和产物），而 CCACHE_DIR 在
         # 仓库外（它体积大、完全可再生，不该跟着仓库走）。
-        for name in ("OUTPUT_DIR", "CACHE_DIR", "BUILD_DIR", "LOG_DIR"):
+        for name in ("OUTPUT_DIR", "BUILD_DIR", "LOG_DIR"):
             path = getattr(common, name)
             self.assertTrue(path.is_relative_to(common.ROOT),
                             f"{name} 应该在仓库里，实际是 {path}")

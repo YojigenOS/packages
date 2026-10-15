@@ -92,15 +92,20 @@ jobs:
           echo "SKIRT_JOBS=$(nproc)" >> "$GITHUB_ENV"
           echo "并行度: -j$(nproc)"
 
-      # 源码和编译缓存可以跨运行复用——它们不影响「这次构建到底建了什么」。
+      # 编译缓存可以跨运行复用——它不影响「这次构建到底建了什么」，只影响快慢。
+      #
       # 【产物 var/output/ 故意不缓存】：那正是每次要重新证明的东西。
+      #
+      # ★ 而源码缓存（var/cache）2026-10-15 移除了，所以这里也没有它。
+      #   原因见 source.py 顶部那段：它的价值只在本地重复构建，而我们没有
+      #   本地构建；而它在 CI 上（尤其配着 restore-keys 会退到上一轮的缓存）
+      #   反而可能用到旧源码。这里现在只缓存 ccache。
       #
       # ★ 键里带架构：两个架构的 ccache 不能混。
       - name: ccache 缓存
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: |
-            var/cache
             .ccache
           key: bootstrap-${{ matrix.arch }}-${{ hashFiles('recipes/**/spec.toml', 'skirt/**/*.py') }}
           restore-keys: bootstrap-${{ matrix.arch }}-
@@ -207,7 +212,6 @@ jobs:
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: |
-            var/cache
             .ccache
           key: bootstrap-${{ matrix.arch }}-${{ hashFiles('recipes/**/spec.toml', 'skirt/**/*.py') }}
 

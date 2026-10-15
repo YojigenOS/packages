@@ -9,7 +9,7 @@ import zipfile
 import urllib.request
 from pathlib import Path
 
-from .common import CACHE_DIR, die, log, rmtree_force, sha256_of
+from .common import BUILD_DIR, die, log, rmtree_force, sha256_of
 
 from .spec import expand
 
@@ -30,8 +30,53 @@ def _repo_name(git_url: str) -> str:
     return git_url.rstrip("/").rsplit("/", 1)[-1].removesuffix(".git")
 
 
+# ── 源码【不缓存】──────────────────────────────────────────────────────────
+#
+# 2026-10-15 的决定：完全移除那份缓存。
+#
+# 【原来是什么样】
+#
+# 下载过的源码留在 var/cache/ 里，下次构建如果文件名和声明的 sha256 都对得上，
+# 就直接用它，不再下载。省的是网络时间。
+#
+# 【为什么去掉】
+#
+# 它只对【同一台机器上的重复构建】有意义，而我们现在没有任何在本地构建的
+# 计划。而它带来的问题是真的：
+#
+#   · 缓存的有效性靠的是「URL 最后一段 + sha256」这两个东西碰巧对得上，
+#     不是由配方内容算出来的。改了配方里的源，得靠人记得清缓存 ——
+#     而这一条已经写进过文档，说明它真的咬过人。
+#
+#   · CI 那两条线上它的处境不一样，而都不好：
+#       release.yml    根本不缓存它 → 每次都是空的 → 它一点用没有
+#       bootstrap.yml  缓存了它，而 restore-keys 会退到上一轮的缓存
+#                      → 改了配方之后，可能用到上一轮的旧源码
+#     也就是说：它在该有用的地方（本地）用不上，在该干净的地方（CI）
+#     反而可能带来旧东西。
+#
+# 【现在是什么样】
+#
+# 每次构建都下载一次，下到 var/work/download/ 下，而那个目录在每次 fetch 时
+# 先清空。**没有"上一次"，所以不可能用到旧的。**
+#
+# 校验没变：sha256 仍然逐个源验，换源仍然会打印出来。sha256 才是信任边界，
+# 而它和缓存无关。
+
+
+def _scratch(name: str) -> Path:
+    """本次构建的下载落点。
+
+    每次调用先清空整个目录 —— 上一个包的下载、上一次的残留，一起没。
+    """
+    d = BUILD_DIR / "download"
+    rmtree_force(d)
+    d.mkdir(parents=True)
+    return d / name
+
+
 def fetch_git(spec: dict, src: dict) -> Path:
-    """从 git 仓库取某个 commit，做成 tar.gz 放进缓存。
+    """从 git 仓库取某个 commit，做成 tar。
 
     【为什么用 git 而不是托管商的归档链接】
 
@@ -55,14 +100,7 @@ def fetch_git(spec: dict, src: dict) -> Path:
         die(f"{pkg['name']}: [[source]] 用了 git 但没写 commit")
 
     repos = _git_candidates(src)
-    # 缓存名里带 commit：换了 commit 自然就是另一个文件，不会用到旧的。
-    # （这正好避开「改了源但缓存没失效」那个坑。）
-    dest = CACHE_DIR / f"{_repo_name(repos[0])}-{commit[:12]}.tar"
-    CACHE_DIR.mkdir(parents=True, exist_ok=True)
-
-    if dest.is_file():
-        log("缓存命中", dest.name)
-        return dest
+    dest = _scratch(f"{_repo_name(repos[0])}-{commit[:12]}.tar")
 
     import subprocess
     import tempfile
@@ -221,28 +259,15 @@ def fetch(spec: dict, arch: str = "") -> Path:
         return fetch_git(spec, src)
 
     urls = _candidates(spec, src, arch)
-    CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    # 文件名取第一个 URL 的。镜像站对同一个文件用的名字是一样的——GNU 的
-    # 镜像就是这样，所以这不成问题。
-    dest = CACHE_DIR / urls[0].rsplit("/", 1)[-1]
 
     want = str(src.get("sha256", "")).strip().lower()
     if len(want) != 64:
         die(f"{pkg['name']}: 源码没有声明有效的 sha256"
             f"（不接受未校验的源码，当前值: {want!r}）")
 
-    if dest.is_file():
-        log("下载", f"缓存命中 {dest.name}")
-        got = sha256_of(dest)
-        if got != want:
-            # 缓存里的是坏的。删掉重下——这一步以前没有，于是坏文件会一直
-            # 被"缓存命中"，每次都失败。
-            log("缓存损坏", f"{dest.name} 的 sha256 不对，删掉重下")
-            dest.unlink()
-        else:
-            log("校验", "sha256 匹配")
-            return dest
-
+    # 文件名取第一个 URL 的。镜像站对同一个文件用的名字是一样的——GNU 的
+    # 镜像就是这样，所以这不成问题。
+    dest = _scratch(urls[0].rsplit("/", 1)[-1])
     tmp = dest.with_name(dest.name + ".part")
     errors: list[str] = []
     for i, url in enumerate(urls):
