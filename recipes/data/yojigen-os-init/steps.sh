@@ -32,4 +32,15 @@ package() {
 
     # cttyhack：给 tty0 上那个 shell 一个控制终端（见 build() 那段）。
     install -Dm755 "$WORK/cttyhack" "$PKGDEST/usr/libexec/cttyhack"
+
+    # ★ reboot / poweroff —— 2026-10-15 加的，理由见那两个文件的开头。
+    #
+    #   一句话：**util-linux 早就不提供它们了**（2.42 的源码里一个都没有），
+    #   而别人的系统靠 busybox（Alpine）或 systemd（Debian）——
+    #   我们两个都没有，于是真机上 `reboot` 是 command not found。
+    #
+    #   放 /usr/sbin：util-linux 的 configure 里 `--sbindir=/usr/sbin`，
+    #   所以那个目录本来就在 PATH 上。
+    install -Dm755 "$PKGDIR/files/reboot"   "$PKGDEST/usr/sbin/reboot"
+    install -Dm755 "$PKGDIR/files/poweroff" "$PKGDEST/usr/sbin/poweroff"
 }

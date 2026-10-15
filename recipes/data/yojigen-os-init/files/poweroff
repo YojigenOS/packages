@@ -1,0 +1,35 @@
+#!/bin/sh
+# poweroff —— 关机
+#
+# ★★ 为什么是我们自己提供的（2026-10-15）：
+#
+#   **util-linux 早就不提供这几个命令了。** 实测（2.42 的源码树）：
+#
+#       grep -rl "reboot\|poweroff\|shutdown\|halt" sys-utils/ misc-utils/ login-utils/
+#           → reboot 0 个文件 · poweroff 0 个 · shutdown 0 个 · halt 0 个
+#
+#   而别人的系统靠别的东西给：
+#
+#       Alpine  → busybox（`readlink -f $(command -v reboot)` = /bin/busybox）
+#       Debian  → systemd
+#       我们    → 【一个都没有】✗  —— 于是真机上 `reboot` 直接 command not found
+#
+#   ★ 而它是在一次真装机里撞出来的：系统装得好好的、`apk` 也能用，
+#     而**重启不了**。
+#
+#   走内核的 sysrq 接口 —— 它不需要任何额外的用户态程序，也不需要 dbus。
+#   而被拒绝时【要说出来】，不能静默地什么都不做。
+set -eu
+
+if [ "$(cat /proc/sys/kernel/sysrq 2>/dev/null)" = "0" ]; then
+    echo "poweroff: sysrq 是关的（/proc/sys/kernel/sysrq = 0）—— 这个办法用不了。" >&2
+    echo "       先 `echo 1 > /proc/sys/kernel/sysrq`，或者用别的办法。" >&2
+    exit 1
+fi
+
+sync
+echo o > /proc/sysrq-trigger
+
+# 走到这里说明内核没照做（正常情况下一瞬间就重启了，回不来）
+echo "poweroff: sysrq 没生效。" >&2
+exit 1

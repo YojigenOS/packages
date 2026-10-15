@@ -21,14 +21,46 @@ urls = [
 ]
 sha256 = "2649b27c0e90e632eadcd757be06c6e9a4f48d941de51e7c0f83ff76408a07b9"
 
+# ★ pcre2 是 2026-10-15 加的，理由见下面的 configure。
+#   （此前 grep 的 configure 走的是"要不要 PCRE"的默认分支，找不到 pcre2
+#     就打一句 WARNING 然后【静默地少掉 -P】。）
+#
+# ★ 而【不】加 pkgconf —— 加了会成环（pkgconf 那条链绕回 grep，排不出顺序）。
+#   也不需要它：grep 的 configure 有两条找 pcre2 的路，日志里看得很清楚：
+#
+#       checking for PCRE... no            ← 走 pkg-config 那条，没有 pkg-config 所以 no
+#       checking for pcre2_compile... no   ← ★ 直接链接检查，【不需要 pkg-config】
+#
+#   所以只要有 pcre2 的头和 .so，第二条就过。而那条正是我们走的路。
 [dependencies.aarch64]
-runtime = ["glibc"]
-build   = ["make", "gettext", "gcc"]
+runtime = ["glibc", "pcre2"]
+build   = ["make", "gettext", "gcc", "pcre2"]
 
 [dependencies.x86_64]
-runtime = ["glibc"]
-build   = ["make", "gettext", "gcc"]
+runtime = ["glibc", "pcre2"]
+build   = ["make", "gettext", "gcc", "pcre2"]
 
 [build]
 type      = "autotools"
-configure = ["--prefix=/usr"]
+configure = [
+    "--prefix=/usr",
+    # ★★ 这一行是 2026-10-15 加的。**它加的不是功能，是"让它响亮地失败"。**
+    #
+    #   grep 的 configure 里那个开关叫 `--disable-perl-regexp`，也就是【默认开着】。
+    #   但它要找到 `libpcre2-8` 才真的开 —— 而它的判断有三档：
+    #
+    #       --enable-perl-regexp  （yes）   → 找不到就【报错】✓
+    #       默认                  （maybe） → 【WARNING】然后继续 ✗
+    #
+    #   我们此前走的是默认那条，于是构建日志里躺着这么一行：
+    #
+    #       configure: WARNING: GNU grep will be built without PCRE support.
+    #
+    #   —— 淹在 87 个包的日志里，没人看见。而后果是真的：我们的 grep 少了 `-P`，
+    #   而 Alpine / Fedora / Debian 的都有。2026-10-15 晚，`reinstall.sh` 在真机上
+    #   用 `grep -oP` 解析 Alpine 的仓库列表，在我们的系统上直接失败 ——
+    #   **而那条路只有真装一次才会走到。**
+    #
+    #   ★ 所以这里显式写 yes：**下次再丢 pcre2，构建会【报错】而不是打一句警告。**
+    "--enable-perl-regexp",
+]

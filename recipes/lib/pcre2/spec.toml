@@ -1,0 +1,63 @@
+# pcre2 —— Perl 兼容的正则表达式库
+#
+# ★ 为什么它在树里（2026-10-15）：
+#
+#   `grep -P` 需要它。而在此之前我们【没有它】，于是 GNU grep 的 configure
+#   走的是「要不要 PCRE」那条路的默认分支（maybe），**打一句 WARNING 就过去了**：
+#
+#       configure: WARNING: GNU grep will be built without PCRE support.
+#
+#   而那句警告淹在 87 个包的日志里，没人看见 —— 于是我们的 grep 悄悄少了 `-P`，
+#   而 Alpine / Fedora / Debian 的都有。
+#
+#   ★ 后果是真实的：2026-10-15 晚，`reinstall.sh` 在真机上用 `grep -oP` 解析
+#     Alpine 的仓库列表，在我们的系统上直接失败。**那条路只有真装一次才会走到。**
+#
+#   顺带把 grep 那边改成 `--enable-perl-regexp`（显式要），那样下次再丢就是
+#   【报错】而不是警告 —— 见 recipes/tool/grep/spec.toml。
+
+[package]
+name        = "pcre2"
+version     = "10.49"
+release     = 1
+date        = 2026-10-15T16:00:00Z
+description = "Perl 兼容的正则表达式库（PCRE2）"
+url         = "https://www.pcre.org/"
+license     = "BSD-3-Clause"
+
+[[source]]
+# ★ 这里用【发行 tarball】而不是 git 形式，而 `配方约定.md` 里写着
+#   「GitHub 的 release 附件只在 commit 那条路走不通时用，并且必须在配方里
+#     写明为什么」——下面就是那个为什么。
+#
+#   它要排在 `grep` 【前面】，而 grep 排得很前（它的依赖只有 make/gettext/gcc）。
+#   而 git 形式要 autoreconf 生成 configure，那会把
+#   autoconf → automake → perl（而 perl 又依赖 openssl）整条链拖到 grep 前面
+#   —— 等于把自举顺序翻过来。
+#
+#   发行 tarball 里带着生成好的 `configure` ✓（实测：`pcre2-10.49/configure`
+#   和 aclocal.m4、Makefile.in 都在），所以依赖只要 make + gcc，和 grep 一样。
+url    = "https://github.com/PCRE2Project/pcre2/releases/download/pcre2-$VERSION/pcre2-$VERSION.tar.gz"
+urls = [
+  "https://sourceforge.net/projects/pcre/files/pcre2/$VERSION/pcre2-$VERSION.tar.gz/download",
+  "https://mirrors.ustc.edu.cn/pcre/pcre2-$VERSION.tar.gz",
+]
+sha256 = "929f0b20e62879252a15886b06c89f1edef61a363cbd5826fb041080a5e557ae"
+
+[dependencies.aarch64]
+runtime = ["glibc"]
+build   = ["make", "gcc"]
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["make", "gcc"]
+
+[build]
+type      = "autotools"
+configure = [
+    "--prefix=/usr",
+    "--disable-static",
+    # 只要 8 位那个：grep 用 `libpcre2-8`，而 16/32 位那两套没人用。
+    # 省下来的是三份编译和一个更宽的 ABI 面。
+    "--disable-pcre2-16",
+    "--disable-pcre2-32",
+]

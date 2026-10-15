@@ -40,6 +40,34 @@ fi
 mount -t tmpfs    tmpfs    /tmp     2>/dev/null
 mount -t tmpfs    tmpfs    /run     2>/dev/null
 
+# ★★ /dev/fd 那一组符号链接 —— devtmpfs【不会】建它们。
+#
+#   devtmpfs（内核自动挂的那一个）只给【设备节点】。而 `/dev/fd`、`/dev/stdin`
+#   这些是【指向 /proc/self/fd 的符号链接】—— 得有人来建。
+#
+#   别人的系统谁建：
+#       Alpine  → busybox 的 mdev
+#       Debian  → systemd-tmpfiles
+#       我们    → 没人 ✗（没有 busybox，也没有 systemd）
+#
+#   ★ 而少了它们的后果是实打实的：**bash 的进程替换（`> >(…)` / `<(…)`）
+#     整个不能用** —— 它底层要打开 `/dev/fd/N`。
+#
+#   实测（2026-10-15 晚，真机 TX 上跑 reinstall.sh）：
+#
+#       /root/ri.sh: line 412: /dev/fd/63: No such file or directory
+#
+#   —— 而那一句是 `1> >(exec head -c 1048576 >$tmp_file)`。**一个纯诊断的句子
+#   因为它挂了，一晚上咬了两次**（第二次是重启之后，因为 /dev 是 devtmpfs，
+#   手工建的会没）。
+#
+#   ★ 所以必须在【这里】建：每次开机都建，而不是靠别人记得。
+mkdir -p /dev
+ln -sfn /proc/self/fd   /dev/fd
+ln -sfn /proc/self/fd/0 /dev/stdin
+ln -sfn /proc/self/fd/1 /dev/stdout
+ln -sfn /proc/self/fd/2 /dev/stderr
+
 # --- 问候 ---------------------------------------------------------------
 echo
 echo "  欢迎来到 Yojigen OS"
@@ -122,8 +150,23 @@ while :; do
     /bin/sh
     echo
     echo "  shell 退出了。PID1 不能退出（内核会 panic），所以现在关机。"
+    # ★ 而这条 fallback 是【真的会走到】的 —— 2026-10-15 才发现。
+    #
+    #   `poweroff` 此前【不在这个系统里】：util-linux 早就不提供它了
+    #   （2.42 的源码里 reboot/poweroff/shutdown/halt 一个都没有），
+    #   别人的系统靠 busybox 或 systemd，而我们两个都没有。
+    #   所以这句一直是"找不到命令"，只是没人走到这条路上。
+    #
+    #   现在 `yojigen-os-init` 自己提供 `poweroff` / `reboot`（见该配方的
+    #   files/），而 sysrq 那条路是最后的兜底 —— 它不依赖任何用户态程序。
     if poweroff -f 2>/dev/null || poweroff 2>/dev/null; then
         break
+    fi
+    if [ "$(cat /proc/sys/kernel/sysrq 2>/dev/null)" != "0" ]; then
+        echo "  poweroff 不可用，走 sysrq。"
+        sync
+        echo o > /proc/sysrq-trigger
+        sleep 5
     fi
     echo "  ⚠ 关机命令不可用。停在 PID1 循环里（别 Ctrl-D）。"
     sleep 3600
