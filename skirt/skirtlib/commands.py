@@ -8,8 +8,8 @@ import argparse
 import shutil
 from pathlib import Path
 
-from .common import (BUILD_DIR, LOG_DIR, OUTPUT_DIR, RECIPES_DIR, ROOT,
-                     die, log, resolve_arch, rmtree_force)
+from .common import (BUILD_DIR, LOG_DIR, OUTPUT_DIR, PKGS_DIR, RECIPES_DIR,
+                     REPO_DIR, ROOT, die, log, resolve_arch, rmtree_force)
 
 from .spec import all_recipe_names, direct_deps, load_spec, recipe_of, subpackages
 
@@ -354,6 +354,51 @@ def cmd_restore(args) -> None:
         die(f"{fail} 个包没解开（上面标 ✗ 的那些）——它们的 payload 还是缺的")
 
 
+def cmd_repo(args) -> None:
+    """把一个架构的 .apk 收成一个 apk 软件仓库（索引 + 包）。
+
+    ★ 原来是 scripts/repo.sh。搬过来时两件事变了，都记在 repo.py 顶上：
+      ① 没有管道了 —— mkndx 的退出码不再被 grep/sed 吃掉
+      ② 没有 shell 了 —— `--pkgname-spec` 里那两个 ${…} 不用再给谁看引号
+      另外多了一步"查产物"：索引建完，拿 apk adbdump 把索引和仓库里的包对一遍。
+    """
+    import os
+    from .repo import build_index
+
+    arch = resolve_arch(args.arch)
+    pkgs_dir, repo_dir = PKGS_DIR / arch, REPO_DIR / arch
+
+    if not pkgs_dir.is_dir():
+        die(f"还没有包（{_shown(pkgs_dir)} 不存在）。"
+            f"先 skirt build + scripts/pack.sh。")
+    count = len(sorted(pkgs_dir.glob("*.apk")))
+    if count == 0:
+        die(f"{_shown(pkgs_dir)} 里没有 .apk")
+
+    sign_key = args.sign_key or os.environ.get("SIGN_KEY") or None
+    if sign_key is not None:
+        sign_key = Path(sign_key)
+        if not sign_key.is_file():
+            die(f"找不到签名密钥: {sign_key}")
+
+    desc = args.desc or f"Yojigen OS {arch} 软件仓库"
+
+    print()
+    print(f"  收拢 {count} 个包 → {_shown(repo_dir)}/")
+
+    index = build_index(arch=arch, pkgs_dir=pkgs_dir, repo_dir=repo_dir,
+                        desc=desc, sign_key=sign_key)
+
+    print()
+    print(f"  ✓ {_shown(index)}  {index.stat().st_size} 字节")
+    print()
+    print("  本地试一下（起个静态服务，然后从它装）：")
+    print(f"      cd {_shown(repo_dir)} && python3 -m http.server 18080")
+    print("      apk add --allow-untrusted --repository http://localhost:18080 \\")
+    print("              --root /tmp/r --initdb <包名>")
+    print()
+
+
 def cmd_provides(args) -> None:
     """输出一组目标【及其依赖闭包】的包名，一行一个。
 
@@ -570,6 +615,13 @@ def main() -> None:
                        help="把 var/pkgs/<架构>/*.apk 还原成 payload（播种/跳过缺的那一步）")
     p.add_argument("--arch", help="目标架构（默认当前架构）")
     p.set_defaults(func=cmd_restore)
+
+    p = sub.add_parser("repo",
+                       help="把 var/pkgs/<架构>/*.apk 收成 apk 软件仓库（索引 + 包）")
+    p.add_argument("--arch", help="目标架构（默认当前架构）")
+    p.add_argument("--sign-key", help="用它签索引（不传就不签，装的时候 --allow-untrusted）")
+    p.add_argument("--desc", help="仓库描述（写进索引）")
+    p.set_defaults(func=cmd_repo)
 
     p = sub.add_parser("stale", help="哪些包该重建（比 build_key，退出码 0=该重建）")
     p.add_argument("targets", nargs="*", help="默认全部配方")

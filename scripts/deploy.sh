@@ -115,7 +115,7 @@ fi
 [ -n "$REMOTE" ] || { echo "用法: $0 <rclone-remote>:<桶路径> [--go]" >&2; exit 1; }
 
 SRC="var/repo/$ARCH"
-[ -f "$SRC/APKINDEX.tar.gz" ] || { echo "找不到 $SRC/APKINDEX.tar.gz。先跑 scripts/repo.sh。" >&2; exit 1; }
+[ -f "$SRC/APKINDEX.tar.gz" ] || { echo "找不到 $SRC/APKINDEX.tar.gz。先跑 ./skirt/skirt repo。" >&2; exit 1; }
 
 
 
@@ -140,14 +140,15 @@ echo
 #     · 里面的签名标记没有可 grep 的原始字节（`# sig v00 …` 是 apk adbdump
 #       的【渲染】，不是文件里的字符串），只有 apk 自己说得准，而那要起容器
 #
-#   所以改成让【签名的那一方】留记号：repo.sh 签完写 var/.repo-signed-<arch>。
+#   所以改成让【签名的那一方】留记号：`skirt repo` 签完写 var/.repo-signed-<arch>
+#   （写在 skirtlib/repo.py 的 mark_signed 里）。
 #   与其在部署这边重新推导一遍"签没签"，不如让知道的那一方记下来。
 if [ -f "var/.repo-signed-$ARCH" ]; then
     echo "  签名:    有（客户端不用加 --allow-untrusted）"
     echo "           密钥: $(cat "var/.repo-signed-$ARCH")"
 else
     echo "  签名:    ★ 没有 —— 客户端装的时候要加 --allow-untrusted"
-    echo "           生成密钥后跑 scripts/repo.sh --sign-key <密钥> 再部署"
+    echo "           生成密钥后跑 ./skirt/skirt repo --sign-key <密钥> 再部署"
 fi
 echo
 

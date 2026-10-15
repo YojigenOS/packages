@@ -28,7 +28,8 @@ jobs:
       - name: 跑 skirt 的测试
         run: python3 -m unittest discover -s skirt/tests -v 2>&1 | tail -40
 
-      # ★ 上面那个 `tail` 会把 unittest 的退出码吃掉 —— 和 repo.sh 里记着的
+      # ★ 上面那个 `tail` 会把 unittest 的退出码吃掉 —— 和 `skirt/skirtlib/repo.py`
+      #   顶上记着的那条同源（原来是 scripts/repo.sh，已经搬进 skirt）
       #   「管道把 mkndx 的退出码吃掉」是同一个坑。所以这里【再判一次产物形态】：
       #   重跑一遍、不要管道，让退出码自己说话。
       #

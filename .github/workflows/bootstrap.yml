@@ -256,7 +256,7 @@ jobs:
 
       # ── 打包、发布 ──────────────────────────────────────────────────────
       #
-      # 这几步和 release.yml 一样，但逻辑不在 workflow 里——pack.sh / repo.sh
+      # 这几步和 release.yml 一样，但逻辑不在 workflow 里——pack.sh / `skirt repo`
       # / deploy.sh 才是实现，这里只是按顺序调它们。所以"两处会漂"的风险不在
       # 这里：要改发布逻辑，改脚本，两边一起变。
 
@@ -301,7 +301,7 @@ jobs:
           S3_BASE_URL: ${{ secrets.S3_BASE_URL }}
           S3_BUCKET: ${{ secrets.S3_BUCKET }}
         run: |
-          ./scripts/repo.sh \
+          ./skirt/skirt repo \
               --arch "${{ matrix.arch }}" \
               --sign-key "$SIGNING_KEY_FILE" \
               --desc "Yojigen OS ${{ matrix.arch }} 软件仓库"
