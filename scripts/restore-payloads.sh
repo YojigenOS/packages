@@ -100,6 +100,25 @@ docker run --rm \
             rel=$(printf "%s" "$base" | sed -E "s/-r([0-9]+)$/-\1/")
         fi
 
+        # ★ build_key 的旁路文件 —— 放在【那个 continue 之前】。
+        #
+        #   两个坑，都是实测撞出来的：
+        #
+        #   ① 文件名。pack.sh 写的是 `<名字>-<版本>-r<release>.apk.buildkey`
+        #      —— `.apk` 在【中间】。而这里我第一版写成 `$base.buildkey`，其中
+        #      `base` 是 `basename "$f" .apk`，也就是把 `.apk` 剥掉之后的名字。
+        #      于是两边差三个字符，找不到，而症状是"跳过判断说盘上没有 key"
+        #      ——**离成因很远**。
+        #
+        #   ② 位置。"payload 已经在了"的那些包之前会 `continue` 直接走掉，而
+        #      那恰恰是最该拿到 key 的一批（它们在 var/output 里已经有目录了）。
+        #
+        #   所以：用带 .apk 的完整文件名，而且放在 continue 之前。
+        if [ -f "/pkgs/$(basename "$f").buildkey" ]; then
+            mkdir -p "/out/$rel"
+            cp -f "/pkgs/$(basename "$f").buildkey" "/out/$rel/.buildkey"
+        fi
+
         dest="/out/$rel/payload"
         if [ -d "$dest" ]; then skip=$((skip+1)); continue; fi
 
@@ -107,11 +126,6 @@ docker run --rm \
         # apk extract 解到当前目录，所以先 cd 进去。
         if (cd "$dest" && apk extract --allow-untrusted "$f" >/dev/null 2>&1); then
             ok=$((ok+1))
-            # ★ build_key 也一起还回 var/output/ —— 否则 skirt stale 会说
-            #   "盘上没有它上次的 build_key"，于是每次都重建。见 pack.sh 那段。
-            if [ -f "/pkgs/$base.buildkey" ]; then
-                cp -f "/pkgs/$base.buildkey" "/out/$rel/.buildkey"
-            fi
         else
             rmdir "$dest" 2>/dev/null || true
             fail=$((fail+1))
