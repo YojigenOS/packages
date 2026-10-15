@@ -67,7 +67,7 @@ recipes/      配方树 —— 真正的核心资产。按【它是什么】分�
                  example/  示例与探针（hello）
 tools/         构建系统（skirt）与它的测试
 host/          宿主环境准备（provides.txt：构建环境提供什么）
-variants/      风味：哪些包进哪个镜像（base / base-devel / …）
+variants/      风味：哪些包进哪个镜像 —— **注意这一格是旧的**：`variants/` 现在在 `distro/` 里
 docs/          文档与决策记录
 ```
 

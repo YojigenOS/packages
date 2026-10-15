@@ -27,9 +27,9 @@
 # 这个脚本唯一有技术含量的事是【meta.json → mkpkg 的参数】。其余的字节
 # 我们一行都不碰——v3 格式长什么样不需要知道，因为生成用 mkpkg、读用 apk。
 #
-# ── 为什么用 alpine:latest 而不是 base-devel ──────────────────────────────
+# ── 为什么用 alpine:latest 而不是 devel ──────────────────────────────
 #
-# 打包不需要编译器。而 base-devel 里也没有 apk-tools——它是我们自举出来的
+# 打包不需要编译器。而 devel 里也没有 apk-tools——它是我们自举出来的
 # glibc 系统，apk-tools 要等 5.8 那条链（perl → openssl → curl → apk-tools）。
 #
 # apk-tools 在这里是【构建期的工具】，不进交付物。用 Alpine 的现成版本
@@ -187,10 +187,20 @@ else:
 #
 # ★ 两端都要：depends 里的 so: 靠 provides 里的 so: 解析。只做一端的话，
 #   装了包会发现"没有谁提供 libz.so.1"。
-import importlib.util as _ilu
-_spec = _ilu.spec_from_file_location("elfdeps", "scripts/elf-deps.py")
-_elfdeps = _ilu.module_from_spec(_spec)
-_spec.loader.exec_module(_elfdeps)
+#
+# ★ 扫描实现是 skirt 的一部分：skirt/skirtlib/elfdeps.py。
+#
+#   它原来叫 scripts/elf-deps.py，而这里按【文件路径】把它硬加载进来
+#   （importlib.util.spec_from_file_location）。那条路的后果是【测试 import
+#   不进来】——文件不在任何包的路径上，只有知道它躺在哪儿的调用方拿得到它。
+#   所以搬进 skirtlib，这里改成正常 import。
+#
+#   ★ 为什么这里加 sys.path 就够：这段 Python 跑在【宿主】上（它生成的
+#     inner.sh 才进容器），而宿主就是有 skirt/ 的那个检出。而且脚本开头已经
+#     cd 到仓库根了，所以 "skirt" 就是那个目录。容器里不需要 skirtlib（inner.sh
+#     是纯 shell + apk mkpkg）。
+sys.path.insert(0, str(pathlib.Path("skirt").resolve()))
+from skirtlib import elfdeps as _elfdeps
 
 _so_needed, _so_provided = _elfdeps.scan(d / "payload")
 # 去重：手写的是包名（glibc、openssl），自动的是 soname（so:libc.so.6）。

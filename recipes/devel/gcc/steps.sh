@@ -126,7 +126,7 @@ package() {
   # update-alternatives 补，别的发行版也各自补。
   #
   # 这个只有在【自举】时才暴露：用 Debian 构建环境时 cc 是 Debian 的 gcc
-  # 提供的，一切正常；换成我们自己的 base-devel 之后立刻死：
+  # 提供的，一切正常；换成我们自己的 devel 之后立刻死：
   #
   #     ccache: error: Could not find compiler "cc" in PATH
   #

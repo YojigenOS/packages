@@ -74,8 +74,8 @@ package() {
     #         AC_MSG_ERROR([pkg-config not installed; please install it.])
     #     fi
     #
-    # ——它要 pkg-config 这个【程序】。而 aarch64 的 base-devel 镜像里没有它
-    # （镜像建于 10-11，pkgconf 是之后才加进 distro 的 base-devel.toml 的；
+    # ——它要 pkg-config 这个【程序】。而 aarch64 的 devel 镜像里没有它
+    # （镜像建于 10-11，pkgconf 是之后才加进 distro 的 devel.toml 的；
     # x86_64 的镜像重建过，所以有）。这个缺口是 distro 那边的，配方治不了。
     #
     # ★★★ 顺带查出来一件更要紧的事，它才是这批文件忽有忽无的原因：

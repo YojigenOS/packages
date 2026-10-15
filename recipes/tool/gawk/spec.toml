@@ -90,10 +90,10 @@ type      = "autotools"
 # 要不要链接它，同一份配方因此产出两种 gawk。
 #
 # 实测：CI 第一遍用 Debian 构建环境（没装 libmpfr-dev）→ gawk 不带 mpfr；
-# 自举那一遍用 base-devel 镜像（里面有我们建的 mpfr）→ gawk 链接了
+# 自举那一遍用 devel 镜像（里面有我们建的 mpfr）→ gawk 链接了
 # libmpfr.so.6，于是它成了未声明的运行时依赖，而且两边行为不一致。
 #
-# 这也是我第一次本地复现不了那个 libpng 问题的原因——我本地的 base-devel
+# 这也是我第一次本地复现不了那个 libpng 问题的原因——我本地的 devel
 # 有 mpfr，CI 那份没有，配置压根不一样。
 #
 # 关掉它，构建就只由配方决定，不由环境决定。

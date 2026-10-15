@@ -72,7 +72,7 @@ configure = [
   # ★ 这里原来有一行临时的 "PKG_CONFIG=/bin/true"，2026-10-13 删掉了。
   #
   #   它当初为什么在：elfutils 的 configure 无条件要求 pkg-config 存在，
-  #   而 CI 的 SKIRT_PROVIDES 声明了 pkgconf（它确实在 base-devel.toml 里），
+  #   而 CI 的 SKIRT_PROVIDES 声明了 pkgconf（它确实在 devel.toml 里），
   #   于是 skirt 不把它合并进构建容器——可手推的那个 x86_64 镜像里其实
   #   【没有】它。镜像和声明不一致，而报错只有一句
   #

@@ -22,7 +22,7 @@
 #
 # 【为什么用 autotools 而不是 meson】
 #
-# 上游两种都提供。用 autotools 是因为 meson / ninja 还不在 base-devel 里：
+# 上游两种都提供。用 autotools 是因为 meson / ninja 还不在 devel 里：
 # 走 meson 就得把这两个也拉进依赖链，而这条链已经够长了。
 
 [package]

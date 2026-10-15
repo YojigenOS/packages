@@ -25,7 +25,7 @@ package() {
   #     风味         util-linux   shadow
   #     base            ✓           ✗
   #     minimal         ✓           ✗
-  #     base-devel      ✓           ✗
+  #     devel      ✓           ✗
   #
   #   **三个风味都要 util-linux，都不要 shadow。** 让 util-linux 去掉它，
   #   base 和 minimal 当场就没有 nologin 了——那是把一个还没发生的冲突换成

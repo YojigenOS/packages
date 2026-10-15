@@ -70,7 +70,7 @@ configure = [
     #
     #   所以真实行为是【由构建环境里有没有 pkg-config 决定的】：
     #
-    #       x86_64（base-devel 镜像里有 pkg-config） → 用系统的 → 96 个文件
+    #       x86_64（devel 镜像里有 pkg-config） → 用系统的 → 96 个文件
     #       aarch64（那个镜像里没有）                → 用自带的 → 143 个文件
     #
     #   同一份配方编出两种包，差别藏在"环境里恰好有没有某个程序"里——这是
@@ -85,8 +85,8 @@ configure = [
     #       if test -z "$PKG_CONFIG"; then
     #           AC_MSG_ERROR([pkg-config not installed; please install it.])
     #
-    #   而 aarch64 的 base-devel 镜像里没有它（镜像建于 10-11，pkgconf 是之后
-    #   才加进 distro 的 base-devel.toml 的；x86_64 的镜像重建过所以有）。
+    #   而 aarch64 的 devel 镜像里没有它（镜像建于 10-11，pkgconf 是之后
+    #   才加进 distro 的 devel.toml 的；x86_64 的镜像重建过所以有）。
     #   那是 distro 那边的缺口，配方治不了。
     #
     #   等那个镜像重建、有了 pkg-config，这里可以换成 --disable-*：那时
