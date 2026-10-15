@@ -129,16 +129,40 @@ apk     = f"{name}-{version}.apk"
 # 通用约定。实测：同一个包换一个时间戳，产出字节就不同；不设的话它用当前
 # 时间，于是同样的输入会产出不同的包（xz 连打三次得到 620941/620941/620943）。
 #
-# 时间戳写进一个文件，外层脚本拿它设环境变量。用 meta.json 的 built_at，
-# 它已经是确定性的：max(配方声明的日期, 依赖的日期)。
+# 时间戳写进一个文件，外层脚本拿它设环境变量。
+#
+# ★ 而它必须是【确定性的】—— 那个值决定 .apk 的字节。
+#
+#   这里原来读的是 meta.json 的 `built_at`，而那句注释写着"它已经是确定性的：
+#   max(配方声明的日期, 依赖的日期)"。**那句话是错的** —— `built_at` 当时是
+#   墙上时钟（`time.strftime`），所以：
+#
+#       · 同一个配方建两次，.apk 字节不同 —— 0005 的目标在产物上没成立
+#       · 而且 `%z` 带本机时区，换个时区建又不同
+#
+#   实测：发布出去那个 zlib 包里文件的时间是 2026-10-15（构建时刻），而配方
+#   date 是 2026-10-10。
+#
+#   现在 meta.json 里叫 `source_date_epoch`，是个整数，由 `deps.source_date_epoch()`
+#   算出来 —— 也就是 `skirt build` 本来就在用来喂构建的那个值。两边同一个来源。
+#
+#   ★ 而老的产物只有 `built_at`。留一条路读它（不然历史产物全部打不出包），
+#     **但要把"我用了退路"说出来** —— 那意味着那个包的时间戳本来就不对。
 import datetime
-def _epoch(iso: str) -> str:
-    try:
-        return str(int(datetime.datetime.fromisoformat(iso).timestamp()))
-    except Exception:
-        return "0"
 
-(pathlib.Path(out_script).parent / "epoch").write_text(_epoch(m.get("built_at", "")))
+epoch = m.get("source_date_epoch")
+if isinstance(epoch, int):
+    _ts = str(epoch)
+else:
+    _old = m.get("built_at", "")
+    try:
+        _ts = str(int(datetime.datetime.fromisoformat(_old).timestamp()))
+        print("    ⚠ 这份 meta.json 只有旧的 built_at（%s）—— 它的时间戳本来就不确定" % _old)
+    except Exception:
+        _ts = "0"
+        print("    ⚠ 这份 meta.json 里没有可用的时间戳 —— 用 0")
+
+(pathlib.Path(out_script).parent / "epoch").write_text(_ts)
 
 # ── ★ 扫 ELF，把动态库依赖补上 ────────────────────────────────────────────
 #

@@ -216,7 +216,7 @@ def cmd_build(args) -> None:
 
     run_in_container(srcrel, srcname, arch, spec, epoch, unpack=unpack)
 
-    results = collect(spec, arch, bk)
+    results = collect(spec, arch, bk, epoch)
     print()
     for out, count in results:
         log("完成", f"{_shown(out)}/  （{count} 项）")

@@ -125,11 +125,16 @@ def _write_package(out: Path, destdir: Path, wanted: set[str]) -> None:
 
 
 def collect(spec: dict, arch: str,
-            build_key: dict | None = None) -> list[tuple[Path, int]]:
+            build_key: dict | None = None,
+            epoch: int | None = None) -> list[tuple[Path, int]]:
     """收集一个配方的全部产出，返回 [(目录, 文件数), ...]，主包在前。
 
     `build_key` 是 `buildkey.compute()` 算出来的那个 dict（{"key", "parts"}）。
     它写进 meta.json，也在产物目录里留一份旁路文件 —— 为什么见 buildkey.py。
+
+    `epoch` 是这个包的 SOURCE_DATE_EPOCH（`deps.source_date_epoch()` 算的那个）。
+    它写进 meta.json，而 **`pack.sh` 拿它当 `apk mkpkg` 的时间戳** —— 也就是
+    决定 `.apk` 字节的那个值。见下面那段。
     """
     pkg = spec["package"]
     destdir = BUILD_DIR / "dest"
@@ -250,7 +255,27 @@ def collect(spec: dict, arch: str,
             "depends": sub_depends,
             "build_depends": deps.get("build", []),
             "built_from": pkg["name"],
-            "built_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+
+            # ★ source_date_epoch —— 而不是"现在几点"。
+            #
+            #   这里原来是 `time.strftime("%Y-%m-%dT%H:%M:%S%z")`，也就是【墙上
+            #   时钟】。而它有两个后果，都是这一格踩出来的：
+            #
+            #     一、`pack.sh` 拿它当 `apk mkpkg` 的 SOURCE_DATE_EPOCH →
+            #         同一个配方建两次，.apk 字节不同。**0005 定的"可复现构建"
+            #         在产物上没成立。** 实测：发布出去那个 zlib 包里文件的时间
+            #         是 2026-10-15（构建时刻），而配方 date 是 2026-10-10。
+            #
+            #     二、`%z` 带本机时区 → 换个时区建，值又不同。
+            #
+            #   改用 `deps.source_date_epoch()` 算的那个值（= max(配方日期,
+            #   依赖的日期)），而 `skirt build` 本来就在用它喂构建 —— 只是没
+            #   传到这里来。
+            #
+            #   ★ 而字段名也一起改了。原来叫 `built_at`，字面意思是"什么时候
+            #     建的" —— 而那恰恰是不可复现的那一半。**名字该说的是它是
+            #     什么，而不是让人以为它是别的。**
+            "source_date_epoch": int(epoch) if epoch is not None else None,
             "files": entries,
         }
         if provides:
