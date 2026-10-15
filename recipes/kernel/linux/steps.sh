@@ -53,8 +53,8 @@ package() {
     esac
 
     # 启动时内核由引导器/QEMU 直接载入，所以放在 /boot 而不是 /usr。
-    # 名字统一叫 vmlinuz——run-vm.sh 和将来的引导器都只认这一个名字，
-    # 不必知道底下是 Image 还是 bzImage。
+    # 名字统一叫 vmlinuz——distro 的 pantsu vm（`--kernel`，默认就是
+    # vmlinuz）和引导器都只认这一个名字，不必知道底下是 Image 还是 bzImage。
     install -Dm644 "$IMG" "$PKGDEST/boot/vmlinuz"
 
     # 这两样是诊断用的，出问题时它们能回答"跑的是哪个内核、符号在哪"。

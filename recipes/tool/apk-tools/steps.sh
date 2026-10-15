@@ -71,7 +71,9 @@ package() {
   # 不建它们 apk 第一次跑就会报错。
   #
   # ★ /etc/apk/repositories 【不在】这个列表里。那是「装哪些仓库」——是
-  #   发行版的决定，不是包管理器该带的。distro 的 assemble.sh 会写它。
+  #   发行版的决定，不是包管理器该带的。distro 的 pantsu rootfs（以及走同一条
+  #   路径的 pantsu assemble）会写它：pantsulib/root.py 里往目标根写
+  #   /etc/apk/repositories。
   install -d \
     "$d/lib/apk/db" \
     "$d/lib/apk/exec" \
