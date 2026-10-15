@@ -175,7 +175,8 @@ def tooling_hash() -> str:
     的行为就变了。所以「同配方、同 gcc」不等于"同产物"。
 
     ★ 而 2026-10-15 之前这里**只哈希 `skirt/**/*.py`**，没算 `scripts/`。
-      那是个真缺口：`scripts/pack.sh` 决定「包里放什么」（它跑 `apk mkpkg`、
+      那是个真缺口：`scripts/pack.sh`（现在在 `skirtlib/pack.py`）决定
+      「包里放什么」（它跑 `apk mkpkg`、
       恢复能力位、补 ELF 依赖），**改了它产物就变，而 key 不动** —— 正是
       "少一样比没有键更危险"那个形状。而它当场就被撞上了：那一天里 `pack.sh`
       改了两次（加安装脚本、换时间戳），两次都没进 key。

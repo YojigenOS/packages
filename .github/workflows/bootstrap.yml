@@ -256,9 +256,9 @@ jobs:
 
       # ── 打包、发布 ──────────────────────────────────────────────────────
       #
-      # 这几步和 release.yml 一样，但逻辑不在 workflow 里——pack.sh / `skirt repo`
-      # / deploy.sh 才是实现，这里只是按顺序调它们。所以"两处会漂"的风险不在
-      # 这里：要改发布逻辑，改脚本，两边一起变。
+      # 这几步和 release.yml 一样，但逻辑不在 workflow 里——`skirt pack` /
+      # `skirt repo` / `skirt deploy` 才是实现，这里只是按顺序调它们。所以"两处
+      # 会漂"的风险不在这里：要改发布逻辑，改 skirt，两边一起变。
 
       - name: 把签名密钥从 secret 落到文件
         env:
@@ -290,7 +290,7 @@ jobs:
 
       - name: 打包并签名
         run: |
-          ./scripts/pack.sh --all \
+          ./skirt/skirt pack --all \
               --arch "${{ matrix.arch }}" \
               --sign-key "$SIGNING_KEY_FILE"
 

@@ -354,6 +354,32 @@ def cmd_restore(args) -> None:
         die(f"{fail} 个包没解开（上面标 ✗ 的那些）——它们的 payload 还是缺的")
 
 
+def cmd_pack(args) -> None:
+    """把一个【已建好的】包打成 .apk。
+
+    ★ 原来是 scripts/pack.sh。搬过来的理由和其它几样一样：**判定要能测**。
+      而这个脚本决定的是【交付物的字节】—— mkpkg 收哪些字段、时间戳从哪来、
+      属主和能力位怎么恢复、旁路文件叫什么名字 —— 它当时是 442 行 shell，
+      改动它会不会改变产物，只能靠人记得。
+
+    拿不到时间戳那种错是【整个停下来】的（不是某个包失败），见 pack.py。
+    """
+    import os
+    from .pack import PackError, pack
+
+    arch = resolve_arch(args.arch)
+    sign_key = args.sign_key or os.environ.get("SIGN_KEY") or None
+    sign_key = Path(sign_key) if sign_key is not None else None
+
+    try:
+        ok, fail, skip = pack(arch=arch, names=args.targets or None,
+                              all_=args.all, sign_key=sign_key)
+    except PackError as exc:
+        die(str(exc))
+    if fail:
+        die(f"{fail} 个包没打出来（上面标 ✗ 的那些）")
+
+
 def cmd_repo(args) -> None:
     """把一个架构的 .apk 收成一个 apk 软件仓库（索引 + 包）。
 
@@ -370,7 +396,7 @@ def cmd_repo(args) -> None:
 
     if not pkgs_dir.is_dir():
         die(f"还没有包（{_shown(pkgs_dir)} 不存在）。"
-            f"先 skirt build + scripts/pack.sh。")
+            f"先 skirt build + skirt pack。")
     count = len(sorted(pkgs_dir.glob("*.apk")))
     if count == 0:
         die(f"{_shown(pkgs_dir)} 里没有 .apk")
@@ -641,6 +667,17 @@ def main() -> None:
                        help="把 var/pkgs/<架构>/*.apk 还原成 payload（播种/跳过缺的那一步）")
     p.add_argument("--arch", help="目标架构（默认当前架构）")
     p.set_defaults(func=cmd_restore)
+
+    p = sub.add_parser("pack",
+                       help="把一个已建好的包打成 .apk（apk mkpkg + 签名 + 能力位）")
+    p.add_argument("targets", nargs="*",
+                   help="包名（每个名字取它最新那份产物）；不传要配 --all")
+    p.add_argument("--all", action="store_true",
+                   help="打 var/output/<架构>/ 下的全部产物")
+    p.add_argument("--arch", help="目标架构（默认当前架构）")
+    p.add_argument("--sign-key",
+                   help="用它签名（包建出来就是签好的；不传就不签。SIGN_KEY 环境变量同理）")
+    p.set_defaults(func=cmd_pack)
 
     p = sub.add_parser("repo",
                        help="把 var/pkgs/<架构>/*.apk 收成 apk 软件仓库（索引 + 包）")

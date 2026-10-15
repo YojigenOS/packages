@@ -29,12 +29,15 @@ Alpine 的 so: 是 abuild + scanelf 生成的，不是 apk 自己的。
 
 ── 为什么它在这里，而不是 scripts/ ──────────────────────────────────────
 
-它原来是 `scripts/elf-deps.py`，由 `scripts/pack.sh` 里那段内嵌 Python **按
+它原来是 `scripts/elf-deps.py`，由 `scripts/pack.sh`（现在也在 skirt 里，见
+`pack.py`）里那段内嵌 Python **按
 文件路径**硬加载（`importlib.util.spec_from_file_location`）。而那条路的后果是
 **测试 import 不进来**：文件不在任何包的路径上，只有"知道它躺在哪个文件里"
 的调用方拿得到它。
 
-所以它搬进 `skirtlib/`，pack.sh 那边改成正常 import。搬家没有改任何判定逻辑
+所以它搬进 `skirtlib/`，pack.sh 那边改成正常 import（pack.sh 后来也搬进来了，
+成 `skirtlib/pack.py` —— 那边现在是普通的 `from . import elfdeps`）。搬家没有改
+任何判定逻辑
 ——`scan()` 的输入输出、两个读取路径的选择、provides 的版本后缀算法，都和
 搬之前逐行一致；`skirt/tests/test_elfdeps.py` 守着这些。
 

@@ -221,7 +221,7 @@ class Test还原计划(_TempTree):
                          {"hello-1.0-1": True, "world-2.0-1": False})
 
     def test_buildkey_的源名字带着_apk(self):
-        """★ 2026-10-15 那个坑：pack.sh 写的是 `<全名>.apk.buildkey`。
+        """★ 2026-10-15 那个坑：`skirt pack` 写的是 `<全名>.apk.buildkey`。
 
         而这里第一版找的是 `<去掉 .apk 的全名>.buildkey`（`basename f .apk`），
         于是永远找不到。

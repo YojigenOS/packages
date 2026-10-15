@@ -117,11 +117,15 @@ class Test工具集哈希(unittest.TestCase):
     def test_同一次调用一致(self):
         self.assertEqual(buildkey.tooling_hash(), buildkey.tooling_hash())
 
-    def test_pack_sh_也算进去(self):
+    def test_打包实现_也算进去(self):
         """★ 这条是补一个真缺口：原来只哈希 skirt/**/*.py。
 
         `scripts/pack.sh` 决定「包里放什么」（跑 apk mkpkg、恢复能力位、补 ELF
         依赖）—— 改了它产物就变，而 key 不动。**少一样比没有键更危险。**
+
+        ★ 而那件事的形态在 2026-10-15 又变了一次：打包整体搬到了
+          `skirtlib/pack.py`（`skirt pack`）。所以现在它由 `skirt/**/*.py`
+          覆盖 —— 这条测试钉的是"打包实现必须在这个哈希里"，名字跟着实现走。
         """
         files = sorted(
             p.relative_to(buildkey.ROOT).as_posix()
@@ -129,10 +133,13 @@ class Test工具集哈希(unittest.TestCase):
             + list((buildkey.ROOT / "scripts").rglob("*.sh"))
             if "__pycache__" not in p.parts
         )
-        self.assertIn("scripts/pack.sh", files,
-                      "pack.sh 决定产物，它必须在那个哈希里")
+        self.assertIn("skirt/skirtlib/pack.py", files,
+                      "打包实现决定产物，它必须在那个哈希里")
         self.assertTrue(any(f.startswith("skirt/") for f in files))
-        self.assertTrue(any(f.endswith(".sh") for f in files))
+        # scripts/ 那一半也要留在扫描里：keys.sh 是它现在唯一的成员，
+        # 而哪天那里再长出会改变产物的脚本，得进这个哈希。
+        self.assertTrue(any(f.endswith(".sh") for f in files),
+                        f"scripts/*.sh 还该在扫描里，现在只有：{files}")
 
     def test_注释不算(self):
         """文档里写着「只改注释不用升 release」—— 那就别让改注释触发全量重建。"""

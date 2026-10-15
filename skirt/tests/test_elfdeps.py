@@ -20,7 +20,8 @@
 
 【搬家的那件事】
 
-这个模块原来是 `scripts/elf-deps.py`，由 pack.sh 按文件路径硬加载。搬进
+这个模块原来是 `scripts/elf-deps.py`，由 pack.sh 按文件路径硬加载（那个脚本
+后来也搬进 skirt 了，见 `skirtlib/pack.py`）。搬进
 `skirtlib/` 之后判定逻辑一行没改，这里守的就是那些判定：
 
   · NEEDED / SONAME 两个 tag 的解析（32 位、64 位、大端）

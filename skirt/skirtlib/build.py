@@ -669,14 +669,14 @@ def run_in_container(srcrel: str, srcname: str, arch: str, spec: dict, epoch: in
         'if [ -x "$GC2" ]; then\n'
         # ★★ 而它要写【到 payload 自己里面】。
         #
-        #   为什么：`/in` 在 build 时是 var/work，而在 pack.sh 里是
+        #   为什么：`/in` 在 build 时是 var/work，而在 skirt pack 里是
         #   var/output/<arch>/<包>-<版本>/ —— 【两个不同的目录】。
         #   我写了四轮才发现这件事（清单一直写在 build 那边，而 pack 那边读不到）。
         #
         #   写进 dest 就跟着 payload 走了：skirt 会把 dest 收成 var/output/…/payload/，
-        #   而 pack.sh 挂的就是那个目录。**自洽，不用两边对齐一个外部路径。**
+        #   而 skirt pack 挂的就是那个目录。**自洽，不用两边对齐一个外部路径。**
         #
-        #   文件名前面一个点 —— pack.sh 读完会把它删掉，不会进包。
+        #   文件名前面一个点 —— skirt pack 读完会把它删掉，不会进包。
         '  "$GC2" -r "$WORK/dest" 2>/dev/null | sed "s|^$WORK/dest||" > "$WORK/dest/.yojigen-caps" || true\n'
         '  n=$(wc -l < "$WORK/dest/.yojigen-caps" 2>/dev/null || echo 0)\n'
         '  echo "[产物] 能力位清单（$n 条）写进 payload 的 .yojigen-caps" >&2\n'
@@ -763,10 +763,10 @@ def run_in_container(srcrel: str, srcname: str, arch: str, spec: dict, epoch: in
         #       rsync -aX → 绑定挂载             → failed: Operation not supported (95)  ✗
         #
         #   绑定挂载的目标文件系统【不支持】设 security.capability。
-        #   而这条链上到处都是绑定挂载（/in 是，pack.sh 那个 /in 也是）。
+        #   而这条链上到处都是绑定挂载（/in 是，skirt pack 那个 /in 也是）。
         #
         #   ★ 所以换个办法：把 `getcap -r` 的输出写成【文本文件】——
-        #     文本跨挂载毫无问题 —— 然后由 pack.sh 用它 setcap。
+        #     文本跨挂载毫无问题 —— 然后由 skirt pack 用它 setcap。
         #     能力位就从"文件属性"变成了"一份清单"，而清单是可以随便搬的。
         'after=$(find /in/dest \\( -type f -o -type l \\) | wc -l | tr -d " ")\n'
         'if [ "$before" != "$after" ]; then\n'

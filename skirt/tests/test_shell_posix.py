@@ -4,7 +4,8 @@
 macOS 的 /bin/sh 是 bash，所以 `${VAR//x}` 这类写法在本地一直是好的；
 Ubuntu 的 /bin/sh 是 dash，CI 上直接 "Bad substitution"。
 
-2026-10-12：pack.sh 在 CI 上就是这么炸的（第 86 行 `${DIRS// /}`）。
+2026-10-12：pack.sh（现在在 `skirtlib/pack.py`）在 CI 上就是这么炸的
+（第 86 行 `${DIRS// /}`）。
 本地跑一百遍都不会有反应。
 
 这条检查用容器里的 dash 做语法检查——不执行，只看能不能解析。

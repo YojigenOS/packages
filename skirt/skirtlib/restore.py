@@ -46,7 +46,7 @@ openssl 明明在仓库里、就在 var/pkgs 里躺着——缺的只是那一�
 
 ── 三次踩出来的东西（都留着）──────────────────────────────────────────────
 
-① **`.buildkey` 的源头名字带 `.apk`**：pack.sh 写的是
+① **`.buildkey` 的源头名字带 `.apk`**：`skirt pack` 写的是
    `<名字>-<版本>-r<release>.apk.buildkey` —— `.apk` 在【中间】。这里第一版
    写成了 `<basename 去掉 .apk>.buildkey`，于是两边差三个字符，找不到，而症状
    是"跳过判断说盘上没有 key"——**离成因很远**。
@@ -197,7 +197,7 @@ def plan(pkgs_dir: Path, output_dir: Path,
         赢"：r2 的目录里装进 r1 的 payload。**看起来正常，内容是旧的。**
 
       所以：子包从文件名推不是"退而求其次"，它是唯一能让每个版本各归各位的
-      那条路（.apk 的文件名和产物目录名本来就是一回事 —— pack.sh 从
+      那条路（.apk 的文件名和产物目录名本来就是一回事 —— `skirt pack` 从
       meta.json 同时拼出这两个）。
     """
     if versions is None:

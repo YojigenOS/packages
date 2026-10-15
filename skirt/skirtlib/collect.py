@@ -155,7 +155,7 @@ def collect(spec: dict, arch: str,
     它写进 meta.json，也在产物目录里留一份旁路文件 —— 为什么见 buildkey.py。
 
     `epoch` 是这个包的 SOURCE_DATE_EPOCH（`deps.source_date_epoch()` 算的那个）。
-    它写进 meta.json，而 **`pack.sh` 拿它当 `apk mkpkg` 的时间戳** —— 也就是
+    它写进 meta.json，而 **`skirt pack` 拿它当 `apk mkpkg` 的时间戳** —— 也就是
     决定 `.apk` 字节的那个值。见下面那段。
     """
     pkg = spec["package"]
@@ -283,7 +283,7 @@ def collect(spec: dict, arch: str,
             #   这里原来是 `time.strftime("%Y-%m-%dT%H:%M:%S%z")`，也就是【墙上
             #   时钟】。而它有两个后果，都是这一格踩出来的：
             #
-            #     一、`pack.sh` 拿它当 `apk mkpkg` 的 SOURCE_DATE_EPOCH →
+            #     一、`skirt pack` 拿它当 `apk mkpkg` 的 SOURCE_DATE_EPOCH →
             #         同一个配方建两次，.apk 字节不同。**0005 定的"可复现构建"
             #         在产物上没成立。** 实测：发布出去那个 zlib 包里文件的时间
             #         是 2026-10-15（构建时刻），而配方 date 是 2026-10-10。
@@ -308,7 +308,7 @@ def collect(spec: dict, arch: str,
         # ★ build_key —— 这个包的身份，从内容算出来。见 buildkey.py 顶上那段。
         #
         #   两个地方都写：
-        #     meta.json        给人看、给 pack.sh 用
+        #     meta.json        给人看、给 skirt pack 用
         #     .buildkey        旁路文件，跟着 var/pkgs 的缓存跨 CI 运行走
         #
         #   为什么需要旁路文件：`apk mkpkg --info` 不收自定义字段

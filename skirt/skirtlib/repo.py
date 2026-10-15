@@ -303,10 +303,10 @@ def make_index(repo_dir: Path, arch: str, *, desc: str,
     #   不等于"产出了东西"，所以再加一道产物的检查。
     if proc.returncode != 0:
         die(f"mkndx 退出码 {proc.returncode}（失败原因在上面那几行里）\n"
-            f"       最常见的是包没签名——pack.sh 要带 --sign-key。")
+            f"       最常见的是包没签名——skirt pack 要带 --sign-key。")
     if not index.is_file() or index.stat().st_size == 0:
         die("索引没有生成。上面那些 ERROR 就是原因。\n"
-            "       最常见的是包没签名——pack.sh 要带 --sign-key。")
+            "       最常见的是包没签名——skirt pack 要带 --sign-key。")
     return index
 
 

@@ -542,7 +542,7 @@ jobs:
           #
           #     skirt build glibc-locales  →  改为构建 glibc，产出 glibc、
           #                                   glibc-dev、glibc-locales 三个目录
-          #     pack.sh glibc-locales      →  打那个子包（pack.sh 按产物目录找）
+          #     skirt pack glibc-locales   →  打那个子包（它按产物目录找）
           #
           # 一个输入没法同时当这两者用——上面列 glibc-locales 会连带建出
           # glibc-dev，但打包那步只打你列的。而 CI 的工作区是干净的，
@@ -551,7 +551,7 @@ jobs:
           #
           # 这也让「建了什么就打什么」成为默认：不会因为忘了在输入里补一个
           # 子包名，而产出一个装着主包、缺了子包的仓库。
-          ./scripts/pack.sh --all \
+          ./skirt/skirt pack --all \
               --arch "${{ inputs.arch }}" \
               --sign-key "$SIGNING_KEY_FILE"
 
@@ -769,7 +769,7 @@ jobs:
           fi
 
           # 打包。【失败不追究】——本来就是在失败路径上，能打多少算多少。
-          ./scripts/pack.sh --all --arch "$ARCH" 2>&1 | tail -6 || true
+          ./skirt/skirt pack --all --arch "$ARCH" 2>&1 | tail -6 || true
 
           # 和正常路径同名，播种步骤不用改。
           echo "  打包目录 $(ls var/pkgs/"$ARCH"/*.apk 2>/dev/null | wc -l | tr -d ' ') 个包"

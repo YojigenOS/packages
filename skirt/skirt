@@ -10,8 +10,11 @@
     skirt/skirt deps <包名>               查看依赖解析结果（不构建）
     skirt/skirt stale [包名…]             哪些包该重建（比 build_key，退出码 0=该重建）
     skirt/skirt restore [--arch x86_64]   把 var/pkgs 里的 .apk 还原成 payload
+    skirt/skirt pack [包名…|--all]        把已建好的包打成 .apk（mkpkg + 签名 + 能力位）
     skirt/skirt repo [--arch x86_64]      把 var/pkgs 收成 apk 仓库（索引 + 包）
+    skirt/skirt deploy [--go]             把 var/repo 传到线上（默认干跑）
     skirt/skirt prune [--go]              清掉仓库里过期的包（默认干跑）
+    skirt/skirt smoke                     跑一次真的构建，验证整条链是通的（几分钟）
     skirt/skirt clean [包名]              清理构建目录 / 该包的产物
 
 依赖机制:
@@ -32,6 +35,12 @@
     source.py    下载、校验、解压
     build.py     构建脚本生成、容器内执行
     collect.py   产物收集与 meta.json
+    pack.py      meta.json → apk mkpkg（时间戳、属主、能力位、安装脚本）
+    restore.py   .apk → payload（播种/跳过缺的那一步）
+    repo.py      .apk → apk 仓库（索引 + 包）
+    deploy.py    仓库 → 线上（rclone copy，只增不减）
+    prune.py     仓库里过期的包（默认干跑）
+    smoke.py     端到端那六项检查（真的构建一次，几分钟）
     buildkey.py  一个包的身份 —— 从内容算出来（见 docs/约定/客观性.md）
     commands.py  子命令
 
