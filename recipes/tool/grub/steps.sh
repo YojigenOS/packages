@@ -78,9 +78,33 @@ build() {
     # 那个符号在 -nostdlib 的链接里根本不存在。所以不是"再摘一条"，而是
     # 【整条 CFLAGS 都不该进来】。
     #
-    # ★ LDFLAGS 留着：它不参与目标链接的符号解析（-z relro -z now 在两种
-    #   链接里都成立），而 grub-install 那些要发出去的工具还需要它。
+    # ★★ LDFLAGS 也【必须】挡掉 —— 2026-10-16 才发现，而这一条代价最大：
+    #    它让【我们建出来的盘不能引导】。
+    #
+    #    原来这里留着 LDFLAGS，理由写的是"它不参与目标链接的符号解析
+    #    （-z relro -z now 在两种链接里都成立）"。**那个判断是错的**，
+    #    而错在一个不显眼的地方：`-z relro` 的语义就是
+    #    **把 ELF 头放进第一个可加载的段**。
+    #
+    #    于是 i386-pc 的 kernel.img 首段从 0x9000 起，而首字节成了 ELF 头：
+    #
+    #        ELF32 头 52 字节 + 2 个 program header × 32 = 116 = 0x74
+    #        入口 = 0x9000 + 0x74 = 0x9074   ← 而它该是 0x9000
+    #
+    #    而 GRUB 自己有个 sanity check，装机时才报：
+    #
+    #        grub-install: error: `/usr/lib/grub/i386-pc/kernel.img' is
+    #            miscompiled: its start address is 0x9074 instead of 0x9000: ld.gold bug?.
+    #
+    #    ★ 那句"ld.gold bug?"是 GRUB 的【猜测】，它不知道是谁干的。
+    #      而真相是上面的 LDFLAGS。所以查上游（grub-devel 2026-01 确实有
+    #      人在 2.14 上撞到同一个报错）会把人带去错的方向。
+    #
+    #    ★ 而它的代价链很长：内核.img 坏 → grub-install 失败 → 那张盘没有
+    #      BIOS 引导代码 → 真启动时【串口一个字都没有】→ 而那要十分钟之后
+    #      才看得到。见 docs/决策记录/0013 第七节。
     unset CFLAGS
+    unset LDFLAGS
 
     mkdir -p "$WORK/build"
     for t in $(grub_targets); do
