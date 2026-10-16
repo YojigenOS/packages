@@ -1,0 +1,38 @@
+#!/bin/sh
+# 让 atkbd 不再刷 "Unknown key"
+#
+# ★ 症状（腾讯云那台控制台的实拍）：
+#
+#     atkbd serio0: Unknown key released (translated set 2, code 0x0 on isa0060/serio0)
+#     atkbd serio0: Use 'setkeycodes 00 <keycode>' to make it known.
+#
+# ★ 为什么：云主机【没有 PS/2 键盘】，而 VNC 控制台发来的按键事件照样落到
+#   `i8042` 那个控制器上。`atkbd` 查不到对应的键码，就每次按键报两条。
+#   —— 它不影响任何功能，而它把串口/控制台刷满，让人以为出了事。
+#
+# ★ 而 255 是哪个值：内核源码里写着（drivers/input/keyboard/atkbd.c）
+#
+#       #define ATKBD_KEY_UNKNOWN  0     ← 0 才报 "Unknown key"
+#       #define ATKBD_KEY_NULL     255   ← 255 = 静默
+#
+#       switch (keycode) {
+#       case ATKBD_KEY_NULL:    break;                     /* ← 什么都不做 */
+#       case ATKBD_KEY_UNKNOWN: dev_warn("Unknown key …"); /* ← 才报错 */
+#
+#   也就是说 255 是设计里"把这个扫描码当作【不存在】"的专用值（连 input
+#   事件都不发）。**而内核那句提示只写了 `setkeycodes 00 <keycode>`，
+#   它没告诉你填 255。**
+#
+# ★ 为什么无条件跑，不先判断"是不是云主机"：
+#   扫描码 0 在真实键盘上不会出现（它是"没有键"那个状态），所以这条在任何
+#   机器上都安全；而真机上它也无害。多一个判断只会多一处会错的地方。
+#
+# ★ 失败就说 —— 不吞。而它不该拦启动：/init 那层会打一句
+#   "⚠ 这个钩子失败了，继续"。所以这里用 set -e，让退出码传上去。
+
+set -eu
+
+if ! setkeycodes 00 255; then
+    echo "    setkeycodes 00 255 没成 —— 控制台上每次按键还会刷两条 Unknown key"
+    exit 1
+fi
