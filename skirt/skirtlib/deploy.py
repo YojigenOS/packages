@@ -257,8 +257,16 @@ def deploy(arch: str, remote: str | None = None, *, go: bool = False,
             "       也可以把 S3_AK / S3_SK / S3_BASE_URL / S3_BUCKET 放进环境变量，"
             "那样连远端都不用写")
 
+    # ★ 这个数字是【报给人看的】，不是要传的东西的清单 —— 传的是整个目录
+    #   （`rclone copy src_dir …`），所以 `.buildkey` 那些边车也会跟着走。
+    #   2026-10-16 之前这里只数 .apk，于是"源: 87 个包 + 索引，42 MB"
+    #   那句话比真传上去的少一点。少得不多，但它是【说出来的数字和做出来的
+    #   不是一回事】——那一类正是这个项目一直在修的东西。
     apks = sorted(p for p in src_dir.glob("*.apk") if p.is_file())
-    size = sum(p.stat().st_size for p in apks) + index.stat().st_size
+    sidecars = sorted(p for p in src_dir.glob("*.apk.buildkey") if p.is_file())
+    size = (sum(p.stat().st_size for p in apks)
+            + sum(p.stat().st_size for p in sidecars)
+            + index.stat().st_size)
     creds = rclone_env(env)
 
     use_local = local_rclone() if local is None else local
@@ -270,7 +278,9 @@ def deploy(arch: str, remote: str | None = None, *, go: bool = False,
         mounts = list(mounts or []) + [(src_dir.parent, REPO_IN_CONTAINER)]
 
     out("")
-    out(f"  源:      {src_dir}   （{len(apks)} 个包 + 索引，{_human(size)}）")
+    out(f"  源:      {src_dir}   （{len(apks)} 个包"
+        + (f" + {len(sidecars)} 份边车" if sidecars else "")
+        + f" + 索引，{_human(size)}）")
     out(f"  目标:    {remote}/{arch}/")
     out(f"  模式:    {'★ 真的传' if go else '干跑（加 --go 才真的传）'}"
         f"   rclone: {'本机那份' if use_local else f'容器里的 {image}'}")
