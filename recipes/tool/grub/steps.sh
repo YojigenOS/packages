@@ -78,31 +78,19 @@ build() {
     # 那个符号在 -nostdlib 的链接里根本不存在。所以不是"再摘一条"，而是
     # 【整条 CFLAGS 都不该进来】。
     #
-    # ★★ LDFLAGS 也【必须】挡掉 —— 2026-10-16 才发现，而这一条代价最大：
-    #    它让【我们建出来的盘不能引导】。
+    # LDFLAGS 也挡掉。理由和 CFLAGS 那两条是同一类（构建环境的口味不该进
+    # freestanding 的目标代码）。
     #
-    #    原来这里留着 LDFLAGS，理由写的是"它不参与目标链接的符号解析
-    #    （-z relro -z now 在两种链接里都成立）"。**那个判断是错的**，
-    #    而错在一个不显眼的地方：`-z relro` 的语义就是
-    #    **把 ELF 头放进第一个可加载的段**。
+    # ★ 而这里要留一句更正：2026-10-16 我一度把【kernel.img 入口错位】
+    #   归到这一条上（"`-z relro` 把 ELF 头放进首段"）。**那个结论站不住**，
+    #   做了两个实验都否掉了它：
     #
-    #    于是 i386-pc 的 kernel.img 首段从 0x9000 起，而首字节成了 ELF 头：
+    #       最小例子带 -z relro / -z now / separate-code      入口都不动 ✗
+    #       整个 unset LDFLAGS 之后重建 grub，再建盘           还是 0x9074 ✗
     #
-    #        ELF32 头 52 字节 + 2 个 program header × 32 = 116 = 0x74
-    #        入口 = 0x9000 + 0x74 = 0x9074   ← 而它该是 0x9000
-    #
-    #    而 GRUB 自己有个 sanity check，装机时才报：
-    #
-    #        grub-install: error: `/usr/lib/grub/i386-pc/kernel.img' is
-    #            miscompiled: its start address is 0x9074 instead of 0x9000: ld.gold bug?.
-    #
-    #    ★ 那句"ld.gold bug?"是 GRUB 的【猜测】，它不知道是谁干的。
-    #      而真相是上面的 LDFLAGS。所以查上游（grub-devel 2026-01 确实有
-    #      人在 2.14 上撞到同一个报错）会把人带去错的方向。
-    #
-    #    ★ 而它的代价链很长：内核.img 坏 → grub-install 失败 → 那张盘没有
-    #      BIOS 引导代码 → 真启动时【串口一个字都没有】→ 而那要十分钟之后
-    #      才看得到。见 docs/决策记录/0013 第七节。
+    #   真相在 make 那一行（见下面 build() 里的注释）：是
+    #   `TARGET_IMG_BASE_LDOPT` 被 configure 挑成了 `--image-base`。
+    #   所以这两处 unset 是【对的但无关】—— 留着，而别把它当那个 bug 的原因。
     unset CFLAGS
     unset CXXFLAGS
     unset LDFLAGS
@@ -120,7 +108,54 @@ build() {
             --prefix=/usr \
             --disable-nls \
             --disable-werror
-        make
+        # ★★★ 关键的一行：把 TARGET_IMG_BASE_LDOPT 从 `--image-base` 掰回 `-Ttext`。
+        #
+        #   症状（它只有真建一张盘、真跑 grub-install 才说话）：
+        #
+        #       grub-install: error: `/usr/lib/grub/i386-pc/kernel.img' is
+        #           miscompiled: its start address is 0x9074 instead of 0x9000: ld.gold bug?.
+        #
+        #   —— 而那句 "ld.gold bug?" 是 GRUB 的【猜测】，不是结论。
+        #
+        #   真相分三段：
+        #
+        #   ① configure 里（configure.ac:1800 那段）：
+        #
+        #          AX_CHECK_LINK_FLAG([-Wl,--image-base,0x400000],
+        #              [TARGET_IMG_BASE_LDOPT="-Wl,--image-base"],   ← 先试
+        #              [TARGET_IMG_BASE_LDOPT="-Wl,-Ttext"],         ← 不行才用它
+        #              [], …)
+        #
+        #      ★ 而 AX_CHECK_LINK_FLAG 只验"链接器【接受】这个 flag"，
+        #        不验"它的语义对不对"。**现代 GNU ld 把它收下了**
+        #        （只打一句 'address of `text-segment` isn't multiple of page size'），
+        #        于是永远走不到那个 else。
+        #
+        #   ② 而 Makefile 拼出来的是（grub-core/Makefile.core.am:27384）：
+        #
+        #          kernel_exec_LDFLAGS = … $(TARGET_IMG_BASE_LDOPT),0x9000
+        #
+        #      —— 也就是 `-Wl,--image-base,0x9000`。
+        #
+        #   ③ 而 `--image-base` 的语义【不是】"text 从 0x9000 起"：它把 ELF 头
+        #      也算进基址。实测（同一个 ld，最小例子）：
+        #
+        #          -Wl,--image-base,0x8000  →  Entry 0x822c   ← 0x2c 的偏移 ✗
+        #          -Wl,-Ttext,0x8000        →  Entry 0x8000   ✓
+        #
+        #      而 GRUB 那个是 0x9074 − 0x9000 = 0x74 = ELF32 头 52 + 2×phdr 32，
+        #      同一个病。
+        #
+        #   所以修法就是在 make 上覆盖那个变量。而它是个 make 变量
+        #   （`$(TARGET_IMG_BASE_LDOPT)`），所以命令行覆盖是干净的。
+        #
+        #   ★ 上游也在这条路上：[PATCH 5/5] configure: drop -Ttext checks for
+        #     i386-pc（grub-devel 2026-01）—— 那串补丁正是在动这个检查和这两条分支。
+        #
+        #   ★ 而它的代价链值得记：kernel.img 坏 → grub-install 失败 → 那张盘没有
+        #     BIOS 引导代码 → 真启动时【串口一个字都没有】→ 而那要十分钟之后才看得到。
+        #     见 docs/决策记录/0013 第七节。
+        make TARGET_IMG_BASE_LDOPT="-Wl,-Ttext"
     done
 }
 
