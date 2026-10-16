@@ -479,5 +479,33 @@ class Test真的建索引(unittest.TestCase):
                          "不签名的这次要把上一次的记号擦掉")
 
 
+class Test边车要跟着包一起走(unittest.TestCase):
+    """★ 这条守的是一处**安静了很久**的漏搬（2026-10-16 补）。
+
+    pack 写 var/pkgs/<名>.apk 和 <名>.apk.buildkey，而 stage 只搬了前者 ——
+    于是线上没有 build_key，restore 就说「我不知道它上次是什么样」，
+    **每轮 CI 都全量重建**（87 包 × 两架构 × 约两小时）。
+    """
+
+    def setUp(self):
+        self.d = Path(tempfile.mkdtemp())
+        self.pkgs = self.d / "pkgs"
+        self.out = self.d / "repo"
+        self.pkgs.mkdir()
+        self.out.mkdir()
+
+    def test_边车跟着走(self):
+        (self.pkgs / "a-1.0-r1.apk").write_bytes(b"APK")
+        (self.pkgs / "a-1.0-r1.apk.buildkey").write_text("key\n")
+        repo.stage(repo.apk_files(self.pkgs), self.out)
+        self.assertTrue((self.out / "a-1.0-r1.apk.buildkey").is_file(),
+                        "边车没跟着搬 —— 线上就没有 build_key，于是每轮全量重建")
+
+    def test_没有边车也不报错(self):
+        (self.pkgs / "b-2.0-r1.apk").write_bytes(b"APK")
+        repo.stage(repo.apk_files(self.pkgs), self.out)
+        self.assertFalse(list(self.out.glob("b-*.buildkey")), "凭空造了一份边车")
+
+
 if __name__ == "__main__":
     unittest.main()

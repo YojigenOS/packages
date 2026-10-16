@@ -75,6 +75,7 @@ import tempfile
 from pathlib import Path
 
 from .common import ROOT, die
+from .pack import sidecar_name
 
 #: 索引文件名。名字叫 .tar.gz，而里面是 ADB 格式（apk v3）——不是 gzip tar。
 INDEX_NAME = "APKINDEX.tar.gz"
@@ -98,10 +99,32 @@ def apk_files(directory: Path) -> list[Path]:
 
 
 def stage(pkgs: list[Path], repo_dir: Path) -> list[Path]:
-    """把 .apk 复制进仓库目录。
+    """把 .apk（和它那份 `.buildkey` 边车）复制进仓库目录。
 
     ★ 用 cp 而不是 mv —— var/pkgs 是"打包的产物"，var/repo 是"要发布的东西"，
       两者是不同的东西，repo 可以从 pkgs 重新生成。
+
+    ★★ 边车也搬 —— 2026-10-16 补的，而它此前漏了【很久】。
+    ------------------------------------------------------------------
+    整条链是：
+
+        pack     写  var/pkgs/<名>.apk  +  var/pkgs/<名>.apk.buildkey   ✓
+        stage    只搬 <名>.apk                                          ✗ ← 这里漏了
+        deploy   把 var/repo/ 传上去（除索引外的一切 ✓）
+        restore  按 <名>.apk.buildkey 找上次的 key → 找不到                ✗
+
+    于是**每一轮 CI 都全量重建**：87 个包、两个架构、各约两小时。
+    而它的症状是一句离成因很远的话：
+
+        「盘上没有它上次的 build_key」→ 该重建 88 个 · 不用 0 个
+
+    而 `pack.py` 里那个函数的 docstring **早就写下了这个危险**：
+
+        「没有这份，跳过判断就只能说「我不知道它上次是什么样」
+          ——于是每次都重建，build_key 那个机制就白做了。」
+
+    ——它写对了，只是隔壁这个模块没跟上。**这类"一处漏搬、全域失效"的，
+    最值得一条测试钉住，因为它安静得只有两小时一轮的账单能看出来。**
     """
     out = []
     for apk in pkgs:
@@ -109,6 +132,14 @@ def stage(pkgs: list[Path], repo_dir: Path) -> list[Path]:
         if apk.resolve() != dest.resolve():
             shutil.copyfile(apk, dest)
         out.append(dest)
+
+        # 边车：存在就搬。不存在不报错——本地手工 build 出来的可能还没有它，
+        # 而那时"没有 key"是【真的】没有，硬报错会把手工流程弄断。
+        side = apk.parent / sidecar_name(apk.name)
+        if side.is_file():
+            side_dest = repo_dir / sidecar_name(apk.name)
+            if side.resolve() != side_dest.resolve():
+                shutil.copyfile(side, side_dest)
     return out
 
 
