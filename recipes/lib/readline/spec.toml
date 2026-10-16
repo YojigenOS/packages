@@ -1,0 +1,80 @@
+# readline —— 命令行编辑库
+#
+# 【为什么有它】
+#
+# bash 在交互式用它做行编辑：上下箭头翻历史、Ctrl-R 搜历史、左右箭头改
+# 已输的那一行、Ctrl-W 删一个词。没有它，交互式 bash 是【能用的】，只是
+# 那几件事全都没有。
+#
+# ★ 2026-10-16 实测：真机上那把 bash 的 ldd 只有 libc —— 也就是说
+#   【它没链 readline】。原因是这个包当时【还没有配方】，所以 bash 的
+#   configure 找不到它，静静地编出了一个没有行编辑的 bash。加了这个包
+#   之后 bash 要重建一次，那几件事才会回来。
+#
+#   ★ 而那是个"看得见的坏"：不是少一个库，是【敲过东西的人立刻发现不对】。
+#
+# 【为什么它重要】
+#
+# 它是被依赖最多的那批之一（Alpine main 里 36 个包直接依赖它），而我们
+# 自己这边 bash 和 bc 都要它（bc 的配方里写着 --without-readline，那正是
+# "当时没有它"的痕迹）。
+#
+# 【版本号：8.3 而不是 8.3.3】
+#
+# GNU 的 readline 用 patch-level：tarball 永远是 8.3，而补丁补到 8.3.3。
+# Alpine 跟了那三个补丁（readline83-001/002/003.patch），我们【先不跟】：
+#   · 它们是 bug fix，不是新功能
+#   · 新 tarball 本身是 8.3.0 —— 功能是完整的，缺的是三个修补
+#   · 而跟着它们就要在 spec 里挂三个额外 source，那是另一种复杂度
+# 所以 version 写 "8.3"，将来要跟补丁时升到 8.3.3 并在下面加 patches。
+
+[package]
+name        = "readline"
+version     = "8.3"
+release     = 1
+date        = 2026-10-16T14:58:18Z
+description = "命令行编辑库（上下箭头翻历史、Ctrl-R 搜索、行内编辑的底子）"
+url         = "https://tiswww.cwru.edu/php/chet/readline/rltop.html"
+license     = "GPL-3.0-or-later"
+
+[[source]]
+url    = "https://ftp.gnu.org/gnu/readline/readline-$VERSION.tar.gz"
+urls   = ["https://mirrors.kernel.org/gnu/readline/readline-$VERSION.tar.gz"]
+sha256 = "fe5383204467828cd495ee8d1d3c037a7eba1389c22bc6a041f627976f9061cc"
+
+[dependencies.aarch64]
+runtime = ["glibc", "ncurses"]
+build   = ["make", "gcc"]
+
+[dependencies.x86_64]
+runtime = ["glibc", "ncurses"]
+build   = ["make", "gcc"]
+
+[build]
+type       = "autotools"
+# tarball 里带着 configure（GNU 的惯例），所以【不要】autoreconf。
+#
+# ★ 而 configure 里那几件事要写清楚：
+#   · --prefix / --libdir —— ★ --libdir 必须写。
+#     驱动给的默认是 ["--prefix=/usr", "--libdir=/usr/lib"]，而【spec 里
+#     一旦写了 configure，那两个默认值就被整个替换掉】—— 所以只写
+#     --prefix 而漏了 --libdir 的话，那个包会退回 configure 自己的默认。
+#     大多数包那个默认就是 ${prefix}/lib（没事），而那【不是我们能指望的】：
+#     autoconf 在 64 位上有个启发式会给出 ${prefix}/lib64，装出一个真目录
+#     和 0001 的 usr-merge 符号链接撞车。写全了就不用想这件事。
+#   · --disable-static —— 它默认把静态库也建出来（opt_static_libs=yes），
+#     而 /usr/lib/libreadline.a 没人用。我们的库大多关掉它。
+#   · --disable-install-examples —— 默认装 examples/ 里那几支示例程序，
+#     那不是发行版该带的东西。
+#
+# ★ 而【默认值已经对的两件事就不写】：
+#   · multibyte —— configure.ac 里 opt_multibyte=yes，默认就开
+#     （而那是中文优先会关心的那条：不开的话 UTF-8 输入的行编辑是坏的）。
+#   · curses —— 默认 opt_curses=no，走 termcap，而 termcap 由 ncurses 提供。
+#     写了 --with-curses 反而会把依赖变成 libcurses 那套。Alpine 也没写。
+configure = [
+  "--prefix=/usr",
+  "--libdir=/usr/lib",
+  "--disable-static",
+  "--disable-install-examples",
+]

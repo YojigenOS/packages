@@ -29,12 +29,20 @@ urls = [
 sha256 = "0d5cd86965f869a26cf64f4b71be7b96f90a3ba8b3d74e27e8e9d9d5550f31ba"
 
 [dependencies.aarch64]
-runtime = ["glibc"]
-build   = ["make", "gettext", "gcc"]
+# ★ readline 在【两处都要】：
+#   · build —— configure 要能找到它（找不到就【静静编出一个没有行编辑的 bash】✗）
+#   · runtime —— bash 链接它，装 bash 就得有它
+# 2026-10-16：加 readline 之前，真机上那把 bash 的 ldd 只有 libc。
+runtime = ["glibc", "readline"]
+build   = ["make", "gettext", "gcc", "readline"]
 
 [dependencies.x86_64]
-runtime = ["glibc"]
-build   = ["make", "gettext", "gcc"]
+# ★ readline 在【两处都要】：
+#   · build —— configure 要能找到它（找不到就【静静编出一个没有行编辑的 bash】✗）
+#   · runtime —— bash 链接它，装 bash 就得有它
+# 2026-10-16：加 readline 之前，真机上那把 bash 的 ldd 只有 libc。
+runtime = ["glibc", "readline"]
+build   = ["make", "gettext", "gcc", "readline"]
 
 [build]
 type      = "autotools"
