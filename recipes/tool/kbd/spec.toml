@@ -62,8 +62,34 @@ build   = ["make", "gcc", "gettext", "pkgconf"]
 
 [build]
 type      = "autotools"
-# ★ 只给 --prefix，不加任何可选项。理由：
-#   · 不写 `--disable-nls`（0012 第 2 条禁止 ✗）
-#   · 可选依赖 configure 自己会判断（PAM 没装 → 不建 vlock；库没装 → 那个
-#     压缩格式不启用），显式关反而多一处会和上游漂的地方
-configure = ["--prefix=/usr"]
+configure = [
+    "--prefix=/usr",
+    # ★★ 必须显式关掉 vlock —— 这一条是第一轮构建（5 秒就挂）教我的。
+    #
+    #   我第一次写这个配方时的判断是错的：我看了 configure.ac 里那串
+    #   PKG_CHECK_MODULES，看到 PAM / zlib / bzip2 / lzma / zstd / xkbcommon
+    #   每一项都给了 `[HAVE_X=yes], [HAVE_X=no]` 两侧，于是写下一句
+    #   "缺了不失败、只是少功能"—— **而 PAM 那条不成立**：
+    #
+    #       AC_ARG_ENABLE([vlock], …, [VLOCK_PROG=yes])      ← 默认【开】
+    #       AS_IF([test "$VLOCK_PROG" = "yes"], [            ← 整段都在这层 if 里
+    #           PKG_CHECK_MODULES(PAM, pam, …)
+    #           AS_IF([… "$HAVE_PAM" != yes …], [
+    #               AC_MSG_ERROR([libpam-devel required.])   ← 就死在这儿
+    #           ])
+    #       ])
+    #
+    #   所以不关 vlock，PAM 就是【必需】的。而它的失败长这样（第 55/89 个包，
+    #   0 分 05 秒）：
+    #
+    #       checking for pam... no
+    #       configure: error: libpam-devel required.
+    #
+    #   ★ 而 vlock 是"锁虚拟终端"那个东西 —— 我们这条路上（init=/init 起一个
+    #     shell、SSH 进来）用不到它，关掉没有任何损失。
+    #
+    #   ★ 教训：**"两侧都给了"不等于"可缺"** —— 得看那层 `if` 的默认值。
+    #     PAM 那一段我扫过去的时候正是漏了 `VLOCK_PROG=yes` 这一行。
+    "--disable-vlock",
+    # 不写 `--disable-nls`：0012 第 2 条禁止它（中文优先），kbd 自带 zh_CN 的 .mo。
+]
