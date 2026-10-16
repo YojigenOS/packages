@@ -104,6 +104,7 @@ build() {
     #      BIOS 引导代码 → 真启动时【串口一个字都没有】→ 而那要十分钟之后
     #      才看得到。见 docs/决策记录/0013 第七节。
     unset CFLAGS
+    unset CXXFLAGS
     unset LDFLAGS
 
     mkdir -p "$WORK/build"
