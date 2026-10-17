@@ -329,10 +329,52 @@ def make_build_script(spec: dict, arch: str = "") -> str:
         #     所以必须由外层 —— 它此刻还是 root —— 调两次。
         #
         #   `all` 是给手工跑用的（两步都做）。驱动走的是分开的两条。
+        # ★★★ 而 package 之后【查一下 $PKGDEST 里到底有没有东西】。
+        #
+        #   2026-10-17 加。那一轮里 pip 和 meson 都报
+        #
+        #       [64/90] pip  ✅  0 分 02 秒
+        #
+        #   —— ✅ 是"脚本退出码 0"，**不是"装进去了东西"**。而它们的
+        #   payload 里只有一个 `.yojigen-caps`（那是这一步之后写的），
+        #   真正的文件一个都没有。于是下游（`test_kind`）报
+        #
+        #       pip: devel 但既没有可执行文件，也没有头文件
+        #
+        #   —— 报错的地方离成因隔了【两小时】和【一整轮 CI】。
+        #
+        #   ★ 判据：package() 跑完，$PKGDEST 里文件数 ≤ 1 就是空的
+        #     （那 1 个是 .yojigen-caps，构建过程自己的记事，不是包内容）。
+        #     真的有很小的包（ninja 就 2 个文件），所以 ≤1 和"少"是两回事。
+        #
+        #   ★ 为什么在这里而不是在下游：这里【知道】"刚才那步干了什么"，
+        #     下游只知道"目录里有什么"。**一个检查该站在离成因最近的地方。**
+        # ★★ 函数名用英文 —— 【shell 不接受中文标识符】。
+        #
+        #   第一版写的是 `检查产物()`，而它在构建容器里报：
+        #
+        #       /build/run.sh: line 10: `检查产物': not a valid identifier
+        #
+        #   ★ 而它【静默地不跑】—— setup 阶段报一句、脚本继续，于是检查
+        #     等于不存在。那正是这一类最坏的形态：**你以为加了防护，而它
+        #     从来没执行过。**
+        #
+        #   ★ 抓到它的方式是【本地把那一段抽出来跑一遍】（用真的 sh，不是
+        #     我想象里的 sh）。这条是 2026-10-17 那天第五次同一个形状。
+        "check_dest() {\n"
+        "  n=$(find \"$PKGDEST\" -type f 2>/dev/null | wc -l)\n"
+        "  if [ \"$n\" -le 1 ]; then\n"
+        "    echo \"[产物] ✗ $PKGDEST 里只有 $n 个文件 —— package() 没装东西。\" >&2\n"
+        "    echo \"        （那一层的函数可能没被 steps.sh 覆盖掉，或者它装的地方\" >&2\n"
+        "    echo \"          不是 $PKGDEST）\" >&2\n"
+        "    exit 1\n"
+        "  fi\n"
+        "  echo \"[产物] $n 个文件\" >&2\n"
+        "}\n"
         "case \"${1:-all}\" in\n"
-        "  all)     build; package ;;\n"
+        "  all)     build; package; check_dest ;;\n"
         "  build)   build ;;\n"
-        "  package) package ;;\n"
+        "  package) package; check_dest ;;\n"
         '  *)       echo "用法: $0 [all|build|package]" >&2; exit 2 ;;\n'
         "esac\n"
     )
