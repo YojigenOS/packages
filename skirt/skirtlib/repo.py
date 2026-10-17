@@ -213,6 +213,57 @@ def remote_path(arch: str, env: dict | None = None) -> str:
     return f"{REMOTE_NAME}:{env.get('S3_BUCKET', '')}/{arch}"
 
 
+def fetch_apks(pkgs_dir: Path, arch: str, env: dict | None = None,
+               image: str = "rclone/rclone") -> int:
+    """把【线上的 .apk】拉进 `var/pkgs/<架构>/`。返回拉了几份。
+
+    ★★★ 为什么需要它（2026-10-17 查清）。
+
+    已经有 `sync_from_s3` 拉线上，而它拉进的是 **`var/repo/<架构>/`** ——
+    那是【建索引之前】做的事（为了让新索引仍然列着以前发布的包）。
+
+    而【建包那一步看的是 `var/pkgs/<架构>/`】。CI 每次都是干净的工作区，所以
+    那里永远是空的 → 每个包都被判成"该重建" → **CI 必然全量**。
+
+    `.buildkey` 那个旁路文件的存在【就是为了跨 CI 的运行】（见 buildkey.py:292），
+    而它躺在 `var/pkgs/*.apk.buildkey` 里 —— 于是不把那批 .apk 拿回来，
+    那个文件永远读不到，增量也就永远不成立。
+
+    ★ 而这一条和 `sync_from_s3` 是【两个方向上的同一件事】：一个服务"建索引"，
+      一个服务"建包"。搬完这两处，`var/pkgs` 和 `var/repo` 才都会是完整的。
+
+    ★ 只拉 `.apk`，连 `.apk.buildkey` 一起（它们在同一个目录、同一批文件名下）。
+      `pull_apks` 那个 `--include *.apk` 只匹配 `.apk` —— 而 `.buildkey` 没有
+      那个后缀，所以它会漏。**这一条要是漏了，增量还是不成**，所以下面单独拉一次。
+    """
+    env = os.environ if env is None else env
+    if not has_s3_credentials(env):
+        print("  （没有 S3 凭据，跳过拉取线上——本地开发时正常）")
+        return 0
+
+    remote = remote_path(arch, env)
+    pkgs_dir.mkdir(parents=True, exist_ok=True)
+    print()
+    print(f"  拉回线上已有的包 → {pkgs_dir.relative_to(ROOT) if pkgs_dir.is_relative_to(ROOT) else pkgs_dir}/")
+    proc = pull_apks(remote, pkgs_dir, env, image=image)
+    for line in proc.stdout.splitlines() + proc.stderr.splitlines():
+        if line.strip() and "NOTICE:" not in line:
+            print(f"    {line}")
+
+    # ★ 边车单独拉一次 —— `*.apk` 那个通配符匹配不到 `*.apk.buildkey`。
+    proc2 = rclone(["copy", remote, "/pkgs", "--include", "*.apk.buildkey",
+                    "--no-traverse"],
+                   env, mounts=[(pkgs_dir, "/pkgs")], image=image)
+    for line in proc2.stdout.splitlines():
+        if line.strip() and "NOTICE:" not in line:
+            print(f"    {line}")
+
+    n = len(list(pkgs_dir.glob("*.apk")))
+    keys = len(list(pkgs_dir.glob("*.apk.buildkey")))
+    print(f"    现在 var/pkgs 里有 {n} 个 .apk、{keys} 份 .buildkey")
+    return n
+
+
 def sync_from_s3(repo_dir: Path, arch: str, env: dict | None = None) -> bool:
     """把【线上已有的包】拉回 repo_dir。返回是否真的拉过。
 

@@ -195,18 +195,31 @@ jobs:
           #     这个坑实测踩过一次，报错是 docker 找不到那个镜像，zlib 第一
           #     个包就挂了。
           SKIRT_BUILDENV: ${{ inputs.buildenv != '' && inputs.buildenv || 'yojigenos/buildenv' }}
+          # ★★ 拉线上那一步要它。第 16 步（建索引）本来就有这四个 ——
+          #   而这里是【另一件事】：它服务的是【建包】那一步的跳过判断。
+          S3_AK: ${{ secrets.S3_AK }}
+          S3_SK: ${{ secrets.S3_SK }}
+          S3_BASE_URL: ${{ secrets.S3_BASE_URL }}
+          S3_BUCKET: ${{ secrets.S3_BUCKET }}
         run: |
-          # ★★★ 先把上一轮的产物捞回来 —— 不做这一步，每个包都会被判成
-          #   "该重建"，于是 CI 必然全量（87 包 × 2 架构 × ~2 小时）。
+          # ★★★ 先把线上已有的产物捞回来 —— 不做这一步，每个包都会被判成
+          #   "该重建"，于是 CI 必然全量（90 包 × 2 架构 × ~2 小时）。
           #
-          #   `.buildkey` 那个旁路文件的存在【就是为了这个】（见 buildkey.py:292
-          #   那句「为了【跨 CI 的运行】」），而 workflow 里一直没调 `skirt restore`。
-          #   2026-10-17 补上。
+          #   `.buildkey` 那个旁路文件的存在【就是为了跨 CI 的运行】
+          #   （见 buildkey.py:292 那句），而它躺在 var/pkgs/*.apk.buildkey 里。
+          #
+          #   ★ 2026-10-17 第一版只加了下面那句 `restore` —— 而那【不够】：
+          #     restore 只解【本地】的 .apk，它不下载。实测那轮跑了两小时、
+          #     日志里写着「没有 …/var/pkgs/x86_64，没什么可还原的」，90 个包
+          #     全部重建。所以【先拉、再解】。
+          #
+          #   ★ 而拉的是 var/pkgs（建包那步读的那个目录）。线上那份是给
+          #     var/repo 用的（建索引那步），两个目录不同 —— 见 fetch_apks 的注释。
           #
           #   ★ 失败不中断：拉不到就当"没有上一次"，退化成全量（那是老行为，
           #     而它不是错的，只是慢）。
-          ./skirt/skirt restore --arch "${{ matrix.arch }}" || \
-            echo "::warning::restore 失败 —— 这一轮会全量重建（几分钟变两小时）"
+          ./skirt/skirt restore --arch "${{ matrix.arch }}" --from-online || \
+            echo "::warning::拉线上/还原失败 —— 这一轮会全量重建（几分钟变两小时）"
           ./skirt/skirt order
           # bootstrap 失败时非零退出（这是它该做的）。但我们要先把日志传出去，
           # 所以这里不让它中断，改成记下结论、后面再失败。

@@ -351,6 +351,10 @@ def cmd_restore(args) -> None:
     from .restore import restore
 
     arch = resolve_arch(args.arch)
+    if getattr(args, "from_online", False):
+        from .repo import fetch_apks
+
+        fetch_apks(PKGS_DIR / arch, arch)
     print()
     ok, skip, fail = restore(arch)
     print()
@@ -704,6 +708,11 @@ def main() -> None:
     p = sub.add_parser("restore",
                        help="把 var/pkgs/<架构>/*.apk 还原成 payload（播种/跳过缺的那一步）")
     p.add_argument("--arch", help="目标架构（默认当前架构）")
+    # ★★ 2026-10-17 加。CI 每次都是干净的工作区，var/pkgs 是空的 —— 而
+    #   `.buildkey`（跨 CI 增量的那个旁路文件）就躺在那里。不先把线上的 .apk
+    #   拉回来，每个包都会被判成"该重建"，于是 CI 必然全量。
+    p.add_argument("--from-online", action="store_true",
+                   help="先从线上仓库把 .apk 和 .buildkey 拉进 var/pkgs（要 S3 凭据）")
     p.set_defaults(func=cmd_restore)
 
     p = sub.add_parser("pack",
