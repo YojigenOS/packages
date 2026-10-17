@@ -183,6 +183,95 @@ jobs:
 
       # ── 引导 ────────────────────────────────────────────────────────────
 
+      # ── provides 从哪来 ───────────────────────────────────────────────
+      #
+      # ★★ 2026-10-17 补的。原来这里【没有】这一步，于是 SKIRT_PROVIDES 落到
+      #   `bootstrap/provides.txt` 那个兜底 —— 而它是给【借来的 Debian 起点】
+      #   写的（4 项 + 断环），不是给 `yojigenos/devel` 写的。
+      #
+      #   `release.yml` 那边【一直有】这一步（它从 distro 的 devel.toml 算闭包）。
+      #   **两个 workflow 用了两个不同的 provides 来源，而它们跑的是同一个
+      #   构建环境。** 那是不一致，而它会以"某个包找不到东西"的方式表现。
+      - name: 读出 devel 提供了哪些包
+        run: |
+          set -euo pipefail
+          # ★ 用 skirt provides 算【依赖闭包】，不是直接读那份列表 ——
+          #   列表是"想要什么"，闭包才是"镜像里真的有什么"。理由详见
+          #   release.yml 同一个步骤（那里记着一次真事故）。
+          LIST=$(python3 -c "
+          import tomllib, pathlib
+          v = tomllib.loads(pathlib.Path('.distro/variants/devel.toml').read_text())['variant']
+          print(' '.join(v['packages']))")
+
+          CLOSURE=$(./skirt/skirt provides $LIST)
+          echo "SKIRT_PROVIDES=$(echo $CLOSURE | tr '\n' ' ')" >> "$GITHUB_ENV"
+
+          echo "  列表上 $(echo $LIST | wc -w) 个 ✗ 闭包 $(echo "$CLOSURE" | wc -l) 个"
+          for p in $(echo "$CLOSURE"); do
+            echo "$LIST" | grep -qw "$p" || echo "      + $p"
+          done
+
+          # ★★★ 而这里加一条断言：**每个配方声明的 build 依赖，都得在这个
+          #   闭包里**。那是 §1.5.B 那句「配方能用什么 ⟺ devel 里有什么」
+          #   的机器版本 —— 它以前只是【意图】，没人量过。
+          #
+          #   2026-10-17 量了：89 个配方里 16 个不满足它。而第一个可观测的
+          #   后果就是那天的一次失败：
+          #
+          #       grep: configure: error: PCRE support not available
+          #
+          #   grep 声明了 pcre2 作 build 依赖 ✓，而环境里没有它 ✗。
+          #
+          #   ★ 而这条断言【必须在这里报警】而不是等到构建失败 —— 构建失败的
+          #     报错（"PCRE support not available"）和原因（"pcre2 不在环境里"）
+          #     之间没有直接线索，那正是这个项目一直在修的那一类。
+          CLOSURE="$CLOSURE" python3 - <<'PYEOF2'
+          import os, pathlib, tomllib
+          # ★ 用 $CLOSURE，不是 $SKIRT_PROVIDES。
+          #
+          #   `echo … >> "$GITHUB_ENV"` 【不等于】设置当前进程的环境变量 ——
+          #   GitHub Actions 把它喂给【后续】步骤，同一步骤内它还没生效。
+          #   第一版就是这么写的，而它当场报 KeyError（本地跑了一遍才抓到）。
+          closure = set(os.environ["CLOSURE"].split())
+
+          # ★★ 子包映射回母包。【装 openssl 就有 libcrypto 和 libssl】——
+          #   而 provides 里写的是母包名。第一版直接比包名，于是报了假的：
+          #
+          #       openssh 缺 libcrypto, libssl
+          #
+          #   而那两个是 openssl 的子包（见 openssl/spec.toml 的两个
+          #   [[subpackage]]）。★ 假报比不报好 —— 它会被人看见并修掉，
+          #   而"不报"不会。但修完之后它该只报真的。
+          子包到母包 = {}
+          for sp in pathlib.Path("recipes").glob("*/*/spec.toml"):
+              d = tomllib.loads(sp.read_text())
+              for sub in (d.get("subpackage") or []):
+                  if sub.get("name"):
+                      子包到母包[sub["name"]] = d["package"]["name"]
+
+          # 这几个是"谁都有"的：编译器是 yojigenos/devel 的定义里自带的，
+          # 而它们不出现在 provides 列表里（它们是 gcc 的一部分）。
+          always = {"gcc", "make", "cc", "ld", "ar"}
+          缺 = {}
+          for sp in sorted(pathlib.Path("recipes").glob("*/*/spec.toml")):
+              d = tomllib.loads(sp.read_text())
+              need = set()
+              for arch in ("x86_64", "aarch64"):
+                  need |= set(d.get("dependencies", {}).get(arch, {}).get("build", []))
+              # 子包换回母包再比
+              need = {子包到母包.get(x, x) for x in need}
+              miss = need - closure - always
+              if miss:
+                  缺[d["package"]["name"]] = sorted(miss)
+          if 缺:
+              print(f"::error::有 {len(缺)} 个配方的 build 依赖不在构建环境里 ——"
+                    f"构建它们时会以一个看不出原因的方式失败")
+              for n, m in sorted(缺.items()):
+                  print(f"::error::    {n} 缺 {', '.join(m)}")
+              raise SystemExit(1)
+          print("  ✓ 每个配方声明的 build 依赖都在构建环境里")
+          PYEOF2
+
       - name: 引导 —— 建出全部包
         id: bootstrap
         env:
