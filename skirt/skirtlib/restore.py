@@ -376,6 +376,30 @@ def restore(arch: str, *, pkgs_dir: Path | None = None,
     ok = sum(1 for j in todo if done.get(j.rel) == "ok")
     fail = [j for j in todo if done.get(j.rel) != "ok"]
 
+    # ★★★ 2026-10-17：解出来的 payload 里到底有几个文件。
+    #
+    #   为什么需要这一句。那一轮全量自举挂在"跑测试"，而报错是：
+    #
+    #       meson: devel 但既没有可执行文件，也没有头文件
+    #
+    #   而 restore 那边报的是「还原 101 个，失败 0 个」—— **两句话对不上**，
+    #   中间没有任何线索说明"解出来了"和"里面有东西"是两件事。
+    #
+    #   `apk extract` 的退出码 0 只说明"这个 .apk 我读得懂"，不说明"解出了
+    #   文件"。而空的 payload 会让【下游】报错，报错的地方离成因很远 ——
+    #   那正是这个项目一直在修的那一类。
+    #
+    #   ★ 判据：.apk 大于 100 KB 而 payload 少于 3 个文件。真的有很小的包
+    #     （filesystem 就是），所以这是【警告】不是失败 —— 但它必须被说出来。
+    可疑 = []
+    for j in todo:
+        if done.get(j.rel) != "ok":
+            continue
+        payload = output_dir / j.rel / "payload"
+        n = sum(1 for f in payload.rglob("*") if f.is_file() or f.is_symlink())
+        if j.apk.stat().st_size > 100 * 1024 and n < 3:
+            可疑.append(f"{j.rel}（{j.apk.stat().st_size // 1024} KB 的包只解出 {n} 个文件）")
+
     # 拿不到 key 的那批要说出来：跳过判断以后见不到 .buildkey，会把它们当
     # "不知道上次是什么样"（= 每次都重建）。而这是【正常的一半】：很老的
     # 产物本来就没有旁路文件。
@@ -388,6 +412,13 @@ def restore(arch: str, *, pkgs_dir: Path | None = None,
     #   的 payload。现在 plan() 已经把旧 release 挡在外面（只处理配方要的那个），
     #   所以 `shared` 里剩下的同名是【另一回事】：子包、或者两个配方碰巧同名。
     #   而它仍然该说出来。
+    if 可疑:
+        print(f"  ★★ 有 {len(可疑)} 个包解出来的文件少得可疑 —— 那会让下游以"
+              f"一个看不出原因的方式失败：")
+        for line in 可疑[:6]:
+            print(f"      {line}")
+        if len(可疑) > 6:
+            print(f"      …还有 {len(可疑) - 6} 个")
     if shared:
         for rel, names in sorted(shared.items()):
             print(f"  ★ {len(names)} 个包指向同一个目录 {rel}：{'、'.join(names)}"
