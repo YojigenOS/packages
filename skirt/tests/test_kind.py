@@ -128,14 +128,39 @@ class TestKindMatchesArtifacts(unittest.TestCase):
                 continue
             详情 = []
             for x in 项[:4]:
-                可 = x.is_file() and os.access(x, os.X_OK) and not x.is_symlink()
-                详情.append(f"{x.name}[{'ok' if 可 else '✗'}]")
+                # ★★ 2026-10-17：去掉了 `not x.is_symlink()`。
+                #
+                #   它【完全多余】，而它唯一的效果是【把好的链接也判死】：
+                #
+                #       好链接（vim → vim.basic）  旧判据 False ✗   现在 True ✓
+                #       断链                       旧判据 False      现在 False ✓
+                #       普通文件                   旧判据 True       现在 True ✓
+                #
+                #   因为 `os.access(x, os.X_OK)` 【自己就会跟链接过去】——断链
+                #   自然返回 False。那个条件防的东西，`os.access` 本来就防住了。
+                #
+                #   ★ 实测的后果：vim 和 xz 被判成"没有可执行文件"，而它们的
+                #     `usr/bin` 里明明有 9 个和 23 个（只是大多是链接）。而包
+                #     【真的能用】—— 真机上 vim 能跑。**一条为了防备某个情况
+                #     而加的条件，在别处已经挡住那个情况之后，只剩副作用。**
+                可 = os.access(x, os.X_OK)
+                # 链接的话，把指向写出来 —— 不然只看到一排 [✗] 会以为是权限
+                if x.is_symlink():
+                    详情.append(f"{x.name}→{os.readlink(x)}[{'ok' if 可 else '✗'}]")
+                else:
+                    详情.append(f"{x.name}[{'ok' if 可 else '✗'}]")
                 if 可:
                     exe = True
             看了.append(f"{sub}({len(项)}): " + " ".join(详情))
         hdr = bool(list(payload.rglob("*.h")))
-        文件数 = sum(1 for _ in payload.rglob("*") if _.is_file())
-        self._看了[id(payload)] = f"payload 里 {文件数} 个文件；" + "；".join(看了)
+        文件 = [str(f.relative_to(payload)) for f in payload.rglob("*") if f.is_file()]
+        # ★★ 文件少的时候【把它们列出来】—— 2026-10-17。
+        #   那两轮里 meson 和 pip 都是"payload 里 1 个文件"，而"1 个"不说
+        #   那 1 个是什么。而它是什么，正是"为什么解出来是这样"的全部线索。
+        名单 = ("：" + "、".join(文件[:5]) + ("…" if len(文件) > 5 else "")
+                ) if len(文件) <= 20 else ""
+        self._看了[id(payload)] = (f"payload 里 {len(文件)} 个文件{名单}；"
+                                   + "；".join(看了))
         return so, exe, hdr
 
     def test_kind_和产物一致(self):
