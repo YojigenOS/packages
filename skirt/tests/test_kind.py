@@ -92,19 +92,50 @@ class TestKindMatchesArtifacts(unittest.TestCase):
             if hits:
                 cls.payloads[name] = hits[0]
 
+    #: payload → "看了什么"的描述。报错时打出来，好让"为什么没找到"有线索。
+    _看了: dict[int, str] = {}
+
     def _shape(self, payload):
+        """(有没有 .so, 有没有可执行文件, 有没有头文件)。
+
+        ★★ 2026-10-17：顺手记下"看了哪儿、看到什么"。
+
+        原来只返回三个布尔值，于是失败时那句话是：
+
+            meson: devel 但既没有可执行文件，也没有头文件
+
+        —— 而它不说【它找了哪几个目录】、【那些目录在不在】、【里面有什么】。
+        而那三样正好是"为什么没找到"的全部信息。本地复现时 meson 的 payload
+        明明有 `usr/bin/meson` 且 `exe=True`，CI 里却报没有 —— 中间那一段
+        完全是黑的。
+
+        所以现在把过程存进 self._看了，报错时一并打出来。
+        「一个该说话的地方没说话」——这一处就是。
+        """
         so = any(self._SO.search(f.name) for f in payload.rglob("*")
                  if f.is_file() or f.is_symlink())
         so = so or bool(list(payload.rglob("*.a")))
         exe = False
+        看了: list[str] = []
         for sub in ("usr/bin", "usr/sbin", "bin", "sbin"):
             d = payload / sub
-            if d.is_dir():
-                for x in d.iterdir():
-                    if x.is_file() and os.access(x, os.X_OK) and not x.is_symlink():
-                        exe = True
-                        break
+            if not d.is_dir():
+                看了.append(f"{sub}(不在)")
+                continue
+            项 = sorted(d.iterdir())
+            if not 项:
+                看了.append(f"{sub}(空)")
+                continue
+            详情 = []
+            for x in 项[:4]:
+                可 = x.is_file() and os.access(x, os.X_OK) and not x.is_symlink()
+                详情.append(f"{x.name}[{'ok' if 可 else '✗'}]")
+                if 可:
+                    exe = True
+            看了.append(f"{sub}({len(项)}): " + " ".join(详情))
         hdr = bool(list(payload.rglob("*.h")))
+        文件数 = sum(1 for _ in payload.rglob("*") if _.is_file())
+        self._看了[id(payload)] = f"payload 里 {文件数} 个文件；" + "；".join(看了)
         return so, exe, hdr
 
     def test_kind_和产物一致(self):
@@ -148,4 +179,11 @@ class TestKindMatchesArtifacts(unittest.TestCase):
             elif kind == "?":
                 bad.append(f"{name}: 不在任何分类目录里")
         self.assertGreater(checked, 20, f"只查了 {checked} 个，太少了")
-        self.assertFalse(bad, "分类和产物对不上：\n         " + "\n         ".join(bad))
+        if bad:
+            # ★ 把"看了什么"一起打出来 —— 否则这句话只说"没找到"，
+            #   而不说找了哪儿、那儿有什么。
+            细节 = "\n         ".join(
+                f"{n} → {self._看了.get(id(self.payloads[n]), '（没记录）')}"
+                for n in sorted(self.payloads) if any(b.startswith(f"{n}:") for b in bad))
+            self.assertFalse(bad, "分类和产物对不上：\n         "
+                             + "\n         ".join(bad) + "\n      看过的：\n         " + 细节)
