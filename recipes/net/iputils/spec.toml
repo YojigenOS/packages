@@ -29,6 +29,20 @@ build   = ["make", "gcc", "meson", "ninja", "libcap"]
 [build]
 type = "meson"
 configure = [
+    # ★★★ 这三行是 2026-10-16 的一次【真实事故】的收尾：
+    #   x86_64 上这个包装出来的是 /usr/local/bin/ping —— 而 usr/bin 里【空的】。
+    #   原因：spec 写了 configure，于是驱动那三个默认值
+    #       ["--prefix=/usr", "--libdir=lib", "--buildtype=release"]
+    #   被【整个替换掉】，而 meson 自己的默认 prefix 是 /usr/local。
+    #
+    #   抓到它的是 `test_kind.py` 里那条「net 但 bin/ 里没有可执行文件」——
+    #   而那条检查 2026-10-15 就加了，却【一次都没跑起来过】：那一步的退出码
+    #   被 `python3 … | tail -25` 吞了。2026-10-16 加了 `set -o pipefail`，
+    #   它才第一次真的说话——而它说的第一句话就是这个。
+    "--prefix=/usr",
+    "--libdir=lib",
+    "--buildtype=release",
+    
     # ★ 关掉三样东西，每样都有具体理由：
     #
     #   ① man 页要 xsltproc（我们从没打过它）—— 而 man 页生成失败会

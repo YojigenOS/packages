@@ -44,6 +44,15 @@ build   = ["make", "gcc", "meson", "ninja", "expat", "python3"]
 type = "meson"
 
 configure = [
+    # ★★ 必须显式写 --prefix 和 --libdir。驱动给的默认是
+    #   ["--prefix=/usr", "--libdir=lib", "--buildtype=release"]，
+    #   而 spec 里一旦写了 configure，那三个默认值就被整个替换掉 ——
+    #   而 meson 自己的默认 prefix 是 /usr/local。
+    #   2026-10-16 由 iputils 那次暴露（同一天，同一个坑）。
+    "--prefix=/usr",
+    "--libdir=lib",
+    "--buildtype=release",
+    
     # ★ 关掉的一律是"要我们没有的库"。每一条都对着 meson_options.txt 里的名字。
     #
     #   apparmor / selinux / libaudit   三个都是 Linux 的安全模块，我们都没有。

@@ -33,6 +33,12 @@ build   = ["cmake", "ninja", "gcc"]
 [build]
 type = "cmake"
 configure = [
+    # ★★ 必须显式写 prefix。驱动给的默认是
+    #   ["-DCMAKE_INSTALL_PREFIX=/usr", "-DCMAKE_INSTALL_LIBDIR=lib"]，
+    #   而 **spec 里一旦写了 configure，那两个默认值就被整个替换掉** ——
+    #   于是 cmake 用它自己的默认（/usr/local），装到错的地方。
+    #   2026-10-16 由 iputils 那次暴露（它装出了 /usr/local/bin/ping）。
+    "-DCMAKE_INSTALL_PREFIX=/usr",
     "-DCMAKE_BUILD_TYPE=Release",
 
     # ★ CMake 4 不再兼容 cmake_minimum_required 写得很老的项目，而 libevent

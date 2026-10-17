@@ -47,6 +47,8 @@ build   = ["cmake", "ninja", "gcc", "python3", "pkgconf"]
 [build]
 type = "cmake"
 configure = [
+    # ★★ 必须显式写 prefix（理由同 libevent 那条）。
+    "-DCMAKE_INSTALL_PREFIX=/usr",
     "-DCMAKE_BUILD_TYPE=Release",
 
     # ── 用自带的 yyjson ──
