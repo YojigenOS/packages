@@ -161,12 +161,33 @@ class TestBuildScriptDefaults(unittest.TestCase):
         s = self.script({"type": "cmake"})
         self.assertIn("-DCMAKE_INSTALL_LIBDIR=lib", s)
 
-    def test_配方可以覆盖默认值(self):
+    def test_默认值在前_配方追加在后(self):
+        """★ 2026-10-17 改的行为。
+
+        原来是「配方写了就用配方的，默认值整个丢掉」，而那条注释把它写成了
+        规格：「覆盖时用配方给的整套，不再附加默认值」。
+
+        ★ 而那个规格会惩罚一种【自然】的写法 —— 只想写自己那几个选项的人，
+          会静静地丢掉 `--prefix` 和 `--libdir`。实测的后果：iputils 装出了
+          /usr/local/bin/ping（meson 自己的默认 prefix 是 /usr/local），
+          而 usr/bin 里是空的；同一个原因还影响 dbus / libevent / fastfetch。
+
+        现在默认值【永远在前面】，spec 的【追加】在后面。而 spec 里再写一次
+        `--prefix` 也能覆盖（后面的赢）——那条路留着，只是不再是唯一的写法。
+        """
         s = self.script({"type": "autotools",
                          "configure": ["--prefix=/opt"]})
+        # 配方那个还在
         self.assertIn("--prefix=/opt", s)
-        # 覆盖时用配方给的整套，不再附加默认值
-        self.assertNotIn("--libdir=/usr/lib", s)
+        # ★ 而默认值【没有被丢掉】—— 这是这次改的核心
+        self.assertIn("--libdir=/usr/lib", s)
+        # ★ 而顺序是"默认在前、配方在后"，所以配方写的仍然是赢的那个
+        self.assertLess(s.index("--libdir=/usr/lib"), s.index("--prefix=/opt"))
+
+    def test_没写_configure_时用默认值(self):
+        s = self.script({"type": "autotools"})
+        self.assertIn("--prefix=/usr", s)
+        self.assertIn("--libdir=/usr/lib", s)
 
     def test_构建脚本必须自带_set_e(self):
         """run.sh 必须自己 set -e，不能指望调用方。

@@ -138,7 +138,19 @@ def make_build_script(spec: dict, arch: str = "") -> str:
     LIBDIR = "--libdir=/usr/lib"
 
     if kind == "autotools":
-        opts_list = list(b.get("configure", ["--prefix=/usr", LIBDIR]))
+        # ★★★ 2026-10-17：改成【追加】。
+        #
+        #   原来是 `list(b.get("configure", ["--prefix=/usr", LIBDIR]))`，也就是
+        #   「spec 写了就用 spec 的，没写才用默认」——**写了就把默认值整个丢掉**。
+        #   而那个写法是【自然的】：大多数配方只想写自己那几个选项。
+        #
+        #   后果（实测）：iputils 装出了 /usr/local/bin/ping（meson 自己的默认
+        #   prefix 是 /usr/local），而 usr/bin 里是空的。同一个原因还影响
+        #   dbus / libevent / fastfetch。
+        #
+        #   现在默认值【永远在前面】，spec 写的【追加】在后面。而 appending 的
+        #   那些里如果再写一次 --prefix，后面的赢——那正好是想要的行为。
+        opts_list = ["--prefix=/usr", LIBDIR] + list(b.get("configure", []))
         # ★ --host 无条件加，写在这里而不是每个配方里。
         #
         #   37 个 autotools 配方各写一遍就等于写 37 遍，而写 37 遍就会有人忘。

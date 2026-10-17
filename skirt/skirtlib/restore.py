@@ -210,12 +210,30 @@ def plan(pkgs_dir: Path, output_dir: Path,
     if subpackages is None:
         subpackages = subpackage_names()
 
+    旧版本: list[str] = []
     jobs: list[Job] = []
     for apk in sorted(pkgs_dir.glob("*.apk")):
         base = apk.name[: -len(".apk")]
         name = _NAME_RE.sub("", base)
         ver = versions.get(name)
         if ver is not None:
+            # ★★★ 先问一句：这个 .apk 是不是【当前配方】的那个？
+            #
+            #   var/pkgs 里会同时躺着同一个包的 r1 / r2 / r3（跨轮的缓存就是
+            #   这样）。而 `rel` 是从【配方】问来的，所以三个都会指向【配方当前
+            #   那个版本】的目录 —— 后面按 rel 去重时只解第一个，而文件名排序
+            #   下第一个是【版本最小】的那个。
+            #
+            #   2026-10-17 实测的后果：配方写 release=3，而还原解的是 r1 的
+            #   payload，于是打包、发布出去的【都是 r1】。**升了 release 而
+            #   不生效**，而每一处都报"成功"。
+            #
+            #   ★ 判据：文件名去掉 `-r` 之后该【正好等于】配方给的 `<版本>-<发布号>`。
+            #     不等就是旧 release —— 跳过它，并且【说出来】（静默跳过等于没有）。
+            stem_rel = _RELEASE_RE.sub(r"-\1", base[len(name) :].lstrip("-"))
+            if stem_rel != ver:
+                旧版本.append(f"{apk.name}（配方要 {ver}）")
+                continue
             rel = f"{name}-{ver}"
             guessed = False
         else:
@@ -226,6 +244,7 @@ def plan(pkgs_dir: Path, output_dir: Path,
                         buildkey=pkgs_dir / sidecar_name(apk.name),
                         skip=(output_dir / rel / "payload").is_dir(),
                         guessed=guessed))
+    plan.旧版本 = 旧版本          # ★ 给调用方一句：跳过了哪些旧 release
     return jobs
 
 
@@ -365,10 +384,22 @@ def restore(arch: str, *, pkgs_dir: Path | None = None,
 
     print(f"  还原 {ok} 个，已有 {skip} 个，失败 {len(fail)} 个"
           f"（顺带取回 {n_keys} 份 .buildkey）")
+    # ★★★ 2026-10-17：这一条以前是"只说一句就完了"——它会静静地用【旧版本】
+    #   的 payload。现在 plan() 已经把旧 release 挡在外面（只处理配方要的那个），
+    #   所以 `shared` 里剩下的同名是【另一回事】：子包、或者两个配方碰巧同名。
+    #   而它仍然该说出来。
     if shared:
         for rel, names in sorted(shared.items()):
             print(f"  ★ {len(names)} 个包指向同一个目录 {rel}：{'、'.join(names)}"
                   f" —— 只还原了排在前面的那个")
+    skipped_old = getattr(plan, "旧版本", [])
+    if skipped_old:
+        print(f"  ★ 跳过 {len(skipped_old)} 个【旧 release】（不覆盖产物，"
+              f"也不是这一轮要的）：")
+        for line in skipped_old[:5]:
+            print(f"      {line}")
+        if len(skipped_old) > 5:
+            print(f"      …还有 {len(skipped_old) - 5} 个")
     if no_key:
         print(f"  ★ {len(no_key)} 个包没有 .buildkey（build_key 出现之前建的）"
               f"——跳过判断会当它们未知")

@@ -196,6 +196,17 @@ jobs:
           #     个包就挂了。
           SKIRT_BUILDENV: ${{ inputs.buildenv != '' && inputs.buildenv || 'yojigenos/buildenv' }}
         run: |
+          # ★★★ 先把上一轮的产物捞回来 —— 不做这一步，每个包都会被判成
+          #   "该重建"，于是 CI 必然全量（87 包 × 2 架构 × ~2 小时）。
+          #
+          #   `.buildkey` 那个旁路文件的存在【就是为了这个】（见 buildkey.py:292
+          #   那句「为了【跨 CI 的运行】」），而 workflow 里一直没调 `skirt restore`。
+          #   2026-10-17 补上。
+          #
+          #   ★ 失败不中断：拉不到就当"没有上一次"，退化成全量（那是老行为，
+          #     而它不是错的，只是慢）。
+          ./skirt/skirt restore --arch "${{ matrix.arch }}" || \
+            echo "::warning::restore 失败 —— 这一轮会全量重建（几分钟变两小时）"
           ./skirt/skirt order
           # bootstrap 失败时非零退出（这是它该做的）。但我们要先把日志传出去，
           # 所以这里不让它中断，改成记下结论、后面再失败。

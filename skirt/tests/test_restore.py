@@ -150,12 +150,21 @@ class Test还原计划(_TempTree):
                          [("libssl-3.5.9-r1.apk", "libssl-3.5.9-1"),
                           ("libssl-3.5.9-r2.apk", "libssl-3.5.9-2")])
 
-    def test_同名的老版本配方包会撞到同一个目录_而且说得出来(self):
-        """配方包（不是子包）走的是版本表，所以老版本会被映射到【当前】那个目录。
+    def test_老版本的包会被跳过_而且说得出来(self):
+        """配方包走版本表，所以老 release 会被映射到【当前】那个目录。
 
-        ★ 这是老脚本的行为，搬家时照搬了。它在 CI 里基本无害（配方没动过的包
-          才会被跳过，而版本变了就说明配方动过 → 会重建，重建会覆盖整个目录），
-          但【说清楚】是必须的：下面那条 ★ 就是给这个的。
+        ★★ 2026-10-17 改了行为。
+
+        老行为：两个都被映射到 `bash-5.3-2` 这个目录，然后按 rel 去重、只解
+        排序第一个（`r1`）——**也就是说解的是【老版本】的 payload**。那个行为
+        是照搬老脚本的，而它当时的注释也承认了这一点（"它意味着那个目录里装的
+        是【老版本】的 payload"）。
+
+        实测后果：配方写 `release = 3`，而打包、发布出去的都是 `r1` 的产物。
+        **升了 release 而不生效**，而每一处都报"成功"。
+
+        新行为：`plan()` 先问一句"这个 .apk 是不是配方要的那个"——文件名去掉
+        `-r` 之后该正好等于 `<版本>-<发布号>`。不等就【跳过】，并且【说出来】。
         """
         for n in ("bash-5.3-r1.apk", "bash-5.3-r2.apk"):
             self._apk(n)
@@ -175,11 +184,13 @@ class Test还原计划(_TempTree):
                 "aarch64", pkgs_dir=self.pkgs, output_dir=self.out,
                 versions={"bash": "5.3-2"}, extractor=fake)
 
-        self.assertEqual((ok, skip, fail), (1, 1, 0))
-        # 排序在前的是 r1 → 解的是它，r2 算"已有"（老脚本在循环里也是这个顺序）
-        self.assertEqual(calls, ["bash-5.3-r1.apk"],
-                         "同一个目录只该解一次，而且是排在前面那个")
-        self.assertIn("指向同一个目录 bash-5.3-2", buf.getvalue())
+        # ★ 解的是 r2（配方要的那个），r1 被跳过
+        self.assertEqual(calls, ["bash-5.3-r2.apk"],
+                         "该解【配方要的】那个，不是排序第一个")
+        self.assertEqual((ok, skip, fail), (1, 0, 0))
+        # ★ 而跳过【必须说出来】——静默跳过等于没有
+        self.assertIn("旧 release", buf.getvalue())
+        self.assertIn("bash-5.3-r1.apk", buf.getvalue())
 
     def test_名字带连字符也剥得对(self):
         """`glibc-dev` 里的连字符不能被当成"版本从这里开始"。"""
