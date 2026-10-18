@@ -27,6 +27,30 @@ package() {
   WHEEL="/tmp/$(basename "$SRCARCHIVE" .tar).whl"
   ln -sf "$SRCARCHIVE" "$WHEEL"
 
+  # ★★★ `--ignore-installed` 不是可选的。2026-10-18 实测。
+  #
+  #   背景：构建环境（`yojigenos/devel`）里【已经装了 meson】—— 因为 meson
+  #   自己就在 devel.toml 里（它是构建工具）。于是 pip 看到同一个版本，说
+  #
+  #       meson is already installed with the same version as the provided
+  #       wheel. Use --force-reinstall to force an installation of the wheel.
+  #
+  #   —— 【然后什么都不做】。而 payload 就空了。而包【照样报 ✅】，因为
+  #   build() 和这一步的清理都成功了。
+  #
+  #   ★ 我要的语义不是"管理容器里的安装"，而是"把这个 wheel 铺到 $PKGDEST"。
+  #     那正是 `--ignore-installed` 做的事：它不看容器里装了什么，直接铺。
+  #     （`--force-reinstall` 也能达到效果，但它会先卸载 —— 在 `--root` 下
+  #     卸载是多余的动作，而且它管的是另一个问题。）
+  #
+  #   ★ 而这一条【为什么会突然出现】：因为同一天我们把 meson 加进了
+  #     devel.toml（构建环境该有它，那是另一件事做对了）。**一个正确的改动
+  #     让另一个地方的条件变了** —— 而那个地方原来靠的是"环境里没有它"。
+  #
+  #   ★ 而它是被【新加的 check_dest】挖出来的：那个检查说
+  #     「/build/dest 里一个包内容都没有」。在那之前，这一条会一直安静下去，
+  #     直到下游的 test_kind 报「devel 但既没有可执行文件，也没有头文件」，  #     而那离成因隔了两小时和一整轮 CI。
+
   # --no-deps    依赖在 spec.toml 里声明，交给 apk 管。
   #              ★ 让 pip 装依赖会绕开 apk，产物里就会出现 apk 不知道的文件。
   # --no-index   不去 PyPI 找东西 —— source 已经下载好了，构建过程不联网。
@@ -34,13 +58,19 @@ package() {
   #
   # 它自己会生成 /usr/bin/meson（从 entry_points 里的
   # `meson = mesonbuild.mesonmain:main`），shebang 指向 /usr/bin/python3。
-  pip install --no-deps --no-index --root "$PKGDEST" "$WHEEL"
+  pip install --no-deps --no-index --ignore-installed --root "$PKGDEST" "$WHEEL"
 
   # pip 会往 dist-info 里写 INSTALLER（内容 "pip"）和 direct_url.json
   # （记着构建机的临时路径）。产物是 apk 装的，前者不对；后者会泄露构建机
   # 的目录结构，而且两者都会让产物漂。
   DI=$(echo "$PKGDEST"/usr/lib/python3.*/site-packages/meson-*.dist-info)
-  [ -d "$DI" ] || return 0
+  if [ ! -d "$DI" ]; then
+    # ★★ 2026-10-18：这里原来是 `|| return 0` —— 它把"pip 什么都没装"也
+    #   当成了"正常，不用清理"。而两者完全不是一回事：前者是失败。
+    #   现在它会出声（而 check_dest 会更早地拦住它，这里是第二道）。
+    echo "[产物] ✗ pip 没在 $PKGDEST 下建出 meson 的 dist-info —— 它没装东西" >&2
+    return 1
+  fi
   rm -f "$DI/direct_url.json"
   printf 'apk\n' > "$DI/INSTALLER"
 }
