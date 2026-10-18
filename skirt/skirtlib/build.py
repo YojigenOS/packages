@@ -362,9 +362,27 @@ def make_build_script(spec: dict, arch: str = "") -> str:
         #   ★ 抓到它的方式是【本地把那一段抽出来跑一遍】（用真的 sh，不是
         #     我想象里的 sh）。这条是 2026-10-17 那天第五次同一个形状。
         "check_dest() {\n"
-        "  n=$(find \"$PKGDEST\" -type f 2>/dev/null | wc -l)\n"
-        "  if [ \"$n\" -le 1 ]; then\n"
-        "    echo \"[产物] ✗ $PKGDEST 里只有 $n 个文件 —— package() 没装东西。\" >&2\n"
+        # ★★★ 数的是【包内容】，所以排除构建自己的那些记事文件。
+        #
+        #   第一版用的是"≤1 就失败"，而它当场【杀掉了一个正常的包】：
+        #
+        #       ca-certificates 的 payload 里只有 1 个文件（etc/ssl/certs/
+        #       ca-certificates.crt，189 KB）+ 1 个符号链接（cert.pem）——
+        #       而 `find -type f` 不算符号链接，于是数是 1 → 被判死。
+        #
+        #   而那个包是【对的】：它线上那份发布成功过。**一条为了防"空"而
+        #   加的检查，没分清"空"和"小"。**
+        #
+        #   ★ 而 `.yojigen-caps` 不是包内容 —— 它是这一步之后写的记事
+        #     （能力位清单）。排除它之后：
+        #
+        #       ca-certificates   1 个（那个 .crt）      → 留着 ✓
+        #       meson / pip       0 个                   → 报出来 ✓
+        #
+        #     正好分开，而分开的依据是【"有没有包内容"】而不是【"文件多少"】。
+        "  n=$(find \"$PKGDEST\" -type f ! -name '.yojigen-caps' 2>/dev/null | wc -l)\n"
+        "  if [ \"$n\" -eq 0 ]; then\n"
+        "    echo \"[产物] ✗ $PKGDEST 里一个包内容都没有 —— package() 没装东西。\" >&2\n"
         "    echo \"        （那一层的函数可能没被 steps.sh 覆盖掉，或者它装的地方\" >&2\n"
         "    echo \"          不是 $PKGDEST）\" >&2\n"
         "    exit 1\n"
