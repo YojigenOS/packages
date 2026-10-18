@@ -21,20 +21,34 @@
 #   ensurepip                不带 pip。树里没有 wheel/setuptools，
 #                            而且构建不该从网上拿东西。
 #
-# ## 没有的模块
+# ## 那些模块 —— 2026-10-18 起【要它们了】
 #
-#   _ssl      要 openssl（建了，但【还没进 devel 风味】）
-#   readline  要 readline（**确实还没配方**）
-#   curses    要 ncurses（建了，但【还没进 devel 风味】）
+#   _ssl      要 openssl
+#   readline  要 readline
+#   curses    要 ncurses
 #
-# ★ 这三行的说法 2026-10-15 按实改过。原文前两个都写着「还没建」，而
-#   `recipes/lib/openssl` 和 `recipes/lib/ncurses` 早建出来了 ——
-#   openssh / curl / apk-tools / tmux / vim / less / procps 都在用。
-#   准确的现状是「建了，但构建环境（`distro/variants/devel.toml`）里没有」。
+# ★★ 这一节原来写的是「三个都是可选的，python 会自己跳过并列出没编成的模块」。
+#   **那句话在 2026-10-18 不成立了** —— 而它不成立的方式很值得记：
 #
-# 三个都是可选的，python 会自己跳过并列出没编成的模块。glibc 的构建脚本
-# 只需要解释器本身。等 minimal 那条线走到 ncurses/readline/openssl 时，
-# 重建一次就会带上。
+#     那天 readline 被加进了构建环境（`devel.toml` 的闭包里有它，因为 bash
+#     要它）。于是 python 的 configure 【看到了一份 libreadline.so.8】——
+#     而那一份是【旧的、缺 ncurses 链接的】—— 于是它【不跳过了】，试着链上，
+#     而 `make sharedinstall` 停在：
+#
+#         [ERROR] readline failed to import: /usr/lib/libreadline.so.8:
+#                 undefined symbol: UP
+#         install: cannot stat 'Modules/readline.cpython-…so'
+#
+#   ★ 也就是说：「可选」和「环境里没有」是两件事，而它们原来碰巧一致。
+#     一旦环境里有了（哪怕那一份是坏的），它就【不再可选】了。
+#
+#   ★ 而更早的一版注释（2026-10-15 之前）把这几个都写成「还没建」，
+#     而 `openssl` / `ncurses` 早就建出来了 —— 那次改的是说法，这次改的是
+#     做法：**依赖表里真的写上它们**，于是顺序也对（readline 会排到 python3
+#     前面，而不是让 python3 碰巧捡到环境里那份）。
+#
+# ★ 这三样在 minimal 那条线上都要（用户的系统里 python 该有 ssl 和行编辑）。
+#   它们现在都在 devel 的闭包里，所以写上它们不会引入新的构建负担。
 
 [package]
 name        = "python3"
@@ -53,12 +67,28 @@ urls = ["https://mirrors.aliyun.com/python-release/source/Python-$VERSION.tar.xz
 sha256 = "c2215904f02b175596dc49351585104f4bc20341e1c47378b26a2c274360ce73"
 
 [dependencies.aarch64]
-runtime = ["glibc", "expat", "libffi", "zlib"]
-build   = ["make", "gcc", "expat", "libffi", "zlib"]
+# ★★★ 2026-10-18：加了 readline / ncurses / openssl —— 都是【两处都要】。
+#
+#   理由见上面「那些模块」那一节：不写它们，python 会碰巧捡到构建环境里那份，
+#   而那份可能是坏的（readline 那次就是）。而写上之后顺序也对 —— readline
+#   会排在 python3 前面。
+#
+#   ★ ncurses 在这里不是多余：readline 的 configure 要能找到 termcap，而
+#     那是 ncurses 提供的。python 链 readline 就要它。
+runtime = ["glibc", "expat", "libffi", "zlib", "readline", "ncurses", "openssl"]
+build   = ["make", "gcc", "expat", "libffi", "zlib", "readline", "ncurses", "openssl"]
 
 [dependencies.x86_64]
-runtime = ["glibc", "expat", "libffi", "zlib"]
-build   = ["make", "gcc", "expat", "libffi", "zlib"]
+# ★★★ 2026-10-18：加了 readline / ncurses / openssl —— 都是【两处都要】。
+#
+#   理由见上面「那些模块」那一节：不写它们，python 会碰巧捡到构建环境里那份，
+#   而那份可能是坏的（readline 那次就是）。而写上之后顺序也对 —— readline
+#   会排在 python3 前面。
+#
+#   ★ ncurses 在这里不是多余：readline 的 configure 要能找到 termcap，而
+#     那是 ncurses 提供的。python 链 readline 就要它。
+runtime = ["glibc", "expat", "libffi", "zlib", "readline", "ncurses", "openssl"]
+build   = ["make", "gcc", "expat", "libffi", "zlib", "readline", "ncurses", "openssl"]
 
 [build]
 type = "autotools"
