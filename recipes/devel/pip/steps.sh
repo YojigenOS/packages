@@ -34,12 +34,12 @@ package() {
   #   所以装进去直接能用，不需要改。
   WHEEL=$(echo /usr/lib/python3.*/ensurepip/_bundled/pip-*.whl)
   if [ ! -f "$WHEEL" ]; then
-    echo "[产物] ✗ 找不到 ensurepip 带的那个 wheel：$WHEEL" >&2
+    echo "[产物] ✗ 找不到 ensurepip 带的那个 wheel：${WHEEL}" >&2
     return 1
   fi
   # --no-deps      它没有依赖（ensurepip 带的就是 pip 自己）
   # --no-index     不去 PyPI 找东西 —— 构建过程不联网
-  # --ignore-installed  铺到 $PKGDEST，不看宿主装了什么（理由见上）
+  # --ignore-installed  铺到 ${PKGDEST}，不看宿主装了什么（理由见上）
   # --root         装到 $PKGDEST 而不是 /
   python3 -m pip install --no-deps --no-index --ignore-installed \
       --root "$PKGDEST" "$WHEEL"
