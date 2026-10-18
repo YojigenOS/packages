@@ -71,8 +71,36 @@ class Test生成的脚本是合法shell(unittest.TestCase):
                       "gzip 有补丁，构建准备那段应该被阶段判断包住")
         # 而分阶段调度必须还在（它才是驱动真正调的那两个入口）
         self.assertIn('case "${1:-all}" in', s)
-        self.assertIn("  build)   build ;;", s)
-        self.assertIn("  package) package ;;", s)
+        #
+        # ★★ 2026-10-17：这两条原来断言的是【整行字面文本】：
+        #
+        #       self.assertIn("  build)   build ;;", s)
+        #       self.assertIn("  package) package ;;", s)
+        #
+        #   而那句在给 package 加一个收尾检查之后变成了
+        #
+        #       package) package; check_dest ;;
+        #
+        #   —— 于是这条测试红了，而它红的【不是它想守的东西】。它想守的是
+        #   「package 阶段只跑 package、不跑 build」，那是【意图】；而整行
+        #   文本是【实现细节的快照】。
+        #
+        #   ★ 守快照的测试会在每次无关改动时报假警，然后被人改成快照的新样子
+        #     —— 于是它再也不守意图了。所以现在按【分支的语义】判：
+        #     package 那一支里必须有 package、必须没有 build（反之亦然）。
+        分支 = {}
+        for line in s.splitlines():
+            for 名 in ("all", "build", "package"):
+                if line.startswith(f"  {名})"):
+                    分支[名] = line[len(f"  {名})"):].strip()
+        self.assertEqual(set(分支), {"all", "build", "package"},
+                         "三个分支该都在")
+        self.assertIn("package", 分支["package"], "package 阶段该调 package")
+        self.assertNotIn("build", 分支["package"],
+                         "package 阶段【不该】调 build —— 那会把构建准备做第二遍")
+        self.assertIn("build", 分支["build"], "build 阶段该调 build")
+        self.assertNotIn("package", 分支["build"],
+                         "build 阶段不该调 package")
 
 
 if __name__ == "__main__":
