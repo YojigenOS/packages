@@ -43,12 +43,58 @@ urls   = ["https://mirrors.kernel.org/gnu/readline/readline-$VERSION.tar.gz"]
 sha256 = "fe5383204467828cd495ee8d1d3c037a7eba1389c22bc6a041f627976f9061cc"
 
 [dependencies.aarch64]
+# ★★★ 2026-10-18：`ncurses` 从 runtime 挪到【两处都要】。
+#
+#   原来只有 runtime 有它。而【configure 也要能找到它】—— readline 默认走
+#   termcap（`opt_curses=no`），而 termcap 由 ncurses 提供。找不到时它不会
+#   报错，会【静静编出一个不链 termcap 的库】：
+#
+#       [ERROR] readline failed to import: /usr/lib/libreadline.so.8:
+#               undefined symbol: UP
+#
+#   而 `UP` 是 terminfo 的能力（光标上移），由 libtinfo 提供。那个 .so 里
+#   有这个符号引用，而没链上提供它的库。
+#
+#   ★ 实测的后果：python3 的 `readline` 模块建不出来（`make sharedinstall`
+#     报 `cannot stat Modules/readline.cpython-…so`），于是【整个 python3
+#     构建失败】。而它离成因很远 —— python3 只是第一个动态链它的包。
+#
+#   ★ 而 bash 【没】暴露这件事，因为它静态链了 readline —— 那正是 2026-10-16
+#     那次「bash 的 ldd 只有 libc」的另一面。
+#
+#   ★ 这一条和 bash 配方里的注释是同一件事：
+#       「readline 在【两处都要】：build —— configure 要能找到它」
+#     ——那次说的是 bash 依赖 readline，这次是 readline 依赖 ncurses。
+#     同一个模式：【找不到就静静降级】，而报告不出来。
 runtime = ["glibc", "ncurses"]
-build   = ["make", "gcc"]
+build   = ["make", "gcc", "ncurses"]
 
 [dependencies.x86_64]
+# ★★★ 2026-10-18：`ncurses` 从 runtime 挪到【两处都要】。
+#
+#   原来只有 runtime 有它。而【configure 也要能找到它】—— readline 默认走
+#   termcap（`opt_curses=no`），而 termcap 由 ncurses 提供。找不到时它不会
+#   报错，会【静静编出一个不链 termcap 的库】：
+#
+#       [ERROR] readline failed to import: /usr/lib/libreadline.so.8:
+#               undefined symbol: UP
+#
+#   而 `UP` 是 terminfo 的能力（光标上移），由 libtinfo 提供。那个 .so 里
+#   有这个符号引用，而没链上提供它的库。
+#
+#   ★ 实测的后果：python3 的 `readline` 模块建不出来（`make sharedinstall`
+#     报 `cannot stat Modules/readline.cpython-…so`），于是【整个 python3
+#     构建失败】。而它离成因很远 —— python3 只是第一个动态链它的包。
+#
+#   ★ 而 bash 【没】暴露这件事，因为它静态链了 readline —— 那正是 2026-10-16
+#     那次「bash 的 ldd 只有 libc」的另一面。
+#
+#   ★ 这一条和 bash 配方里的注释是同一件事：
+#       「readline 在【两处都要】：build —— configure 要能找到它」
+#     ——那次说的是 bash 依赖 readline，这次是 readline 依赖 ncurses。
+#     同一个模式：【找不到就静静降级】，而报告不出来。
 runtime = ["glibc", "ncurses"]
-build   = ["make", "gcc"]
+build   = ["make", "gcc", "ncurses"]
 
 [build]
 type       = "autotools"
