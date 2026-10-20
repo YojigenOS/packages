@@ -700,6 +700,65 @@ jobs:
               done
               echo "  [分发包] 验了 $n_ok 个 · 挂了 $n_bad 个"
               [ "$n_bad" -eq 0 ] || exit 1
+
+              # ★★★ 5.12.2 的「ldd 检查」—— 这个系统里有没有【解不掉的符号】。
+              #
+              #   为什么需要它：`libreadline.so.8` 曾经里有 9 个 termcap 符号
+              #   （UP / PC / BC / tputs / tgoto / tgetent / tgetnum / tgetstr）
+              #   而它【NEEDED 里只有 libc 和 ld-linux】。也就是说那个 .so 在
+              #   任何系统上都跑不起来 —— 而"依赖检查"看不见它：
+              #     · 没声明，所以"声明了而没人提供"无从谈起
+              #     · 没有 NEEDED，所以"从 NEEDED 自动补依赖"也补不出来
+              #   它只在下游炸出来（python3 连着五轮失败，隔了两小时一轮）。
+              #
+              #   ★ `ldd -r`（-r = report unresolved symbols）就是那个检查。
+              #     2026-10-20 在装好的 minimal 上实测：1315 个 ELF 里 41 个报，
+              #     而【真的只有一个】（就是 readline）。
+              #
+              #   ★★ 两张白名单，都是【实测确认过的假阳性】：
+              #
+              #     /usr/lib/bash/*       bash 的 loadable builtin。符号由【宿主
+              #                           bash】注入，而 ldd -r 看不到宿主。实测
+              #                           `enable -f` 加载 print / head / stat /
+              #                           uname 全部成功。
+              #     libthread_db.so.*     gdb 的钩子，符号由 gdb 注入 —— 设计如此。
+              #
+              #   白名单之外的任何一条都是真的，所以这里【失败】。
+              #   ★ 而它若因为一个新包的 dlopen 插件目录而误报，那条报错会明确
+              #     说"要么修那个包，要么把这条加进白名单并写理由" —— 那是一次
+              #     响亮的失败，而不是一次静默的坏产物。
+              echo
+              echo "  [符号] 查这个系统里有没有解不掉的符号（ldd -r）"
+              if [ ! -x /newroot/usr/bin/ldd ]; then
+                echo "  [符号] ⚠ 这个风味里没有 ldd —— 这一格查不了"
+              else
+                elf_n=0; sym_bad=0
+                for f in $(find /newroot/usr/lib /newroot/usr/bin /newroot/bin \
+                                /newroot/sbin /newroot/usr/sbin -type f 2>/dev/null); do
+                  rel="${f#/newroot}"
+                  # 只处理 ELF（读魔数，不靠扩展名）
+                  head -c4 "$f" 2>/dev/null | od -An -c 2>/dev/null \
+                    | grep -q "177   E   L   F" || continue
+                  elf_n=$((elf_n + 1))
+                  # 两张白名单
+                  case "$rel" in /usr/lib/bash/*) continue ;; esac
+                  case "$(basename "$rel")" in libthread_db.so.*) continue ;; esac
+                  out=$(chroot /newroot /usr/bin/ldd -r "$rel" 2>&1 \
+                        | grep "undefined symbol" | head -5)
+                  if [ -n "$out" ]; then
+                    sym_bad=$((sym_bad + 1))
+                    echo "  [符号] ✗ $rel"
+                    echo "$out" | sed "s/^/           /"
+                  fi
+                done
+                echo "  [符号] 查了 $elf_n 个 ELF · 解不掉的 $sym_bad 个"
+                if [ "$sym_bad" -ne 0 ]; then
+                  echo "  [符号] ✗ 上面那些在【这个系统里跑不起来】——"
+                  echo "          要么修那个包（通常是缺一个 NEEDED / configure 开关），"
+                  echo "          要么它确实是 dlopen 那类（把路径加进这一步的白名单并写理由）。"
+                  exit 1
+                fi
+              fi
             '
           kill "$(cat /tmp/http.pid)" 2>/dev/null || true
 
