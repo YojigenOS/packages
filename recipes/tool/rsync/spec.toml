@@ -19,8 +19,32 @@ description = "增量文件传输与同步工具"
 url         = "https://rsync.samba.org/"
 license     = "GPL-3.0-or-later"
 
+# ★★★ 2026-10-20：这个配方原来【只有一个源】，而它 504 了。
+#
+#   那一轮（39436540833）走到第 41 位停在 rsync：
+#
+#       [下载] https://rsync.samba.org/ftp/rsync/src/rsync-3.5.1.tar.gz
+#       skirt: 错误 rsync: 所有源都取不到或校验不通过
+#           HTTPError: HTTP Error 504: Gateway Time-out
+#           curl 也失败（退出码 22: 504）
+#
+#   ★ 而"所有源"只有一条 —— 那个说法听起来像有退路，其实没有。
+#     **一个单点故障在报错里长得像"多处尝试都失败"。**
+#
+#   实测那段 samba.org 整个站不通（连 `-r 0-1023` 的探测都是 HTTP 000），
+#   而 GitHub 的 release 附件**逐字节一致**：
+#
+#       rsync-3.5.1.tar.gz   1932807 字节
+#       sha256               c55f9c9d…c37bef   ← 和上面那个 sha 相同
+#
+#   ★ 所以两条 sha 一样：换源不改产物（0005 要的可复现性不受影响）。
+#     把 GitHub 放第一条，因为它这一整天的可达性都好过 samba.org。
 [[source]]
-# 上游自己的站点，不依赖 GitHub。实测字节与 GitHub 附件一致。
+url    = "https://github.com/RsyncProject/rsync/releases/download/v$VERSION/rsync-$VERSION.tar.gz"
+sha256 = "c55f9c9dc10fb8bec397b399a0fdded53cc9a2d8e30891bb0d63724d25c37bef"
+
+[[source]]
+# 上游自己的站点，不依赖 GitHub。实测字节与 GitHub 附件一致（见上）。
 url    = "https://rsync.samba.org/ftp/rsync/src/rsync-$VERSION.tar.gz"
 sha256 = "c55f9c9dc10fb8bec397b399a0fdded53cc9a2d8e30891bb0d63724d25c37bef"
 
