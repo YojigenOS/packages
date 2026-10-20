@@ -105,3 +105,50 @@ class Test生成的脚本是合法shell(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Test_readline_必须链_termcap(unittest.TestCase):
+    """readline 的 configure 必须带 `--with-shared-termcap-library`。
+
+    ★ 2026-10-20 查到底的一处，连续五轮 python3 失败的真因：
+
+        [ERROR] readline failed to import: /usr/lib/libreadline.so.8:
+                undefined symbol: UP
+
+      `UP` 是 terminfo 的"光标上移"，由 libtinfo（ncurses）提供。而我们的
+      `libreadline.so.8` **没用 NEEDED 指向 libncursesw**（仓库索引里它只有
+      `so:libc.so.6`，而 Alpine 的同版本有 `so:libncursesw.so.6`）。
+
+      为什么：那个 .so 链什么由 `SHLIB_LIBS` 决定，而它来自 `support/shobj-conf`
+      —— 对 linux 那个脚本给的是**空**。configure 有一段补丁会补上，但补的是
+      `$SHARED_TERMCAP`，而那个变量**只在给了 `--with-shared-termcap-library`
+      时才有值**（`opt_shared_termcap_lib` 默认 `no`）。
+
+    ★★ 而它为什么难看出来：configure 明明打印了
+
+          checking for tgetent in -lncursesw... yes
+          checking which library has the termcap functions... using libncursesw
+
+      而真正那条 `gcc -shared` 命令行结尾什么都没有 —— **"找到了"有输出，
+      "用上了"没有**。只有对着链接命令行和产物里的 NEEDED 才看得出矛盾。
+    """
+
+    def _脚本(self):
+        d = tomllib.loads((RECIPES / "lib/readline/spec.toml").read_text())
+        return make_build_script(d, "x86_64")
+
+    def test_configure_带那个开关(self):
+        s = self._脚本()
+        行 = [l for l in s.splitlines() if "./configure" in l]
+        self.assertTrue(行, "没找到 configure 那行")
+        self.assertIn("--with-shared-termcap-library", 行[0],
+                      "readline 的 configure 必须带它 —— 否则那个 .so 不链 "
+                      "libncursesw，而任何动态链它的东西都会撞 undefined symbol: UP")
+
+    def test_而它不该写_with_curses(self):
+        """★ 反面：`--with-curses` 会把依赖变成 libcurses 那套，那是另一条路。
+
+        两个开关都写会同时开两条路，而 configure 的取舍不明确。配方里那段注释
+        写清了为什么选前者。
+        """
+        self.assertNotIn("--with-curses", self._脚本())

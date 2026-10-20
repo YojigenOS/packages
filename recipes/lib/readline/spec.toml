@@ -113,14 +113,67 @@ type       = "autotools"
 #   · --disable-install-examples —— 默认装 examples/ 里那几支示例程序，
 #     那不是发行版该带的东西。
 #
-# ★ 而【默认值已经对的两件事就不写】：
+# ★ 而【默认值已经对的一件事就不写】：
 #   · multibyte —— configure.ac 里 opt_multibyte=yes，默认就开
 #     （而那是中文优先会关心的那条：不开的话 UTF-8 输入的行编辑是坏的）。
 #   · curses —— 默认 opt_curses=no，走 termcap，而 termcap 由 ncurses 提供。
 #     写了 --with-curses 反而会把依赖变成 libcurses 那套。Alpine 也没写。
+#
+# ★★★ 而【必须写】的是下面那个 `--with-shared-termcap-library`。
+#
+#   2026-10-20 查到底的一处（连续五轮 python3 失败的真因）：
+#
+#     [ERROR] readline failed to import: /usr/lib/libreadline.so.8:
+#             undefined symbol: UP
+#
+#   `UP` 是 terminfo 的"光标上移"，由 libtinfo（ncurses）提供。而我们的
+#   `libreadline.so.8` 【根本没用 NEEDED 指向 libncursesw】—— 仓库索引里它只有
+#   `so:libc.so.6`，而 Alpine 的同版本有 `so:libncursesw.so.6`。
+#
+#   为什么：readline 的 `SHLIB_LIBS`（决定那个 .so 链什么）不是 configure 自己
+#   算的，而是 `support/shobj-conf` 那个脚本给的 —— 而对 linux 它给的是【空】：
+#
+#       $ support/shobj-conf -C gcc -c x86_64 -o linux-gnu -v yojigen
+#       SHLIB_LIBS=''
+#
+#   然后 configure 有一段补丁：
+#
+#       case "$SHLIB_LIBS" in
+#       *curses*|*tinfo*) ;;          # 已经有了
+#       *termcap*|*termlib*) ;;       # 已经有了
+#       *) SHLIB_LIBS="$SHLIB_LIBS $SHARED_TERMCAP" ;;   # 补上
+#       esac
+#
+#   —— 而 `SHARED_TERMCAP` 【只在给了这个选项时才有值】
+#   （`opt_shared_termcap_lib` 默认是 `no`）：
+#
+#       case "$opt_shared_termcap_lib" in
+#       [Yy][Ee][Ss]) SHARED_TERMCAP="$TERMCAP_LIB" ;;     # ← 我们要这条
+#       -l*)          SHARED_TERMCAP="$opt_shared_termcap_lib" ;;
+#       esac
+#
+#   ★ 所以证据链是完整的：configure 明明打印了
+#       "checking for tgetent in -lncursesw... yes"
+#       "checking which library has the termcap functions... using libncursesw"
+#     而真正那条 `gcc -shared` 命令行【结尾什么都没有】，连 -lncursesw 都没有
+#     —— 因为它用的是 `$(SHLIB_LIBS)`，而那个变量是空的。
+#
+#   ★★ **这就是这个项目反复在修的那一类**：一处"找到了"和一处"用上了"在日志里
+#      看不出矛盾 —— 前者有输出，后者没有。**只有对着链接命令行和产物里的
+#      NEEDED 才看得出来。**
+#
+#   ★ 而它是被 python3 抓到的：python 的 `setup.py` 会试着 import readline，
+#     失败就跳过那个模块（配方注释里写着"python 会自己跳过"）。可 2026-10-18
+#     把 readline 加进构建环境之后，python 的 configure 【能看到它】了，于是它
+#     不跳过了 —— 它链上、而那份是坏的、于是整个构建停。
+#
+#   不带值的 `--with-shared-termcap-library` 会让 `$withval` = `yes`。
 configure = [
   "--prefix=/usr",
   "--libdir=/usr/lib",
   "--disable-static",
   "--disable-install-examples",
+  # ★★★ 这一行就是上面那一整段的原因。没有它，那个 .so 不会 NEEDED
+  #   libncursesw，而任何动态链 readline 的东西都会撞上 undefined symbol: UP。
+  "--with-shared-termcap-library",
 ]
