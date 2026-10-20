@@ -49,6 +49,15 @@
 #
 # ★ 这三样在 minimal 那条线上都要（用户的系统里 python 该有 ssl 和行编辑）。
 #   它们现在都在 devel 的闭包里，所以写上它们不会引入新的构建负担。
+#
+# ★★ 而「那一份是坏的」在 2026-10-20 修掉了 —— 根因不在 python，在 readline
+#   的配方：它的 configure 少了 `--with-shared-termcap-library`，于是那个
+#   `libreadline.so.8` 【没用 NEEDED 指向 libncursesw】。见
+#   `recipes/lib/readline/spec.toml` 里那一大段（有实测证据）。
+#
+#   **所以上面第 12 行那句「旧的、缺 ncurses 链接的」现在记的是历史，
+#   不是现状。** 留着它是因为它解释了"为什么依赖表里要写这三样"的来历 ——
+#   而那件事仍然对（顺序要对，不能靠碰巧捡到环境里那份）。
 
 [package]
 name        = "python3"
