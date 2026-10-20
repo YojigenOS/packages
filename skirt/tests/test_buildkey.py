@@ -364,3 +364,85 @@ class Test工具集哈希收哪些文件(unittest.TestCase):
         self.assertEqual(前, 后, "改了一个测试文件，工具集哈希变了 —— "
                                  "那会让每个包的 build_key 都变")
         self.assertEqual(前, buildkey.tooling_hash(), "没还原干净")
+
+
+class Test_产物那条路的模块清单是算出来的(unittest.TestCase):
+    """`PAYLOAD_MODULES` 必须是【算出来的】，不是记下来的。
+
+    ★ 2026-10-20：`tooling_hash` 从"哈希 `skirt/**/*.py` 里除 tests 的全部"
+      （39 个文件）收窄到"只哈希能改变产物的"（7 个）。动因是一笔实账：那天
+      改了 `order.py` 三次，而它不在任何产物的因果链上 —— 三次，每次触发一遍
+      全量重建（2 小时）。
+
+    ★★ 而这个方向【危险】：2026-10-15 那次事故就是"哈希少了"
+      （`scripts/pack.sh` 没算进去 → 改了它 key 不动、产物变了 → 静默的旧产物）。
+
+      所以这条路要有一个【算出来】的判据钉住：从 `build` / `pack` 出发沿
+      import 走一遍闭包，**任何一个能走到而没列进 `PAYLOAD_MODULES` 的模块
+      都会让这条测试红**。
+
+      —— 那样"忘了加"就是一次响亮的失败，而不是一次静默的旧产物。
+    """
+
+    def _闭包(self):
+        import ast
+        from pathlib import Path
+        d = Path(__file__).resolve().parent.parent / "skirtlib"
+        mods = {p.stem: p for p in d.glob("*.py")}
+
+        def 依赖(p):
+            t = ast.parse(p.read_text(encoding="utf-8"))
+            out = set()
+            for n in ast.walk(t):
+                if isinstance(n, ast.ImportFrom):
+                    if n.level and n.module:            # from .deps import x
+                        out.add(n.module.split(".")[0])
+                    elif n.level and not n.module:      # from . import x
+                        out.update(a.name for a in n.names)
+                    elif n.module and n.module.startswith("skirtlib"):
+                        out.add(n.module.split(".")[1])
+                elif isinstance(n, ast.Import):
+                    for a in n.names:
+                        if a.name.startswith("skirtlib."):
+                            out.add(a.name.split(".")[1])
+            return {x for x in out if x in mods}
+
+        seen, stack = set(), ["build", "pack"]
+        while stack:
+            m = stack.pop()
+            if m in seen or m not in mods:
+                continue
+            seen.add(m)
+            stack.extend(依赖(mods[m]))
+        return seen
+
+    def test_闭包里的模块一个都不能少(self):
+        from skirtlib.buildkey import PAYLOAD_MODULES
+        缺 = self._闭包() - set(PAYLOAD_MODULES)
+        self.assertEqual(
+            缺, set(),
+            f"这些模块从 build/pack 出发能走到，而没进 PAYLOAD_MODULES：{sorted(缺)}\n"
+            f"      它们的改动会改变产物，而 build_key 不会变 —— 那正是 2026-10-15 "
+            f"`scripts/pack.sh` 那次事故的形状。")
+
+    def test_多出来的恰好是那两个显式声明的(self):
+        """反面：清单里若有产物那条路走不到、而又【没声明】的模块，改了它会让
+        全部包白重建。
+
+        ★ 这半边是 2026-10-20 那次收窄的**目的** —— 它必须真的变窄了，而不是
+          只多了一条测试。
+
+        ★★ 而 `deps` / `source` 是【推导不出来】的两个：它们由
+          `commands.cmd_build` 在调 `build` 之前用到，而 `commands.py` 里还装着
+          restore / deploy / prune 那些和产物无关的东西，所以不能拿它当种子。
+          它们进 `PAYLOAD_MODULES_UNDERIVED`，理由写在那边。
+        """
+        from skirtlib.buildkey import PAYLOAD_MODULES, PAYLOAD_MODULES_UNDERIVED
+        多数 = set(PAYLOAD_MODULES) - self._闭包()
+        self.assertEqual(
+            多数, set(PAYLOAD_MODULES_UNDERIVED),
+            f"推导不出来的那些模块：{sorted(多数)}\n"
+            f"      而显式声明的只有 {sorted(PAYLOAD_MODULES_UNDERIVED)}。\n"
+            f"      要么把它加进 PAYLOAD_MODULES_UNDERIVED 并写清理由，"
+            f"要么它根本不该在 PAYLOAD_MODULES 里（改它不改变产物，"
+            f"却会让全部包白重建）。")

@@ -166,6 +166,44 @@ def _strip_docstrings(tree: ast.AST) -> ast.AST:
     return tree
 
 
+# ★ 哪些模块能改变一个包的【产物】。见 `tooling_hash` 里那一大段。
+#
+#   从 `build` / `pack` 出发沿 import 走出来的闭包（2026-10-20 实测）。
+#   ★ `skirtlib` 之外还有 `skirt/skirt` 那个入口脚本 —— 它也算（改它可能
+#     改变调用方式，那是产物的一部分）。
+#
+#   ★ 而这个集合【不是给人维护的清单】：`test_buildkey.py` 里有一条测试
+#     从 `build` / `pack` 重算一遍 import 闭包，任何一个能走到而没列在这里的
+#     模块都会让它红。
+# ★★ 而其中有两个【推导不出来】，只能显式声明 —— 而它们的理由要写下来，
+#   否则下一个人会以为清单是随手列的。
+#
+#   它们是【在调 `skirt build` 之前】由 `commands.py` 用到的：
+#
+#     deps    —— 算 sysroot 的合并顺序，以及 `SOURCE_DATE_EPOCH`
+#                （后者直接决定产物里的时间戳 → 改它产物就变）
+#     source  —— 下载并解开源码 → 决定"拿什么编"
+#
+#   而它们为什么不能从 `build` / `pack` 的 import 闭包里推出来：那条链是
+#   `commands.cmd_build` → `deps.build_sysroot` / `source.fetch` → `build.执行`。
+#   而 `commands.py` 里【还装着】restore / deploy / prune 那些和产物无关的东西，
+#   所以不能拿它当种子（那会把它们全拉进来）。
+#
+#   ★ `test_buildkey.py` 里那条测试钉住的就是这个结构：
+#       能推导的 ⊆ PAYLOAD_MODULES，而多出来的【恰好】是下面这两个。
+PAYLOAD_MODULES_UNDERIVED = frozenset({"deps", "source"})
+
+PAYLOAD_MODULES = frozenset({
+    "build",      # 生成构建脚本（configure 参数、check_dest …）
+    "pack",       # 包装成 .apk（mkpkg 参数、能力位、ELF 依赖）
+    "spec",       # 读配方、展开占位符
+    "deps",       # 依赖闭包、合 sysroot、SOURCE_DATE_EPOCH
+    "source",     # 下载、校验 sha256、解压
+    "elfdeps",    # 读 NEEDED / SONAME → 写进 provides/depends
+    "common",     # 构建环境镜像名、日志、ROOT 这些
+})
+
+
 def tooling_hash() -> str:
     """工具集的内容 —— 驱动 + 打包脚本。注释和文档字符串剥掉之后。
 
@@ -208,11 +246,42 @@ def tooling_hash() -> str:
     #   ★ 而上面那句「方向选保守那头」讲的是**一个文件内部**要剥多少（剥多了
     #     会漏掉真实改动）。这一条讲的是**哪些文件该进来**，是另一回事：
     #     测试不在产物那条因果链上，进来就是误报。
+    # ★★★ 2026-10-20：从"哈希 skirt/ 下所有 .py"改成【只哈希能改变产物的那些】。
+    #
+    #   起因是一笔很实的账：那天我改了 `order.py` 三次（B1 那个修复的三个版本），
+    #   而它【不在】任何产物的因果链上 —— 三次，每次触发一遍全量（2 小时）。
+    #   同一类还有 `restore.py` / `repo.py` / `deploy.py`：改它们【不可能】改变
+    #   任何 .apk 的内容。
+    #
+    #   ★ 而"哪些在因果链上"不该靠人记 —— 它是【算】出来的：从产物那条路
+    #     （`build` / `pack`）出发，沿 import 走一遍。实测：
+    #
+    #         build · common · deps · elfdeps · pack · source · spec      7 个
+    #
+    #     而 order / restore / repo / deploy / commands / smoke / prune /
+    #     collect / buildkey 一个都不在里面。
+    #
+    #   ★★ 而这个改动【方向是危险的】—— 2026-10-15 那次事故就是"哈希少了"
+    #      （`scripts/pack.sh` 没算进去，于是改了它 key 不动、产物变了）。
+    #      所以下面 `PAYLOAD_MODULES` 配一个测试：从 build/pack 出发算一遍
+    #      import 闭包，**任何一个能走到而没列在这里的模块会让测试红**。
+    #      那样"忘了加"就变成一次响亮的失败，而不是一次静默的旧产物。
     files = sorted(
-        p for p in list((ROOT / "skirt").rglob("*.py"))
-        + list((ROOT / "scripts").rglob("*.sh"))
-        if "__pycache__" not in p.parts and "tests" not in p.parts
+        p for p in list((ROOT / "skirt" / "skirtlib").glob("*.py"))
+        if p.stem in PAYLOAD_MODULES
+    ) + sorted(
+        p for p in list((ROOT / "scripts").rglob("*.sh"))
+        if "__pycache__" not in p.parts
     )
+    # ★ 而 `skirt/skirt`（那个 CLI 入口）【不在】里面 —— 它只决定命令怎么被
+    #   调用，不改变任何 .apk 的内容。`__init__.py` 也不在（它是空的）。
+    #
+    #   实测的完整清单（2026-10-20）：
+    #
+    #       skirt/skirtlib/{build,common,deps,elfdeps,pack,source,spec}.py
+    #       scripts/keys.sh
+    #
+    #   而它以前是 39 个文件（`skirt/**/*.py` 里除 tests 的全部）。
     h = hashlib.sha256()
     for p in files:
         src = p.read_text(encoding="utf-8")
