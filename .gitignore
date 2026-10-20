@@ -22,3 +22,6 @@ __pycache__/
 /.comet/*
 !/.comet/config.yaml
 # <<< Comet managed project state <<<
+
+# CI 把 distro 仓库取到这儿（bootstrap.yml 的"取 distro"那一步）
+.distro/

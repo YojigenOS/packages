@@ -204,6 +204,58 @@ jobs:
           print(' '.join(v['packages']))")
 
           CLOSURE=$(./skirt/skirt provides $LIST)
+
+          # ★★★ 2026-10-20：从这里【减掉】那些"也要交付给用户"的包。
+          #
+          #   为什么必须减（§1.5.Bf 查到底的）：`SKIRT_PROVIDES` 的语义是
+          #   「构建环境提供这些，所以【不用建】」—— 驱动会把它们【断环】：
+          #
+          #       [断环] 这些包由构建环境提供，指向它们的 490 条依赖边被断掉：
+          #
+          #   于是名单里的包【不进构建顺序、永远不重建】。对 autoconf / make /
+          #   cmake 这类【纯构建工具】，那是对的。而对 `readline` / `ncurses` /
+          #   `openssl` / `zlib` 这类【既要进构建环境、又要装进用户系统】的包，
+          #   那是错的：它们被"环境提供"之后就【再也不会跟着配方更新】。
+          #
+          #   实测的后果（2026-10-18 连续四轮）：readline 的 build 依赖补了
+          #   ncurses，而 config 改了【不生效】—— 因为 readline 那一轮根本没
+          #   被建（var/logs 里 68 份日志没有它）。于是 python3 链上镜像里那份
+          #   旧的 libreadline.so.8：
+          #
+          #       [ERROR] readline failed to import: …: undefined symbol: UP
+          #
+          #   判据：**一个包最终要不要进用户系统？** 要进 → 它必须跟着配方走。
+          #
+          #   ★ 而这个判据不在这里"想"，它是【算】出来的：
+          #
+          #       devel 的闭包  减去  base+minimal 的闭包  =  纯构建工具
+          #
+          #   减去的那部分就是"最终系统里也要有的"。而 base/minimal 的定义在
+          #   distro 仓库里，所以这一步在 CI 里做（这里取了 `.distro`）。
+          DELIVERED_LIST=$(python3 -c "
+          import tomllib, pathlib
+          out = set()
+          for f in ('base', 'minimal'):
+              p = pathlib.Path(f'.distro/variants/{f}.toml')
+              if p.is_file():
+                  out |= set(tomllib.loads(p.read_text())['variant']['packages'])
+          print(' '.join(sorted(out)))")
+
+          # ★★ 变量名一律用英文 —— shell 不保证接受非 ASCII 标识符。
+          #   （2026-10-18 那次 `检查产物()` 就是这个；这次又踩了一遍。
+          #     中文只该出现在注释和 echo 里。）
+          if [ -n "$DELIVERED_LIST" ]; then
+            DELIVERED_CLOSURE=$(./skirt/skirt provides $DELIVERED_LIST || true)
+            # 两边都排序，然后 comm 取差集
+            EXCLUDED=$(comm -12 <(echo "$CLOSURE" | sort -u) <(echo "$DELIVERED_CLOSURE" | sort -u) | tr '\n' ' ')
+            KEEP=$(comm -13 <(echo "$CLOSURE" | sort -u) <(echo "$DELIVERED_CLOSURE" | sort -u) | tr '\n' ' ')
+            echo "  ★ 排掉 $(echo $EXCLUDED | wc -w) 个【也要交付】的包（它们必须跟着配方重建）："
+            echo "      $EXCLUDED"
+            CLOSURE=$(echo "$KEEP" | tr ' ' '\n')
+          else
+            echo "  ★ 拿不到 base/minimal 的定义 —— 沿用 devel 的全闭包（旧行为）"
+          fi
+
           echo "SKIRT_PROVIDES=$(echo $CLOSURE | tr '\n' ' ')" >> "$GITHUB_ENV"
 
           echo "  列表上 $(echo $LIST | wc -w) 个 ✗ 闭包 $(echo "$CLOSURE" | wc -l) 个"
