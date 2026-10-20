@@ -146,6 +146,15 @@ def parse(yaml_text: str) -> list[dict]:
     return pkgs
 
 
+def _ver_key(v: str) -> tuple:
+    """粗排 `1.2.3-r4` 这类版本串。够用来挑"最新那个"，不是完整的 apk 算法。"""
+    main, _, rel = v.partition("-r")
+    parts = []
+    for chunk in main.replace("_p", ".").replace("_", ".").split("."):
+        parts.append((0, int(chunk)) if chunk.isdigit() else (1, chunk))
+    return (tuple(parts), int(rel) if rel.isdigit() else 0)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="看一个 apk 仓库自洽不自洽")
     ap.add_argument("--repo", default=DEFAULT_REPO,
@@ -212,11 +221,25 @@ def main() -> int:
             bad += 1
             print(f"\n  ✗ 仓库里没有 {want_pkg}")
             continue
+        # ★★★ 只看【最新那个版本】。仓库里的交付物是不可变的（0013），所以旧版本
+        #   会一直留着 —— 而 readline 那次就是这样：r1（坏的）和 r2（修好的）同时
+        #   在索引里。第一版把【所有】版本都当判据，于是永远 exit 1。
+        #
+        #   ★ 而"最新"这件事本身也是判据的一部分：`apk` 装的就是最新的那个，所以
+        #     判据该和 `apk` 的看法一致。
+        hit.sort(key=lambda p: _ver_key(p["version"]))
+        最新 = hit[-1]["version"]
         for p in hit:
             ok = want_so in p["depends"]
+            旧版本 = p["version"] != 最新
+            if 旧版本:
+                # 旧版本只【报告】，不判对错（它是历史，改不掉）
+                print(f"  · {p['name']}-{p['version']}（旧）链 {want_so}？"
+                      f"{'是' if ok else '不是'}")
+                continue
             mark = "✓" if ok else "✗"
             note = "" if ok else f"   （它的 depends：{sorted(p['depends']) or '空'}）"
-            print(f"  {mark} {p['name']}-{p['version']} 链 {want_so}？{note}")
+            print(f"  {mark} {p['name']}-{p['version']}（最新）链 {want_so}？{note}")
             if not ok:
                 bad += 1
 
