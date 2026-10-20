@@ -31,7 +31,20 @@
 [package]
 name        = "readline"
 version     = "8.3"
-release     = 1
+# ★★★ 2026-10-20 从 1 升到 2 —— 而理由不是"上游出新版了"，是**产物变了而版本没变**。
+#
+#   线上已经有 `readline-8.3-r1`，而那一份是坏的（`libreadline.so.8` 没链
+#   libncursesw）。修好之后如果还叫 r1：`deploy` 会按 0013 的【交付物不可变】
+#   拒绝覆盖 —— 于是"建出来了，而线上还是旧的"。
+#
+#   ★ 这正是 §1.5.Bd「缺口二：工具链变了，而产出同名」那个坑的具体一次。
+#     它列了四个候选方案，而这里用的是最后一个：「工具链/配方变了时手动升一批
+#     release」。★ 为什么没用"让 tooling_hash 影响版本号"：那要改命名规则，
+#     而每次改 `skirt` 都会换一批名字。
+#
+#   ★★ 而"产物变了"这件事有判据：链接命令行现在以 `-lncursesw` 结尾，而 r1
+#      那份是空的。见上面那一大段注释和 `docs/待办.md` §1.5.Bd。
+release     = 2
 date        = 2026-10-16T14:58:18Z
 description = "命令行编辑库（上下箭头翻历史、Ctrl-R 搜索、行内编辑的底子）"
 url         = "https://tiswww.cwru.edu/php/chet/readline/rltop.html"
