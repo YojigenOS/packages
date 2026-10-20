@@ -167,6 +167,15 @@ type       = "autotools"
 #     把 readline 加进构建环境之后，python 的 configure 【能看到它】了，于是它
 #     不跳过了 —— 它链上、而那份是坏的、于是整个构建停。
 #
+#   ★★★ 实测（2026-10-20，在 alpine + ncurses-dev 里只跑 configure）：
+#
+#       不带那个选项：  SHLIB_LIBS =          （空）
+#       带它：          SHLIB_LIBS = -ltinfo  （那儿认的是 libtinfo；我们这儿是
+#                                              libncursesw，所以会是 -lncursesw）
+#
+#     —— 而【在 alpine 上也是同一个行为】，所以那不是我们环境的怪癖，是
+#     readline 的默认。**这条实测是这个修复的唯一直接证据。**
+#
 #   不带值的 `--with-shared-termcap-library` 会让 `$withval` = `yes`。
 configure = [
   "--prefix=/usr",
