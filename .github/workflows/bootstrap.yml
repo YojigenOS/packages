@@ -286,7 +286,23 @@ jobs:
           print(' '.join(sorted(out)))")
 
           if [ -n "$DELIVERED_LIST" ]; then
-            DELIVERED_CLOSURE=$(./skirt/skirt provides $DELIVERED_LIST || true)
+            # ★★★ `--runtime` 不是可选的。2026-10-20 实测：
+            #
+            #   `provides` 的默认闭包是 runtime + build（对"构建环境里真的
+            #   有什么"是对的）。可"**用户会装到什么**"只取决于 runtime。
+            #   用它算 REBUILD，会把 m4 / bison / autoconf / perl / python3
+            #   这些【构建工具】算成"也要交付"，于是它们进构建顺序 ——
+            #   而 `glibc → bison → m4 → glibc` 那个环就露出来了（CI 报
+            #   「依赖成环」）。
+            #
+            #   ★ 而那个环【是真的】（glibc 建时要 bison，bison 要 m4，
+            #     m4 运行时要 glibc）。错的是判据，不是环。
+            #
+            #   实测两个闭包的差别（minimal）：
+            #       只 runtime      59 个
+            #       runtime+build   78 个
+            #       差 19 个 = 构建工具（m4 bison autoconf perl python3 …）
+            DELIVERED_CLOSURE=$(./skirt/skirt provides --runtime $DELIVERED_LIST || true)
             REBUILD=$(comm -12 <(echo "$CLOSURE" | sort -u) <(echo "$DELIVERED_CLOSURE" | sort -u) | tr '\n' ' ')
             echo "  ★ $(echo $REBUILD | wc -w) 个包【也要交付】，所以它们会重建（SKIRT_REBUILD）："
             echo "      $REBUILD"

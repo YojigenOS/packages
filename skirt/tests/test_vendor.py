@@ -235,3 +235,80 @@ class Test_force_build_和断环是两件事(unittest.TestCase):
             self.assertNotIn("make", v["packages"],
                              f"make 不该在 {风味} 的直接列表里 —— 它是构建工具，"
                              "而它正是那个环的断点")
+
+
+class Test_runtime_闭包和_build_闭包是两件事(unittest.TestCase):
+    """`skirt provides --runtime` —— 回答"用户会装到什么"，不是"环境里有什么"。
+
+    ★ 这条的来历（2026-10-20）：B1 那个修复要算「哪些包也要交付」，第一版用的
+      是 `provides` 的默认闭包（runtime + build）。于是 `m4` / `bison` /
+      `autoconf` / `perl` 这些【构建工具】被算成"用户会装到的"，进了
+      `SKIRT_REBUILD` —— 而 `glibc → bison → m4 → glibc` 那个环就露出来了，
+      CI 报「依赖成环」。
+
+      ★ 而那个环【是真的】（glibc 建时要 bison，bison 要 m4，m4 运行时要
+        glibc）。错的不是环，是判据。
+    """
+
+    def _闭包(self, *args, env=None):
+        import os, subprocess
+        from pathlib import Path
+        环境 = dict(os.environ)
+        环境.pop("SKIRT_PROVIDES", None)      # ★ 默认路径会用它断环，见下
+        环境.pop("SKIRT_REBUILD", None)
+        if env:
+            环境.update(env)
+        r = subprocess.run([str(Path(__file__).resolve().parent.parent / "skirt"),
+                            "provides", *args],
+                           capture_output=True, text=True, env=环境)
+        self.assertEqual(r.returncode, 0, f"失败: {r.stderr[:200]}")
+        return set(r.stdout.split())
+
+    def test_默认路径是要建什么_而不是闭包(self):
+        """★★ `provides` 的默认路径走 `build_order` —— 它会【断掉】基线里的包。
+
+        所以它回答的是「要建什么 + 目标」，**不是"闭包"**。第一版测试把两者
+        当成一样，于是 `provides bash` 只给了 3 个（bash / ncurses / readline）
+        —— 因为 gcc / glibc / make 都在 `bootstrap/provides.txt` 里，被断了。
+
+        ★ 而这个名字（`provides`）容易让人以为是"提供什么"，其实它是
+          "构建环境要提供什么、所以哪些不用建"。**命名问题，不是 bug。**
+        """
+        默认 = self._闭包("bash", env={"SKIRT_PROVIDES": ""})
+        不设 = self._闭包("bash")
+        self.assertLessEqual(不设, 默认,
+                             "设了 SKIRT_PROVIDES 之后只会更少（那些包被断了）")
+
+    def test_runtime_闭包不带构建工具(self):
+        """★ 这是那 19 个差集的核心：构建工具不该出现在 runtime 闭包里。"""
+        r = self._闭包("--runtime", "bash")
+        # bash 的 runtime 依赖是 glibc + readline（而 readline 要 ncurses）
+        for 不该 in ("gcc", "make", "m4", "bison", "autoconf"):
+            self.assertNotIn(不该, r, f"{不该} 是构建工具，不该在 runtime 闭包里")
+        self.assertIn("glibc", r)
+        self.assertIn("readline", r, "bash 运行时要 readline")
+
+    def test_runtime_闭包_子包目标也能算(self):
+        """★ `glibc-locales` / `dash-binsh` 是【子包】。
+
+        第一版只映射了依赖那一侧，于是 minimal 的 46 个目标里有 2 个直接报
+        「找不到配方: glibc-locales」。**而这个项目已经为子包吃过一次亏**
+        （provides 里写母包名，于是 openssh 被报缺 libcrypto）。
+        """
+        r = self._闭包("--runtime", "glibc-locales")
+        self.assertIn("glibc", r, "glibc-locales 该映射回 glibc")
+
+    def test_runtime_闭包和默认路径_是两个不同的东西(self):
+        """★ 别拿 `provides` 的默认输出当"闭包"来比 —— 它两条路径的语义不同：
+
+            默认        build_order 的结果（断过环）
+            --runtime   纯 runtime 依赖闭包（不断环，也不看 SKIRT_PROVIDES）
+
+        而 `--runtime` 【不该】看 `SKIRT_PROVIDES`：它回答的是"用户会装到什么"，
+        那和环境里有什么无关。**那正是它和默认路径该分开的理由。**
+        """
+        # 同一个包，设了 SKIRT_PROVIDES 时 --runtime 的结果【不变】
+        a = self._闭包("--runtime", "bash")
+        b = self._闭包("--runtime", "bash", env={"SKIRT_PROVIDES": "glibc"})
+        self.assertEqual(a, b,
+                         "--runtime 不看 SKIRT_PROVIDES（用户装什么和环境无关）")

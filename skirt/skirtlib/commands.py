@@ -526,6 +526,43 @@ def cmd_provides(args) -> None:
         from .spec import all_recipe_names
         names = all_recipe_names()
 
+    # ★★ 2026-10-20：`--runtime` —— 只沿【运行时】依赖算闭包。
+    #
+    #   为什么要它：`provides` 原来只有一种闭包，而它是 runtime + build
+    #   （那对"构建环境里真的有什么"是对的）。可用它去回答"**用户会装到什么**"
+    #   就错了 —— build 依赖把 m4 / bison / autoconf / perl 这些【构建工具】
+    #   全带进来了。
+    #
+    #   实测的后果（2026-10-20）：B1 那个修复要算「哪些包也要交付」，
+    #   用的是 `provides`，于是 m4 被算成"用户会装到的包"，于是它进
+    #   SKIRT_REBUILD，于是 `glibc → bison → m4 → glibc` 那个环露出来了 ——
+    #   CI 报「依赖成环」。
+    #
+    #   ★ 而那个环是真的（glibc 建的时候要 bison，bison 要 m4，m4 运行时要
+    #     glibc），它一直存在，只是被"m4 也算环境提供的"遮着。**错的是判据，
+    #     不是环。**
+    #
+    #   `deps.dep_closure` 的 docstring 早就写清了这件事：
+    #       "拼运行时的根文件系统时传 kinds=("runtime",)"
+    if getattr(args, "runtime", False):
+        from .deps import dep_closure
+        from .spec import load_spec, recipe_of, recipe_of as _r
+        # ★★ 目标和依赖【都可能写成子包名】（`glibc-locales` · `dash-binsh`），
+        #   而 `dep_closure` 要的是配方名。两个方向都要映射 ——
+        #   第一版只映射了依赖那一侧，于是 minimal 的 46 个目标里有 2 个
+        #   直接报「找不到配方」。**而这个项目已经为子包吃过一次亏**
+        #   （provides 里写的是母包名，于是 openssh 被报缺 libcrypto）。
+        out: set[str] = set()
+        for n in names:
+            母 = _r(n) or n
+            out.add(母)
+            for dep in dep_closure(load_spec(母), arch, set(),
+                                   kinds=("runtime",)):
+                out.add(_r(dep) or dep)
+        for n in sorted(out):
+            print(n)
+        return
+
     order, _ = build_order(arch, names)
     # ★ 目标和闭包一起输出：镜像里有闭包，也有目标本身。
     #   而 build_order 只给"要建的顺序"，目标自己在里面还是不在，取决于
@@ -701,6 +738,11 @@ def main() -> None:
     p.add_argument("targets", nargs="*", help="默认全部配方")
     p.add_argument("--arch", default=None)
     p.set_defaults(func=cmd_provides)
+
+    p_prov = sub.choices["provides"]
+    p_prov.add_argument("--runtime", action="store_true",
+                        help="只沿【运行时】依赖算闭包（回答\"用户会装到什么\"，"
+                             "而不是\"构建环境里有什么\"）")
 
     p = sub.add_parser("list", help="列出所有包")
     p.set_defaults(func=cmd_list)
