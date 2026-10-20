@@ -615,6 +615,25 @@ jobs:
       #   自己报个版本。apk 是 glibc 程序，它能在那个 chroot 里跑起来意味着
       #   动态链接器、libc、libssl、libcrypto、CA 证书全都就位了——比"文件
       #   都在"强得多。
+      # ★ 2026-10-20：仓库刚建出来、装系统之前，先问一句它自洽不自洽。
+      #
+      #   两个方向里查一个（另一个由 `pack.elf_fields` 从 NEEDED 自动补）：
+      #
+      #     声明了而没人提供   ← 这一步
+      #     链了而没声明       ← 自动
+      #     该链而没链         ← 只有下游才炸得出来，见下面 18 步的 ldd 检查
+      #
+      #   ★ 而它放在【装系统之前】：索引错了的话，后面那步会以"装不上"的形式
+      #     失败，而那个报错离真正的原因（某个 provides 少了）很远。
+      #
+      #   ★★ 而这个脚本自己身上有三个"静默读空"（正则是 `depends:$` 而实际是
+      #      `depends: # 3 items`、provides 带 `=版本`、`re.split` 吃掉分隔换行）。
+      #      三个都会给出"没人提供的依赖 0 个"这种看起来正常的结论。见
+      #      `scripts/check-repo.py` 里那几段注释 —— 而这里是它第一次进 CI。
+      - name: 查一遍刚建出来的仓库自洽不自洽
+        run: |
+          ./scripts/check-repo.py --repo var/repo --arch "${{ matrix.arch }}"
+
       - name: 自检 —— 从刚建出来的仓库装一个系统
         run: |
           set -euo pipefail
