@@ -47,7 +47,7 @@ build   = ["cmake", "ninja", "gcc", "python3", "pkgconf"]
 [build]
 type = "cmake"
 configure = [
-    # ★★ 必须显式写 prefix（理由同 libevent 那条）。
+    # ★★ 冗余了（驱动 2026-10-17 起会追加），来历同 libevent 那条。
     "-DCMAKE_INSTALL_PREFIX=/usr",
     "-DCMAKE_BUILD_TYPE=Release",
 

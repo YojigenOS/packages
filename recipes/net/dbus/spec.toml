@@ -44,11 +44,12 @@ build   = ["make", "gcc", "meson", "ninja", "expat", "python3"]
 type = "meson"
 
 configure = [
-    # ★★ 必须显式写 --prefix 和 --libdir。驱动给的默认是
-    #   ["--prefix=/usr", "--libdir=lib", "--buildtype=release"]，
-    #   而 spec 里一旦写了 configure，那三个默认值就被整个替换掉 ——
-    #   而 meson 自己的默认 prefix 是 /usr/local。
-    #   2026-10-16 由 iputils 那次暴露（同一天，同一个坑）。
+    # ★★ 这三行【现在是冗余的】—— 2026-10-17 起驱动会把默认值
+    #   ["--prefix=/usr", "--libdir=lib", "--buildtype=release"]
+    #   【追加】在 spec 写的之前（见 build.py 里 opts_list 那行）。
+    #
+    #   来历同 libevent：2026-10-16 那次事故（spec 一写 configure 就把默认值
+    #   整个丢掉，于是 meson 用自己的 /usr/local）。留着无害，也不必再写。
     "--prefix=/usr",
     "--libdir=lib",
     "--buildtype=release",

@@ -29,7 +29,8 @@ build   = ["make", "gcc", "meson", "ninja", "libcap"]
 [build]
 type = "meson"
 configure = [
-    # ★★★ 这三行是 2026-10-16 的一次【真实事故】的收尾：
+    # ★★★ 这三行【现在是冗余的】（2026-10-17 起驱动会追加同样的默认值），
+    #   而它们是一次【真实事故】的见证：
     #   x86_64 上这个包装出来的是 /usr/local/bin/ping —— 而 usr/bin 里【空的】。
     #   原因：spec 写了 configure，于是驱动那三个默认值
     #       ["--prefix=/usr", "--libdir=lib", "--buildtype=release"]

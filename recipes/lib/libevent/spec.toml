@@ -33,11 +33,17 @@ build   = ["cmake", "ninja", "gcc"]
 [build]
 type = "cmake"
 configure = [
-    # ★★ 必须显式写 prefix。驱动给的默认是
-    #   ["-DCMAKE_INSTALL_PREFIX=/usr", "-DCMAKE_INSTALL_LIBDIR=lib"]，
-    #   而 **spec 里一旦写了 configure，那两个默认值就被整个替换掉** ——
-    #   于是 cmake 用它自己的默认（/usr/local），装到错的地方。
-    #   2026-10-16 由 iputils 那次暴露（它装出了 /usr/local/bin/ping）。
+    # ★★ 这一行【现在是冗余的】—— 2026-10-17 起驱动会把默认值
+    #   ["-DCMAKE_INSTALL_PREFIX=/usr", "-DCMAKE_INSTALL_LIBDIR=lib"]
+    #   【追加】在 spec 写的之前（见 build.py 里 opts_list 那行）。
+    #
+    #   而它是那么留下来的：2026-10-16 iputils 那次暴露了旧行为——spec 一写
+    #   configure，驱动的默认值就被【整个替换掉】，于是 cmake 用自己的默认
+    #   （/usr/local），装出了 /usr/local/bin/ping。当时四个包各自补了一行。
+    #
+    #   ★ 留着它有两个理由：它是那次事故的见证；而"spec 写的在后面"意味着
+    #     它仍然赢，所以无害。
+    #   ★ 而【下一个人写新配方时不必再写它】—— 那正是那次修复的意义。
     "-DCMAKE_INSTALL_PREFIX=/usr",
     "-DCMAKE_BUILD_TYPE=Release",
 
