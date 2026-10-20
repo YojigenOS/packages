@@ -332,6 +332,70 @@ jobs:
           print("  ✓ 每个配方声明的 build 依赖都在构建环境里")
           PYEOF2
 
+      # ★ 5.12.4：每个风味里有几个包来自【上游二进制】。
+      #
+      #   那是 `vendor` 那个记号（5.12.1）的【用处】—— 记号不是为了好看，
+      #   是为了让这句话能被算出来、写进 job summary。
+      #
+      #   判据是：【风味的闭包里，有几个配方的 [build].vendor 非空】。
+      #   而"闭包"不是"直接列表"：一个风味要装 readline，而 readline 不是
+      #   vendor 的 —— 那些都算进去才是用户真正会装到的东西。
+      #
+      #   ★ 而现在这个数字是 0（89 个配方全是自己建的）。**而 0 也要说话**：
+      #     一个从不打印的检查，和一个打印"0 个"的检查，区别在于后者证明
+      #     它跑过。这一条是这个项目这几天反复在修的那一类。
+      - name: 数一下每个风味里有几个包来自上游二进制
+        run: |
+          set -euo pipefail
+          python3 - <<'PYEOF3'
+          import os, pathlib, subprocess, tomllib, sys
+
+          # 每个配方的 vendor 记号
+          vendor = {}
+          for sp in sorted(pathlib.Path("recipes").glob("*/*/spec.toml")):
+              d = tomllib.loads(sp.read_text(encoding="utf-8"))
+              v = (d.get("build") or {}).get("vendor")
+              if v:
+                  vendor[d["package"]["name"]] = v
+
+          print(f"  [分发包] 配方里带 vendor 记号的：{len(vendor)} 个"
+                + ("（" + " · ".join(sorted(vendor)) + "）" if vendor else ""))
+          print()
+
+          # 每个风味：直接列表 → 闭包 → 数其中几个是分发包
+          行 = []
+          for f in sorted(pathlib.Path(".distro/variants").glob("*.toml")):
+              v = tomllib.loads(f.read_text(encoding="utf-8"))["variant"]
+              直接 = v["packages"]
+              try:
+                  闭包 = subprocess.run(
+                      ["./skirt/skirt", "provides", *直接],
+                      capture_output=True, text=True, check=True).stdout.split()
+              except subprocess.CalledProcessError as e:
+                  print(f"  ⚠ {f.stem}：算闭包失败（{e}），跳过", file=sys.stderr)
+                  continue
+              分发的 = sorted(x for x in 闭包 if x in vendor)
+              行.append((f.stem, len(直接), len(闭包), 分发的))
+
+          # 表格 —— 而它是这一条的产出，所以排版值得。
+          print(f"  {'风味':<10} {'直接':>4} {'闭包':>4} {'来自上游二进制':>14}")
+          for 名, n直接, n闭包, 分发的 in 行:
+              print(f"  {名:<10} {n直接:>4} {n闭包:>4} {len(分发的):>14}"
+                    + ("    " + " ".join(分发的) if 分发的 else ""))
+          print()
+
+          # 进 job summary（那里是给人看的，不必在日志里重复）
+          summary = pathlib.Path(os.environ.get("GITHUB_STEP_SUMMARY", "/dev/null"))
+          if summary.name != "dev/null":
+              with summary.open("a", encoding="utf-8") as fp:
+                  fp.write("## 分发包（决策记录 0022）\n\n")
+                  fp.write(f"配方里带 `vendor` 记号的：**{len(vendor)}** 个\n\n")
+                  fp.write("| 风味 | 直接包 | 闭包 | 来自上游二进制 |\n|---|---|---|---|\n")
+                  for 名, n直接, n闭包, 分发的 in 行:
+                      fp.write(f"| {名} | {n直接} | {n闭包} | **{len(分发的)}** |\n")
+                  fp.write("\n")
+          PYEOF3
+
       - name: 引导 —— 建出全部包
         id: bootstrap
         env:
