@@ -577,6 +577,28 @@ jobs:
           print(' '.join(v['packages']))")
           echo "  风味 $FLAVOR: $(echo $FLAVOR_PKGS | wc -w | tr -d ' ') 个包"
 
+          # ★ 5.12.3：分发包装完之后【真的跑一次】。
+          #
+          #   判据是 `vendor_check`（配方里可选的命令），不写就用默认的
+          #   `<包名> --version`。★ 而这一条只能在【装好的系统里】跑 ——
+          #   构建容器里没有它链的那些库，而"没有库"正是要检的东西。
+          #
+          #   而它【现在一个分发包都没有】。所以它算出来是空表，而【空也要
+          #   说话】：打印"0 个"，证明这条检查跑过。
+          VENDOR_CHECKS=$(python3 -c "
+          import tomllib, pathlib
+          out = []
+          for sp in sorted(pathlib.Path('recipes').glob('*/*/spec.toml')):
+              d = tomllib.loads(sp.read_text(encoding='utf-8'))
+              b = d.get('build') or {}
+              if not b.get('vendor'):
+                  continue
+              name = d['package']['name']
+              out.append(name + '=' + (b.get('vendor_check') or (name + ' --version')))
+          print(' '.join(out))")
+          echo "  [分发包] 要验的可执行：$(echo "$VENDOR_CHECKS" | wc -w | tr -d ' ') 个"
+          for pair in $VENDOR_CHECKS; do echo "      $pair"; done
+
           ( cd var/repo && python3 -m http.server 18080 >/dev/null 2>&1 & echo $! > /tmp/http.pid )
           sleep 2
           curl -fsS -o /dev/null "http://localhost:18080/${{ matrix.arch }}/APKINDEX.tar.gz" || {
@@ -587,6 +609,7 @@ jobs:
             -v "$PWD/.distro/keys:/keys:ro" \
             -e "FLAVOR_PKGS=$FLAVOR_PKGS" \
             -e "ARCH=${{ matrix.arch }}" \
+            -e "VENDOR_CHECKS=$VENDOR_CHECKS" \
             alpine:latest sh -c '
               set -e
               mkdir -p /newroot/etc/apk/keys
@@ -600,6 +623,33 @@ jobs:
               if apk --root /newroot info -e apk-tools >/dev/null 2>&1; then
                 echo "  新系统里的 apk: $(chroot /newroot /sbin/apk --version)"
               fi
+
+              # ★ 5.12.3：每个分发包真的跑一次。
+              #
+              #   失败会让这一步红 —— 而这是【对的】：0022 的规则是"有能直接
+              #   运行的官方二进制就只分发"，而"能直接运行"是那条规则的前提。
+              #   跑不起来的二进制不该进仓库。
+              #
+              #   在【装好的系统里】跑（chroot /newroot），不是构建容器 ——
+              #   因为要检的正是"它链的库在这个系统里有没有"。
+              n_ok=0; n_bad=0
+              for pair in $VENDOR_CHECKS; do
+                pkg="${pair%%=*}"; cmd="${pair#*=}"
+                if apk --root /newroot info -e "$pkg" >/dev/null 2>&1; then
+                  if chroot /newroot /bin/sh -c "$cmd" >/tmp/vc.out 2>/tmp/vc.err; then
+                    echo "  [分发包] $pkg: $cmd → ✅ $(head -1 /tmp/vc.out)"
+                    n_ok=$((n_ok + 1))
+                  else
+                    echo "  [分发包] $pkg: $cmd → ❌ 跑不起来"
+                    echo "            stderr: $(head -3 /tmp/vc.err)"
+                    n_bad=$((n_bad + 1))
+                  fi
+                else
+                  echo "  [分发包] $pkg 不在这个风味里（跳过）"
+                fi
+              done
+              echo "  [分发包] 验了 $n_ok 个 · 挂了 $n_bad 个"
+              [ "$n_bad" -eq 0 ] || exit 1
             '
           kill "$(cat /tmp/http.pid)" 2>/dev/null || true
 

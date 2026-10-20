@@ -62,6 +62,17 @@ def all_recipe_names() -> list[str]:
 #   ★ 2026-10-20 加了 `vendor`（决策记录 0022）：它标记"这个包来自上游二进制，
 #   不分发源码、不编译"。而它的用处是让 5.12.2/5.12.3 那两条检查知道
 #   【该检谁】——见 docs/待办.md §5.12。
+#   ★ `vendor_check`（2026-10-20 加，决策记录 0022 的 5.12.3）：
+#   对分发包，"它真的能跑"这件事要在【装好的系统里】验 —— 那是 distro 那边
+#   的事（`bootstrap.yml` 的自检那一步，它已经会装一个系统）。
+#
+#   而那个命令【不该由 CI 猜】：大多数分发包都能用 `<包名> --version`，
+#   而有些不能（`docker` 的包名和程序名不同、`1panel` 是个服务、`rust` 装的是
+#   一堆二进制）。所以在配方里写：
+#
+#       vendor_check = "docker --version"
+#
+#   不写就用默认的 `<包名> --version` —— 而【写了会覆盖它】。
 BUILD_KEYS = frozenset({
     "type",           # autotools / cmake / meson / custom
     "autoreconf",     # 要不要先跑 autoreconf
@@ -71,6 +82,7 @@ BUILD_KEYS = frozenset({
     "out_of_tree",
     "patches",
     "vendor",         # ★ "这个包来自上游二进制"，值是一句人能读的说明
+    "vendor_check",   # ★ 可选：怎么验它真的能跑（5.12.3）。见下
 })
 
 

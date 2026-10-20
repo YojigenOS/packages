@@ -109,8 +109,14 @@ class TestBuild段的键白名单(unittest.TestCase):
         读的 = set(re.findall(r'b\.get\("([a-z_]+)"', 源))
         # nostrip 是 b.get("nostrip") 之外还有别的写法，先看差集
         白名单有而没有读 = spec.BUILD_KEYS - 读的 - {"nostrip"}
-        # vendor 只在 pack.py 里读（它不影响构建，只影响检查），所以不算
-        白名单有而没有读 -= {"vendor"}
+        # 这两个【不影响构建】，只影响别处的检查，所以不算"该被 build.py 读"。
+        #
+        #   vendor        pack.py 读它（决定要不要报库依赖，5.12.2）
+        #   vendor_check  bootstrap.yml 的自检读它（决定跑什么命令，5.12.3）
+        #
+        # ★ 而它们是【加进白名单的一部分】—— 白名单管的是"配方里允许写什么"，
+        #   不是"build.py 会读什么"。两者恰好大部分重叠，而这四个键就是例外。
+        白名单有而没有读 -= {"vendor", "vendor_check"}
         self.assertEqual(
             白名单有而没有读, set(),
             f"这些键在白名单里，而 build.py 从不读它们（写了会被静默忽略）：{白名单有而没有读}")
