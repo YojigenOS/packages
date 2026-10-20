@@ -238,36 +238,28 @@ jobs:
           #
           #   判据：**一个包最终要不要进用户系统？** 要进 → 它必须跟着配方走。
           #
-          #   ★ 而这个判据不在这里"想"，它是【算】出来的：
+          #   ★★★ 而第一版的修法（从 SKIRT_PROVIDES 里减掉 base+minimal 的
+          #   闭包）【不成立，已回退】。2026-10-20 实测：
           #
-          #       devel 的闭包  减去  base+minimal 的闭包  =  纯构建工具
+          #       skirt: 错误 依赖成环，排不出构建顺序：
+          #         make → glibc → python3 → zlib → make
           #
-          #   减去的那部分就是"最终系统里也要有的"。而 base/minimal 的定义在
-          #   distro 仓库里，所以这一步在 CI 里做（这里取了 `.distro`）。
-          DELIVERED_LIST=$(python3 -c "
-          import tomllib, pathlib
-          out = set()
-          for f in ('base', 'minimal'):
-              p = pathlib.Path(f'.distro/variants/{f}.toml')
-              if p.is_file():
-                  out |= set(tomllib.loads(p.read_text())['variant']['packages'])
-          print(' '.join(sorted(out)))")
-
-          # ★★ 变量名一律用英文 —— shell 不保证接受非 ASCII 标识符。
-          #   （2026-10-18 那次 `检查产物()` 就是这个；这次又踩了一遍。
-          #     中文只该出现在注释和 echo 里。）
-          if [ -n "$DELIVERED_LIST" ]; then
-            DELIVERED_CLOSURE=$(./skirt/skirt provides $DELIVERED_LIST || true)
-            # 两边都排序，然后 comm 取差集
-            EXCLUDED=$(comm -12 <(echo "$CLOSURE" | sort -u) <(echo "$DELIVERED_CLOSURE" | sort -u) | tr '\n' ' ')
-            KEEP=$(comm -13 <(echo "$CLOSURE" | sort -u) <(echo "$DELIVERED_CLOSURE" | sort -u) | tr '\n' ' ')
-            echo "  ★ 排掉 $(echo $EXCLUDED | wc -w) 个【也要交付】的包（它们必须跟着配方重建）："
-            echo "      $EXCLUDED"
-            CLOSURE=$(echo "$KEEP" | tr ' ' '\n')
-          else
-            echo "  ★ 拿不到 base/minimal 的定义 —— 沿用 devel 的全闭包（旧行为）"
-          fi
-
+          #   ★ 原因是【`host_provides` 一个集合干了两件事】：
+          #
+          #       ① `build_graph` 里把指向它的边【断掉】—— 那是【解决依赖环】
+          #          的机制（`order.py:58` 的 `if recipe in host_provides`）
+          #       ② 它同时让那个包【不进构建顺序、永远不重建】
+          #
+          #   我只该改 ②，而把 ① 也拿掉了 —— 环就露出来了。而那个环是真的：
+          #   make 要 glibc，glibc 要 python3，python3 要 zlib，zlib 要 make。
+          #   它一直存在，只是被 ① 遮着。
+          #
+          #   ★ 而"一个机制两个意思"是我这几天第三次撞见的同一个形状（前两次：
+          #     一个变量表达两件事、一个 `head -1` 藏掉另外两条）。
+          #
+          #   正确的修法要把 ① 和 ② 分开 —— 那要改 `skirt/`（`order.py` +
+          #   `deps.py`），而改它会让全部包 stale。所以它该和 B2/B3 那些一起做，
+          #   不该在 workflow 里绕。细节见 `docs/待办.md` §1.5.Bf。
           echo "SKIRT_PROVIDES=$(echo $CLOSURE | tr '\n' ' ')" >> "$GITHUB_ENV"
 
           echo "  列表上 $(echo $LIST | wc -w) 个 ✗ 闭包 $(echo "$CLOSURE" | wc -l) 个"
