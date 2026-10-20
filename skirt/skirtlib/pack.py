@@ -342,6 +342,59 @@ def elf_fields(meta: dict, payload: Path, *, scanner=elfdeps.scan
 
 # ------------------------------------------------------------------ mkpkg 的字段
 
+# ★ glibc 自己提供的 soname。它们永远能在任何一个 glibc 系统上找到，
+#   所以分发包依赖它们不算风险。
+#
+#   ★ 硬编码这几个是【故意的】：真正的答案在 glibc 配方的 provides 里，而
+#   为了读它去扫一遍 glibc 的 payload 不值得（那要几十秒）。而这份清单很短、
+#   很稳定（glibc 不会突然多一个 lib*.so.6），而【如果它真的变了】——
+#   下面的报告会多几行，而人一眼能看出是假的。
+GLIBC_SONAMES = frozenset({
+    "libc.so.6", "libm.so.6", "libdl.so.2", "libpthread.so.0",
+    "librt.so.1", "libresolv.so.2", "libutil.so.1", "libanl.so.1",
+    "libmvec.so.1", "libnsl.so.1", "libcrypt.so.1",
+})
+
+
+def vendor_risky_needs(meta: dict, payload: Path, declared: list[str],
+                       *, scanner=None) -> list[str] | None:
+    """对【分发包】报告它链了哪些"我们可能没有"的库（决策记录 0022，5.12.2）。
+
+    ★ 只对 `[build] vendor` 非空的包做 —— 自己建的包依赖由配方声明，
+      而声明漏了 `elf_fields` 那头会补；而分发包的依赖【没人声明过】。
+
+    ★ 返回 `None` 表示"这不是分发包，没查"；返回 `[]` 表示"查了，没有可疑的"。
+      **这两者必须分开** —— 否则零分发包的时候，这条检查【看起来】通过了，
+      而它其实一次都没跑过。那正是这个项目一直在修的那一类。
+
+    ★ 判据是【近似】的，而这是故意的：我们不知道仓库里有哪些 soname
+      （那要扫全部包的 payload），所以报的是"链了、而自己没声明"。
+      它不替你判断对错，它让【那个人能判断】。
+
+      · glibc 提供的（`GLIBC_SONAMES`）—— 跳过，谁都有的
+      · 自己声明了的（`so:xxx` 或包名）—— 跳过，说明作者想过了
+      · 剩下的 —— 报出来
+
+    ★ 而它【不失败】。装不上的真正判据是"装上之后跑得起来"，那在 distro
+      那边（5.12.3）。这里失败的话，会把一个能用的包挡在门外。
+    """
+    build = meta.get("build") or {}
+    if not build.get("vendor"):
+        return None                      # 不是分发包
+
+    if scanner is None:
+        scanner = elfdeps.scan
+    needed, _ = scanner(payload)
+    已声明 = set()
+    for d in declared:
+        if d.startswith("so:"):
+            已声明.add(d[3:])
+        else:
+            已声明.add(d)                # 包名，不是 soname，但记着无害
+    return [n for n in needed
+            if n not in GLIBC_SONAMES and n not in 已声明]
+
+
 def info_fields(job: Job, depends: list[str], provides: list[str]
                 ) -> list[tuple[str, str]]:
     """meta.json → `--info k:v` 的那些字段（空值不传：mkpkg 对空字符串会报错）。"""
@@ -513,6 +566,29 @@ def pack_one(job: Job, *, pkgs_dir: Path, work: Path, sign_key: Path | None,
     depends, provides, elf_note = elf_fields(job.meta, job.payload)
     if elf_note:
         print(elf_note, file=sys.stderr)
+
+    # ★ 5.12.2：分发包链了哪些"我们可能没有"的库。**只报告，不失败**
+    #   （理由见 vendor_risky_needs 的 docstring）。
+    #
+    #   ★ 而 `None` 和 `[]` 的区别在这里很重要：前者是"自己建的，没查"，
+    #   后者是"分发包，查了，干净"。两种都要说话，否则零分发包时这条检查
+    #   会看起来一直在工作。
+    风险 = vendor_risky_needs(job.meta, job.payload, depends)
+    if 风险 is None:
+        pass                          # 自己建的包，这格不适用（也不打印，免得刷屏）
+    elif 风险:
+        名 = job.meta["package"]["name"]
+        vendor = (job.meta.get("build") or {}).get("vendor")
+        print(f"[分发包] ⚠ {名} 来自上游二进制（{vendor}）：", file=sys.stderr)
+        for so in 风险:
+            print(f"            {so}", file=sys.stderr)
+        print("          ★ 这些它链了、而配方没声明 —— 它们可能不在我们的仓库里，"
+              "于是装上之后跑不起来。", file=sys.stderr)
+        print("            要么把提供它的包加进 depends，要么记进 0022 的验收。",
+              file=sys.stderr)
+    else:
+        名 = job.meta["package"]["name"]
+        print(f"[分发包] {名} 的库依赖都声明过了（或由 glibc 提供）", file=sys.stderr)
 
     inner = packdir / "inner.sh"
     inner.write_text(inner_script(job, depends, provides, signed=sign_key is not None),

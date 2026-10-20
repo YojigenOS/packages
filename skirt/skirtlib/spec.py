@@ -56,6 +56,24 @@ def all_recipe_names() -> list[str]:
     return sorted(out)
 
 
+# ★ `[build]` 段认识哪些键。这份清单必须和 `build.py` 里真正读的键【一致】——
+#   而"一致"这件事没有自动保证，所以两处都在注释里互相指着。
+#
+#   ★ 2026-10-20 加了 `vendor`（决策记录 0022）：它标记"这个包来自上游二进制，
+#   不分发源码、不编译"。而它的用处是让 5.12.2/5.12.3 那两条检查知道
+#   【该检谁】——见 docs/待办.md §5.12。
+BUILD_KEYS = frozenset({
+    "type",           # autotools / cmake / meson / custom
+    "autoreconf",     # 要不要先跑 autoreconf
+    "cflags",
+    "configure",      # 交给 configure/cmake/meson 的参数（★ 会【追加】在默认值之后）
+    "nostrip",
+    "out_of_tree",
+    "patches",
+    "vendor",         # ★ "这个包来自上游二进制"，值是一句人能读的说明
+})
+
+
 def load_spec(name: str) -> dict:
     path = spec_path(name)
     if path is None:
@@ -69,6 +87,25 @@ def load_spec(name: str) -> dict:
     for key in ("name", "version"):
         if key not in spec["package"]:
             die(f"{path}: [package] 缺少 {key}")
+
+    # ★★★ [build] 的键白名单 —— 2026-10-20 加。
+    #
+    #   在这之前，[build] 里【多写一个键不会报错，会被静静忽略】：
+    #   build.py 只读 type / autoreconf / cflags / configure / nostrip /
+    #   out_of_tree / patches，而 spec.py 从不检查还有没有别的。
+    #
+    #   而那是这个项目一直在修的那一类 —— 一个该大声失败的地方静静地成功了。
+    #   实测的代价会是这样：有人写 `patch = [...]`（少个 s），配方照建，
+    #   补丁没打，而产物看起来正常。**而那个人会以为自己打了补丁。**
+    #
+    #   ★ 而这一条在加 `vendor` 的时候顺手加，是因为那时正好在改这里；
+    #     而它会立刻抓到现有配方里写错的键（如果有）。
+    for key in (spec.get("build") or {}):
+        if key not in BUILD_KEYS:
+            die(f"{path}: [build] 里有一个不认识的键 {key!r}\n"
+                f"          认识的只有：{', '.join(sorted(BUILD_KEYS))}\n"
+                f"          （多写的键会被静静忽略，所以这里直接报错）")
+
     spec["_dir"] = path.parent
     return spec
 
