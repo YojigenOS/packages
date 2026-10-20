@@ -262,6 +262,40 @@ jobs:
           #   不该在 workflow 里绕。细节见 `docs/待办.md` §1.5.Bf。
           echo "SKIRT_PROVIDES=$(echo $CLOSURE | tr '\n' ' ')" >> "$GITHUB_ENV"
 
+          # ★★★ 2026-10-20（§1.5.Bf）：`SKIRT_PROVIDES` 只管【断环】了。
+          #
+          #   原来它一个集合干两件事：① 断掉指向这些包的依赖边（解决环）
+          #   ② 让它们不进构建顺序（永远不重建）。对 autoconf / make 这类
+          #   纯构建工具两件都对；而对 readline / ncurses / openssl / zlib
+          #   这类【既要进构建环境、又要交付】的包，② 是错的 —— 实测
+          #   readline 的配方改了四轮都不生效，因为那一轮它根本没被建。
+          #
+          #   现在多传一个 `SKIRT_REBUILD`：那些包的边【还是断】（所以环还是
+          #   断的），但它们【进构建顺序】。
+          #
+          #   判据和上面一样是【算】的：devel 闭包 减 base+minimal 闭包。
+          #   而第一次的修法（直接从 SKIRT_PROVIDES 里减）失败过 —— 它把
+          #   断环也拿掉了，于是 `make → glibc → python3 → zlib → make` 露出来。
+          DELIVERED_LIST=$(python3 -c "
+          import tomllib, pathlib
+          out = set()
+          for f in ('base', 'minimal'):
+              p = pathlib.Path(f'.distro/variants/{f}.toml')
+              if p.is_file():
+                  out |= set(tomllib.loads(p.read_text())['variant']['packages'])
+          print(' '.join(sorted(out)))")
+
+          if [ -n "$DELIVERED_LIST" ]; then
+            DELIVERED_CLOSURE=$(./skirt/skirt provides $DELIVERED_LIST || true)
+            REBUILD=$(comm -12 <(echo "$CLOSURE" | sort -u) <(echo "$DELIVERED_CLOSURE" | sort -u) | tr '\n' ' ')
+            echo "  ★ $(echo $REBUILD | wc -w) 个包【也要交付】，所以它们会重建（SKIRT_REBUILD）："
+            echo "      $REBUILD"
+            echo "SKIRT_REBUILD=$REBUILD" >> "$GITHUB_ENV"
+          else
+            echo "  ★ 拿不到 base/minimal 的定义 —— SKIRT_REBUILD 留空（旧行为：那些包不重建）"
+            echo "SKIRT_REBUILD=" >> "$GITHUB_ENV"
+          fi
+
           echo "  列表上 $(echo $LIST | wc -w) 个 ✗ 闭包 $(echo "$CLOSURE" | wc -l) 个"
           for p in $(echo "$CLOSURE"); do
             echo "$LIST" | grep -qw "$p" || echo "      + $p"

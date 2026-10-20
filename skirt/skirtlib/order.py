@@ -37,11 +37,26 @@ def _recipe_names() -> list[str]:
 
 
 def build_graph(arch: str, host_provides: set[str],
-                names: list[str] | None = None) -> tuple[dict[str, set[str]], list[tuple[str, str]]]:
+                names: list[str] | None = None,
+                force_build: set[str] | None = None
+                ) -> tuple[dict[str, set[str]], list[tuple[str, str]]]:
     """依赖图，以及「哪些边因为基线被断掉了」。
 
     返回 (图, 断掉的边)。图中的键是配方名，值是需要先建好的配方名。
+
+    ★ `force_build`（2026-10-20 加，§1.5.Bf）：在 `host_provides` 里、
+      **但也要建**的包。指向它们的边【不断】—— 因为它们要进构建顺序，而顺序
+      得知道它们等谁。
+
+      而它不会把环带回来：那个 `make → glibc → python3 → zlib → make` 的环
+      还是断的，因为 `make` / `glibc` 这类【永远不交付给用户】的包不在
+      `force_build` 里（它们是构建工具，用户不会装到它们）。
+
+      ★ 而如果有人真的把环上每一个都放进 `force_build`，`_topo_sort` 会报
+        「依赖成环」并打印那个环 —— 那是【对的】，因为那个环是真的，而人
+        该知道"这几样没法全靠自己建出来"。
     """
+    force_build = force_build or set()
     names = names if names is not None else _recipe_names()
     known = set(names)
     graph: dict[str, set[str]] = {}
@@ -55,9 +70,12 @@ def build_graph(arch: str, host_provides: set[str],
             recipe = recipe_of(dep)
             if recipe not in known or recipe == name:
                 continue
-            if recipe in host_provides:
+            if recipe in host_provides and recipe not in force_build:
                 # 由构建环境满足：不等待它。但仍然记下这条边断了，
                 # 因为它正是环被打开的地方，值得让人看见。
+                #
+                # ★ 而 force_build 里的【不在这里】—— 它们要建，所以顺序必须
+                #   知道它们等谁。见 build_graph 的 docstring（§1.5.Bf）。
                 broken.append((name, recipe))
                 continue
             edges.add(recipe)
@@ -155,6 +173,11 @@ def build_order(arch: str = "aarch64",
     from .common import die
 
     host_provides = load_host_provides()
+    # ★ 2026-10-20：分成两件事了。`host_provides` 只管【断环】，
+    #   `rebuild_only` 管【哪些"环境有"的包也要建】。
+    #   理由见 `deps.load_rebuild_only` 的 docstring（§1.5.Bf）。
+    from .deps import load_rebuild_only
+    rebuild_only = load_rebuild_only()
     names = _recipe_names()
     known = set(names)
 
@@ -174,7 +197,8 @@ def build_order(arch: str = "aarch64",
                     stack.append(r)
         names = [n for n in names if n in want]
 
-    graph, broken = build_graph(arch, host_provides, names)
+    graph, broken = build_graph(arch, host_provides, names,
+                                force_build=rebuild_only)
 
     order, stuck = _topo_sort(graph, names)
     if stuck:

@@ -131,3 +131,107 @@ class TestBuild段的键白名单(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Test_force_build_和断环是两件事(unittest.TestCase):
+    """§1.5.Bf：`SKIRT_PROVIDES` 只管断环，`SKIRT_REBUILD` 管哪些也要建。
+
+    ★ 这两个集合【必须能分开】，而它们是同一件事的两个方面：
+
+        SKIRT_PROVIDES   "环境里有它，所以【不要等它】"（断边，解决环）
+        SKIRT_REBUILD    "而它【也要建】"（所以它进顺序，而指向它的边不断）
+
+    ★ 而 2026-10-20 的第一版修法【直接从 SKIRT_PROVIDES 里减掉】，于是把
+      "不要等它"也拿掉了 —— `make → glibc → python3 → zlib → make` 那个环
+      立刻露出来，CI 报「依赖成环」。这个文件的那几条测试就是为了让那种
+      回归【在本地就挂】，而不是等一轮 CI。
+    """
+
+    def setUp(self):
+        import os
+        self._old = {k: os.environ.get(k) for k in ("SKIRT_PROVIDES", "SKIRT_REBUILD")}
+
+    def tearDown(self):
+        import os
+        for k, v in self._old.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+    def test_读环境变量(self):
+        import os
+        os.environ["SKIRT_REBUILD"] = "readline  ncurses,openssl"
+        from skirtlib.deps import load_rebuild_only
+        self.assertEqual(load_rebuild_only(), {"readline", "ncurses", "openssl"})
+
+    def test_没设就是空集(self):
+        import os
+        os.environ.pop("SKIRT_REBUILD", None)
+        from skirtlib.deps import load_rebuild_only
+        self.assertEqual(load_rebuild_only(), set())
+
+    def test_force_build_里的包_边不断(self):
+        """指向 force_build 的边要保留 —— 那样顺序才知道它等谁。
+
+        ★ 而 `force_build` 的语义是【重建名单】，不是"某一个包"。所以给它一个
+          孤立的 `{"readline"}` 是【不一致的输入】：真跑的时候 workflow 传的是
+          整份交集（`devel` 闭包 ∩ `base`+`minimal` 闭包，49 个），而 `ncurses`
+          就在里面。
+
+          第一版这条测试正是传了 `{"readline"}`，于是 `readline → ncurses` 那条
+          边还断着 —— 而那不是 bug，是**它给的名单里没有 ncurses**。
+          ★ 教训：**孤立元素的输入测不出闭包语义**。
+        """
+        from skirtlib import order
+        # readline 的 build 依赖里有 ncurses；两个都在重建名单里
+        graph, broken = order.build_graph(
+            "x86_64", {"readline", "ncurses"}, ["readline", "ncurses"],
+            force_build={"readline", "ncurses"})
+        self.assertIn("ncurses", graph["readline"],
+                      "readline 建的时候要等 ncurses —— 两个都在重建名单里，这条边不该断")
+
+    def test_而名单外的依赖_边还是断的(self):
+        """★ 这条是【环不回来】的原因：`make` 永远不在重建名单里。
+
+        `ncurses` 的依赖是 gcc / glibc / make —— 三个都是构建工具，base 和
+        minimal 里都没有它们，所以它们不在交集里。于是 `ncurses → make` 断，
+        而 `make → glibc → python3 → zlib → make` 那个环断在 `make` 上。
+        """
+        from skirtlib import order
+        graph, broken = order.build_graph(
+            "x86_64", {"ncurses", "make"}, ["ncurses", "make"],
+            force_build={"ncurses"})
+        self.assertNotIn("make", graph["ncurses"])
+        self.assertIn(("ncurses", "make"), broken)
+
+    def test_而_force_build_外_边还是断的(self):
+        """★ 这条是环不回来的原因：`make` 永远不在 rebuild 里。"""
+        from skirtlib import order
+        # bash 的 build 依赖里有 readline；readline 在 host_provides 而不在 force_build
+        graph, broken = order.build_graph(
+            "x86_64", {"readline"}, ["bash", "readline"], force_build=set())
+        self.assertNotIn("readline", graph["bash"])
+        self.assertIn(("bash", "readline"), broken)
+
+    def test_而真实的环_靠一个不在_rebuild_里的包断着(self):
+        """`make → glibc → python3 → zlib → make`。
+
+        ★ 这条测的是【设计成立的前提】：那个环上必须至少有一个包【不该重建】
+          （用户装不到它），否则它真的成环。而 `make` 正是那一个 —— 它是构建
+          工具，base/minimal 里都没有它。
+
+          而这条测试【不跑 CI 那个差集】（那要 distro 仓库），它只断言：
+          `make` 不在 base/minimal 的直接列表里。★ 那正是差集把它排除的理由。
+        """
+        import tomllib
+        from pathlib import Path
+        根 = Path(__file__).resolve().parents[3]
+        for 风味 in ("base", "minimal"):
+            f = 根 / "distro" / "variants" / f"{风味}.toml"
+            if not f.is_file():
+                self.skipTest(f"没有 {f}（这个测试要在工作区里跑）")
+            v = tomllib.loads(f.read_text(encoding="utf-8"))["variant"]
+            self.assertNotIn("make", v["packages"],
+                             f"make 不该在 {风味} 的直接列表里 —— 它是构建工具，"
+                             "而它正是那个环的断点")

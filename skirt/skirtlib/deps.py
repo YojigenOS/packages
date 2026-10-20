@@ -12,6 +12,49 @@ from .spec import direct_deps, latest_date, load_spec, package_rel, recipe_of
 
 # ---------------------------------------------------------------- 依赖解析
 
+def load_rebuild_only() -> set[str]:
+    """哪些包【明明在构建环境里、却仍然要重建】（2026-10-20 加）。
+
+    ★ 为什么需要它 —— §1.5.Bf 那个结构性问题的修法：
+
+      `SKIRT_PROVIDES` 原来一个集合干了两件事：
+
+        ① `build_graph` 里把指向这个包的边【断掉】—— 那是【解决依赖环】的机制
+        ② 同时让它【不进构建顺序、永远不重建】
+
+      对 autoconf / make / cmake 这类【纯构建工具】，两件事都对。
+      而对 `readline` / `ncurses` / `openssl` / `zlib` 这类【既要进构建环境、
+      又要装进用户系统】的包，② 是错的：它们被"环境提供"之后就再也【不会
+      跟着配方更新】，而最终系统里装的是那个永不更新的版本。
+
+      实测（2026-10-18 连续四轮）：readline 的 build 依赖补了 ncurses，而
+      config 改了【不生效】—— 因为 readline 那一轮根本没被建。于是 python3
+      链上镜像里那份旧的 libreadline.so.8：
+
+          [ERROR] readline failed to import: …: undefined symbol: UP
+
+    ★ 所以现在分成两件事：
+
+        SKIRT_PROVIDES   ① 断环（不变，还是完整闭包）
+        SKIRT_REBUILD    ★ 这个集合里的包【也进构建顺序】
+
+      而 ① 依然有效：那个 `make → glibc → python3 → zlib → make` 的环还是
+      靠 `make` 在 `SKIRT_PROVIDES` 里、而不在 `SKIRT_REBUILD` 里断掉的
+      （`make` 永远不交付给用户，所以它不该重建）。
+
+    ★ 而这里【不加默认值】。空集合是合法的（= 不重建任何"本该跳过"的包，
+      旧行为）。而"哪 33 个该重建"是 CI 算的（`devel` 闭包减 `base`+`minimal`
+      闭包），不该在 packages 里猜 —— 那和镜像名不该出现在 recipes 里是
+      同一条分界。
+    """
+    env = os.environ.get("SKIRT_REBUILD", "").strip()
+    out: set[str] = set()
+    for chunk in env.replace(",", " ").split():
+        if chunk:
+            out.add(chunk)
+    return out
+
+
 def load_host_provides() -> set[str]:
     """构建环境已经提供了哪些包。
 
