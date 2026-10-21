@@ -1,0 +1,98 @@
+# ★ 临时工作流，用完删掉（packages/AGENTS.md 允许这么做）。
+#
+# 它只回答一个问题：**同一个工具链、不同的镜像 ID → 产物是否逐字节相同？**
+#
+# 答案决定 §「增量」那一条怎么改：
+#   相同  → `build_key` 里的 `buildenv`（镜像 Id）可以换成工具链指纹，
+#           于是"换镜像"不再让 90 个包全量重建
+#   不同  → 不能换，镜像 Id 必须留着（那说明镜像里还有别的东西影响产物）
+#
+# 做法：拿 devel 镜像 commit 出一个【工具链完全一样、Id 不同】的副本，
+# 用它和原件各建一次 `hello`，比 .apk 的 sha256 和 build_key 的 parts。
+name: probe-toolchain
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/checkout@v6
+        with:
+          repository: YojigenOS/distro
+          path: .distro
+
+      - name: 拉构建环境，并造一个「同工具链、不同 Id」的副本
+        run: |
+          set -euo pipefail
+          docker pull yojigenos/devel:edge-x86_64
+          docker tag yojigenos/devel:edge-x86_64 yojigenos/devel:x86_64
+          echo "原件 Id: $(docker image inspect --format '{{.Id}}' yojigenos/devel:x86_64)"
+
+          # 只加一个标记文件 —— 内容变了（所以 Id 变），工具链一个字没动
+          docker run --name probe yojigenos/devel:x86_64 \
+            /bin/sh -c 'printf probe > /etc/.toolchain-probe'
+          docker commit --change 'CMD ["/bin/bash"]' probe probe-img >/dev/null
+          docker rm -f probe >/dev/null
+          docker tag probe-img probe:x86_64
+          echo "副本 Id: $(docker image inspect --format '{{.Id}}' probe:x86_64)"
+
+      - name: 证明两个镜像的工具链一样
+        run: |
+          set -euo pipefail
+          for img in yojigenos/devel:x86_64 probe:x86_64; do
+            echo "── $img ──"
+            docker run --rm "$img" /bin/sh -c '
+              gcc --version | head -1
+              ld --version | head -1
+              /lib64/ld-linux-x86-64.so.2 --version 2>&1 | head -1
+              apk list -I 2>/dev/null | grep -cE "^"' || true
+          done
+
+      - name: 算出 PROVIDES（不然 hello 会去建 glibc）
+        run: |
+          set -euo pipefail
+          # .distro 那边要放在 distro/ 才和本地布局一致
+          mv .distro distro
+          DEVEL=$(python3 -c "
+          import tomllib,pathlib
+          v=tomllib.loads(pathlib.Path('distro/variants/devel.toml').read_text())['variant']
+          print(' '.join(v['packages']))")
+          CLOSURE=$(./skirt/skirt provides $DEVEL)
+          echo "闭包 $(echo $CLOSURE | wc -w) 个"
+          echo "SKIRT_PROVIDES=$CLOSURE" >> "$GITHUB_ENV"
+
+      - name: 用原件建一次 hello
+        run: |
+          set -euo pipefail
+          SKIRT_BUILDENV=yojigenos/devel ./skirt/skirt build hello --arch x86_64
+          A=$(find var/output/x86_64 -name 'hello-*.apk' | head -1)
+          echo "APK_A=$(sha256sum "$A" | cut -d' ' -f1)" >> "$GITHUB_ENV"
+          echo "── meta.json 的 parts ──"
+          cat "$(dirname "$A")/meta.json" | python3 -c 'import json,sys; print(json.dumps(json.load(sys.stdin)["parts"], indent=2, ensure_ascii=False))'
+
+      - name: 用副本建一次 hello
+        run: |
+          set -euo pipefail
+          SKIRT_BUILDENV=probe ./skirt/skirt build hello --arch x86_64
+          A=$(find var/output/x86_64 -name 'hello-*.apk' | head -1)
+          echo "APK_B=$(sha256sum "$A" | cut -d' ' -f1)" >> "$GITHUB_ENV"
+          echo "── meta.json 的 parts ──"
+          cat "$(dirname "$A")/meta.json" | python3 -c 'import json,sys; print(json.dumps(json.load(sys.stdin)["parts"], indent=2, ensure_ascii=False))'
+
+      - name: 比
+        run: |
+          set -euo pipefail
+          echo "原件: $APK_A"
+          echo "副本: $APK_B"
+          if [ "$APK_A" = "$APK_B" ]; then
+            echo "★ 结论：产物逐字节相同 —— 镜像 Id 不是产物的一部分，可以换成工具链指纹"
+          else
+            echo "★★ 结论：产物不同 —— 镜像 Id 必须留在 build_key 里（镜像里还有别的东西影响产物）"
+            exit 1
+          fi
