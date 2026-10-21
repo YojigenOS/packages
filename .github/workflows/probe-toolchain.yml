@@ -73,7 +73,11 @@ jobs:
       - name: 用原件建一次 hello
         run: |
           set -euo pipefail
+          # ★ `build` 只产出 payload 目录，`.apk` 是 `pack` 打的。
+          #   第一版漏了 pack，于是 find 找不到文件、报 `sha256sum: ''` ——
+          #   而那看起来像"产物没生成"。
           SKIRT_BUILDENV=yojigenos/devel ./skirt/skirt build hello --arch x86_64
+          SKIRT_BUILDENV=yojigenos/devel ./skirt/skirt pack hello --arch x86_64
           A=$(find var/output/x86_64 -name 'hello-*.apk' | head -1)
           echo "APK_A=$(sha256sum "$A" | cut -d' ' -f1)" >> "$GITHUB_ENV"
           echo "── meta.json 的 parts ──"
@@ -82,7 +86,11 @@ jobs:
       - name: 用副本建一次 hello
         run: |
           set -euo pipefail
+          # ★ `build` 只产出 payload 目录，`.apk` 是 `pack` 打的。
+          #   第一版漏了 pack，于是 find 找不到文件、报 `sha256sum: ''` ——
+          #   而那看起来像"产物没生成"。
           SKIRT_BUILDENV=probe ./skirt/skirt build hello --arch x86_64
+          SKIRT_BUILDENV=probe ./skirt/skirt pack hello --arch x86_64
           A=$(find var/output/x86_64 -name 'hello-*.apk' | head -1)
           echo "APK_B=$(sha256sum "$A" | cut -d' ' -f1)" >> "$GITHUB_ENV"
           echo "── meta.json 的 parts ──"
