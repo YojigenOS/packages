@@ -126,7 +126,15 @@ def cmd_build(args) -> None:
 
     # 依赖
     host_provides = load_host_provides()
-    order = dep_closure(spec, arch, host_provides)
+    # ★★★ include_rebuild=True —— 这是 readline 那笔账的另一半（2026-10-21）。
+    #
+    #   不加它的时候：`SKIRT_REBUILD` 里的包会被【重建】（`order.py` 的边回来了），
+    #   而它们【从不进 sysroot】（这里原来按 `host_provides` 一把跳过），于是
+    #   重建了没人用 —— 下游拿的还是镜像里那份。实测：`python3` 的「需自建」
+    #   闭包在 CI 那 62 个 PROVIDES 下是空的。
+    #
+    #   ★ 而 glibc / filesystem 由 `deps.SYSRROOT_NEVER` 挡在门外（命根子）。
+    order = dep_closure(spec, arch, host_provides, include_rebuild=True)
     if order:
         log("解析", f"依赖链: {' → '.join(order + [name])}")
     else:

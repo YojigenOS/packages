@@ -96,9 +96,43 @@ def load_host_provides() -> set[str]:
     return out
 
 
+#: 这些包【永远不】因为 `SKIRT_REBUILD` 而进构建 sysroot。
+#
+#  ★★★ 2026-10-21 加。它们是构建容器自己的**命根子**：
+#
+#    glibc       —— 动态链接器（`usr/lib64/ld-linux-x86-64.so.2`）和 libc 本身。
+#                    `build.py` 那段合并注释已经写过一次：「Links 一改，链接器
+#                    就悬空了 —— 容器里所有动态链接的程序立刻全废」。
+#    filesystem  —— 容器的目录布局（`/lib64 -> usr/lib64` 这类 symlink 就在它里面）。
+#
+#  ★ 而今天把它们合并进去**确实无害**：`buildenv` 换成我们自己的 devel 镜像之后，
+#    镜像里那份和这一轮重建的是【逐字节相同】的（可复现构建）。但那是"今天恰好"，
+#    不是"永远" —— 而它坏起来的样子是"容器里所有程序突然都不能跑"，
+#    查起来极贵（历史上查过一次）。
+#
+#  ★★ 所以规则是：这两条不进 sysroot，其余 28 个进的。判据是"它在不在
+#     `build.py` 那段命根子清单里"，不是"它重不重要"。
+SYSRROOT_NEVER = frozenset({"glibc", "filesystem"})
+
+
 def dep_closure(spec: dict, arch: str, host_provides: set[str],
-                kinds: tuple[str, ...] = ("runtime", "build")) -> list[str]:
+                kinds: tuple[str, ...] = ("runtime", "build"), *,
+                include_rebuild: bool = False) -> list[str]:
     """返回按安装顺序排列的依赖包名（依赖在前，不含自身，已剔除宿主提供的）。
+
+    ★★★ `include_rebuild`（2026-10-21 加）—— 那条一直没修的另一半。
+
+    `SKIRT_REBUILD` 里的包（既在构建环境里、又是要交付的）会【被重建】，而
+    `order.py` 也已经让它们的依赖边回来了（B1）。但这里的跳过是另一处：
+    `if name in host_provides` 一把全跳过，于是**重建了却没人用它**。
+
+    实测过的后果：`python3` 的「需自建」闭包在 CI 那 62 个 `PROVIDES` 下是
+    **空的** —— 它的构建容器里一个依赖都没有，链接和 import 拿的全是镜像里
+    那份。而 readline 那次就是坏在镜像里那份上。
+
+    ★ 只在「准备构建 sysroot」那条路上打开（`commands.cmd_build`）。别的地方
+      （`provides --runtime`、`source_date_epoch`）保持原语义 —— 那里的"闭包"
+      回答的是另一个问题。
 
     自依赖不算成环，它是自举的常态：构建 make 需要 make，构建 gcc 需要 gcc
     （gcc 的 stage1 → stage2 正是这个模式）。此时用「上一轮构建出的自己」；
@@ -112,8 +146,13 @@ def dep_closure(spec: dict, arch: str, host_provides: set[str],
     stack: list[str] = []
     self_name = spec["package"]["name"]
 
+    # ★ 只有"准备构建 sysroot"那条路会打开它；而打开之后仍然绕过 SYSRROOT_NEVER。
+    reborn = load_rebuild_only() - SYSRROOT_NEVER if include_rebuild else set()
+
     def visit(name: str) -> None:
-        if name in host_provides or name in done:
+        if name in done:
+            return
+        if name in host_provides and name not in reborn:
             return
         if name in stack:
             die(f"依赖成环: {' → '.join(stack + [name])}")

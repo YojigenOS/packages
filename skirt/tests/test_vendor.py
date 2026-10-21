@@ -312,3 +312,114 @@ class Test_runtime_闭包和_build_闭包是两件事(unittest.TestCase):
         b = self._闭包("--runtime", "bash", env={"SKIRT_PROVIDES": "glibc"})
         self.assertEqual(a, b,
                          "--runtime 不看 SKIRT_PROVIDES（用户装什么和环境无关）")
+
+
+#: 假宿主集合 —— 假装"构建环境里已经有了这些"。
+#
+#  ★★★ 它【必须覆盖工具链】：`make` / `gcc` / `binutils` / `python3` / `m4` /
+#  `bison` 那一串。否则 `dep_closure` 会一路跟下去，撞上真实环境里【不存在的】
+#  环 —— 实测撞到过两个：
+#
+#      readline → ncurses → make → gcc → … → python3 → readline
+#      ncurses → gcc → gmp → gcc
+#
+#  而这两条在 CI 里都不成立：那些名字都在 62 个 `SKIRT_PROVIDES` 里，`visit`
+#  直接跳过。**真实调用量出来的是 `zlib · ncurses · readline · openssl`、
+#  四个、无环。**
+#
+#  ★ 所以"一个太小的宿主集合会让依赖图看起来有环"——那是夹具的问题，不是代码的。
+假宿主 = frozenset({
+    "glibc", "ncurses", "readline", "openssl", "zlib", "expat", "libffi",
+    "make", "gcc", "binutils", "python3", "bison", "m4", "autoconf",
+    "automake", "libtool", "texinfo", "perl", "linux-headers", "gettext",
+    "pkgconf", "meson", "ninja", "pip", "ccache", "cmake", "curl", "xz",
+    "gmp", "mpc", "mpfr", "flex", "patch", "diffutils", "gawk", "sed", "grep",
+    "coreutils", "bash", "dash", "findutils", "tar", "gzip", "bzip2",
+    "util-linux", "pcre2", "elfutils", "file", "libcap", "libcap-ng",
+    "libxcrypt", "popt", "rsync", "strace", "vim", "tmux", "which", "less",
+    "procps", "zstd",
+})
+
+
+class Test_sysroot_要用上刚建好的包(unittest.TestCase):
+    """`dep_closure(include_rebuild=True)` —— B1 那笔账的**另一半**。
+
+    ★ 来历（2026-10-21）：`readline` 的 `.so` 不链 libncursesw 那个 bug 修好之后，
+      `python3` 仍然报 `undefined symbol: UP`，而报错里的路径是
+      **`/usr/lib/libreadline.so.8`** —— 不是 sysroot。
+
+      查下去发现两处跳过只修了一处：
+
+          order.py 的 build_graph   ← B1 修了它（边回来 → 排对位置）
+          deps.py 的 dep_closure    ← 【没修】（`if name in host_provides` 一把跳过）
+
+      于是 `SKIRT_REBUILD` 里的包**建了没人用** —— 下游拿的还是镜像里那份。
+
+    ★★ 而它当时的实测证据很硬：`python3` 的「需自建」闭包在 CI 那 62 个
+      `PROVIDES` 下是**空的**。一个依赖都没有的构建容器，等于"镜像说了算"。
+    """
+
+    def _闭包(self, name, *, rebuild, include):
+        import os
+        from unittest import mock
+        from skirtlib.deps import dep_closure
+        from skirtlib.spec import load_spec
+
+        # ★★★ 用模块级那份 `假宿主`，理由见它自己的注释。
+        #   第一版这里写了个更小的集合，于是造出真实环境里不存在的环
+        #   （`ncurses → gcc → gmp → gcc`、`… → python3 → readline`）。
+        宿主 = 假宿主
+        with mock.patch.dict(os.environ, {"SKIRT_REBUILD": " ".join(sorted(rebuild))}):
+            return dep_closure(load_spec(name), "x86_64", 宿主,
+                               include_rebuild=include)
+
+    def test_默认不把宿主提供的包放进闭包(self):
+        """原来的语义不动它 —— 这条是防回归的锚。
+
+        ★ 用 `readline` 而不是 `python3`：它的依赖只有 glibc + ncurses，而这两个
+          都在假宿主集合里，所以默认路径的答案该是空 —— 判据干净。
+          （第一版用 `python3`，于是断言 `== []` 被 expat / perl / m4 那些
+          "假宿主里没有的" 真实依赖打破了。**那是我的夹具不完整，不是代码错。**）
+        """
+        得 = self._闭包("readline", rebuild={"ncurses"}, include=False)
+        self.assertEqual(得, [], "默认路径不该把宿主提供的包塞进闭包")
+
+    def test_而_include_rebuild_打开之后它们进来了(self):
+        """★ 这就是修的那一句：重建出来的包要真的被用上。"""
+        得 = self._闭包("python3", rebuild={"readline", "ncurses"}, include=True)
+        self.assertIn("readline", 得, "python3 要 readline（而这轮刚建了它）")
+        self.assertIn("ncurses", 得)
+
+    def test_不在_rebuild_里的宿主包仍然不进(self):
+        """★ 别修过头：镜像里那份够用的包，不该因为它也被重建而进 sysroot。"""
+        得 = self._闭包("python3", rebuild={"readline"}, include=True)
+        self.assertIn("readline", 得)
+        for 不该 in ("glibc", "make", "gcc", "openssl"):
+            self.assertNotIn(不该, 得, f"{不该} 不在 REBUILD 里，仍然该由宿主提供")
+
+    def test_命根子永不进_sysroot(self):
+        """★★ `glibc` / `filesystem` 即使【在】`REBUILD` 里也不进。
+
+        它们在 `REBUILD` 里是**真的**（两个都交付给用户），而合并进构建容器就是
+        另一回事：`build.py` 那段注释写过一次「Links 一改，链接器就悬空了 ——
+        容器里所有动态链接的程序立刻全废」。历史上查过一次，很贵。
+
+        ★ 而今天合并它们其实无害（镜像里那份和重建的逐字节相同）—— 所以这条
+          测试有一个更重要的任务：**把"今天恰好"和"规则"分开**。
+        """
+        from skirtlib.deps import SYSRROOT_NEVER, dep_closure
+        from skirtlib.spec import load_spec
+        import os
+        from unittest import mock
+
+        self.assertEqual(set(SYSRROOT_NEVER), {"glibc", "filesystem"})
+
+        # ★ 判据要能分辨两件事：`include_rebuild` 生效了（ncurses 进来了）、而
+        #   `SYSRROOT_NEVER` 也生效了（glibc 没进来）。所以两条都得在 REBUILD 里
+        #   —— 只测 glibc 的话，一个"include_rebuild 完全没生效"的实现也会过。
+        宿主 = 假宿主 | {"glibc", "ncurses"}
+        with mock.patch.dict(os.environ, {"SKIRT_REBUILD": "glibc ncurses"}):
+            得 = dep_closure(load_spec("readline"), "x86_64", 宿主,
+                             include_rebuild=True)
+        self.assertIn("ncurses", 得, "include_rebuild 该生效（否则下一条测不出东西）")
+        self.assertNotIn("glibc", 得, "glibc 是命根子，永不进 sysroot")
