@@ -56,6 +56,7 @@ from __future__ import annotations
 import ast
 import hashlib
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -299,6 +300,72 @@ def tooling_hash() -> str:
     return h.hexdigest()
 
 
+#: 进 `meta.json` 但【不进 key】的成分。
+#
+#  ★★★ `buildenv`（镜像 Id）就是这样一个：它记录"这一份是用哪个镜像建出来的"
+#    （查问题时要这个），而它【不改变产物】——
+#
+#    2026-10-21 实测（临时工作流 `probe-toolchain`，用完已删）：
+#
+#        拿 devel 镜像 commit 出一个「加了 /etc/.toolchain-probe 这个标记文件」的
+#        副本 —— 内容变了所以 Id 变了、工具链一个字没动：
+#
+#            原件 Id  sha256:f6aa550d…    副本 Id  sha256:31cfc4cf…
+#            工具链两边都是 gcc (GCC) 16.2.0 / GNU ld (GNU Binutils) 2.47.20260726
+#
+#        用它俩各建一次 `hello`（同样的 PROVIDES、同样的源码）：
+#
+#            原件  cc5d4006018b313e8eb22aa6797150b871bf784a8f59e91d11a663fd497c2bd2
+#            副本  cc5d4006018b313e8eb22aa6797150b871bf784a8f59e91d11a663fd497c2bd2
+#
+#    **逐字节相同。** 而这一条正是"换构建环境就全量 90 个包（2 小时 / 架构）"
+#    的病根：镜像 Id 进了 key，于是任何一次镜像重建都让整个仓库过期。
+#
+#  ★★ 换掉它的是 `toolchain`（工具链指纹）。而"指纹够不够"这件事本身有判据：
+#     CI 里只要指纹没变、镜像变了，这一轮就该全部跳过 —— 而如果哪天有包在
+#     同指纹下产出不同，那说明指纹漏了一样东西，那时要补指纹、不是退回镜像 Id。
+RECORD_ONLY = frozenset({"buildenv"})
+
+#: 一个进程里只问一次工具链（90 个包不该起 90 次容器）。
+_TOOLCHAIN_CACHE: dict[str, str] = {}
+
+
+def toolchain_fingerprint(arch: str) -> str:
+    """构建环境里【能改变产物】的那几样东西的指纹。
+
+    不是镜像 Id —— 见 `RECORD_ONLY` 那段实测。
+
+    来源有两条路：
+      · `SKIRT_TOOLCHAIN` 环境变量（CI 里算一次、所有包共用）
+      · 没设就直接进容器问一次（本机跑 `skirt build` 时用；一个进程只问一次）
+
+    取不到就返回 UNKNOWN —— 而 `needs_rebuild` 见到 UNKNOWN 就当它变了（不猜）。
+    """
+    global _TOOLCHAIN_CACHE
+    if arch in _TOOLCHAIN_CACHE:
+        return _TOOLCHAIN_CACHE[arch]
+
+    环境值 = os.environ.get("SKIRT_TOOLCHAIN", "").strip()
+    if 环境值:
+        值 = hashlib.sha256(环境值.encode("utf-8")).hexdigest()
+        _TOOLCHAIN_CACHE[arch] = 值
+        return 值
+
+    探针 = ("gcc --version | head -1; ld --version | head -1; "
+            "make --version | head -1; ldd --version | head -1")
+    image = f"{common.BUILDENV_IMAGE}:{arch}"
+    try:
+        r = subprocess.run(["docker", "run", "--rm", image, "/bin/sh", "-c", 探针],
+                           capture_output=True, text=True, timeout=120)
+    except (OSError, subprocess.SubprocessError):
+        return UNKNOWN
+    if r.returncode != 0 or not r.stdout.strip():
+        return UNKNOWN
+    值 = hashlib.sha256(r.stdout.encode("utf-8")).hexdigest()
+    _TOOLCHAIN_CACHE[arch] = 值
+    return 值
+
+
 def buildenv_id(arch: str) -> str:
     """构建环境镜像的内容 Id。
 
@@ -340,6 +407,10 @@ def compute(spec: dict, arch: str, epoch: int, dep_keys: list[tuple[str, str]]) 
         "arch": arch,
         "recipe": recipe_hash(spec["_dir"]),
         "epoch": str(epoch),
+        # ★ 进 key 的是【工具链指纹】，不是镜像 Id（见 RECORD_ONLY 那段实测）。
+        "toolchain": toolchain_fingerprint(arch),
+        # ★ 而镜像 Id 照样记下来 —— 查问题时要能回答"这一份是哪个镜像建的"。
+        #   它不进 key，`key_of` 会把它剔掉。
         "buildenv": buildenv_id(arch),
         # ★ 名字从 `driver` 改成 `tooling`：它现在同时含驱动和打包脚本。
         #   而名字改对很重要 —— 原来是"driver"，会让人以为 scripts/ 已经在了。
@@ -397,7 +468,9 @@ def stored_key_of(pkg_dir: Path) -> str | None:
 
 def key_of(parts: dict) -> str:
     """从成分算出 key —— 和 `compute()` 用的是同一段代码，所以不会分叉。"""
-    blob = json.dumps(parts, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    # ★ 剔掉"只记录、不进键"的那几样 —— 判据见 `RECORD_ONLY`。
+    进键 = {k: v for k, v in parts.items() if k not in RECORD_ONLY}
+    blob = json.dumps(进键, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 
 
@@ -420,7 +493,13 @@ def needs_rebuild(now: dict, before: dict | None) -> tuple[bool, list[str]]:
 
     changed = [k for k in sorted(set(a) | set(b)) if a.get(k) != b.get(k)]
 
-    if UNKNOWN in (str(a.get("buildenv")), str(b.get("buildenv"))):
-        changed.append("buildenv=unknown（取不到构建环境的身份，那就当它变了）")
+    # ★ 判据从 `buildenv` 换成 `toolchain`：前者已经不进键了，而后者才是
+    #   "这一份是谁建的"里那个真正能改变产物的部分。
+    if UNKNOWN in (str(a.get("toolchain")), str(b.get("toolchain"))):
+        changed.append("toolchain=unknown（取不到工具链指纹，那就当它变了）")
+    elif "toolchain" not in b:
+        # ★ 旧的 meta.json 里没有这一项（2026-10-21 之前的产物）—— 那时算法不同，
+        #   没法比，当成变了。这条是"别拿旧结论冒充新结论"。
+        changed.append("上次那份没有 toolchain（算法变了），当它变了")
 
     return bool(changed), changed

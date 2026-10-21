@@ -289,6 +289,32 @@ jobs:
       #
       # 因为"devel 里有什么"的定义在 distro/variants/devel.toml 里。
       # 在这里抄一份就是"同一个东西两个出处"——项目里已经为这个吃过亏。
+      # ★★★ 2026-10-21：工具链指纹。
+      #
+      # `build_key` 原来含「构建环境镜像 Id」，于是**任何一次镜像重建都让整个仓库
+      # 过期** —— 90 个包 × 2 架构 × 2 小时。而实测证明镜像 Id 不改变产物
+      # （拿同一个镜像 commit 出一个只多一个标记文件的副本，用它俩各建一次
+      # `hello`，sha256 相同；见 `skirtlib/buildkey.py` 的 `RECORD_ONLY` 那段）。
+      #
+      # 所以键里换成【工具链指纹】：gcc / ld / make / glibc 的版本行。
+      #
+      # ★ 而"指纹够不够"有判据：将来若有包在同一指纹下产出不同，说明指纹漏了
+      #   一样东西 —— 那时**补指纹**，不是退回镜像 Id。
+      #
+      # ★★ 压成一行：`GITHUB_ENV` 只认单行（踩过 —— 多行时它报
+      #    `Invalid format 'automake'`，而那是第二个包名）。
+      - name: 算出工具链指纹
+        env:
+          IMG: yojigenos/devel
+        run: |
+          set -euo pipefail
+          I="$IMG:${{ matrix.arch }}"
+          T=$(docker run --rm "$I" /bin/sh -c \
+                'gcc --version | head -1; ld --version | head -1; make --version | head -1; ldd --version | head -1' \
+              | tr '\n' ';' | sed 's/;$//')
+          echo "工具链: $T"
+          echo "SKIRT_TOOLCHAIN=$T" >> "$GITHUB_ENV"
+
       - name: 读出 devel 提供了哪些包
         run: |
           set -euo pipefail

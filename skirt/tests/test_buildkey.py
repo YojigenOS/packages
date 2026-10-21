@@ -183,9 +183,11 @@ class Test键的合成(unittest.TestCase):
         bk = buildkey.compute(self._spec(), "x86_64", 12345, [("a", "k1")])
         # ★ 这份名单要和人脑里那份一致 —— 少一样，那个包就不会因为那一样变而重建，
         #   而产物其实变了。所以这条测试列全，加了新成分就得改这里。
-        for k in ("arch", "recipe", "epoch", "buildenv", "tooling", "deps"):
+        # ★ 2026-10-21：加了 `toolchain`。而 `buildenv` 仍在（记录用），只是
+        #   它不参与计键 —— 判据见 `Test_镜像_Id_不进_build_key`。
+        for k in ("arch", "recipe", "epoch", "toolchain", "buildenv", "tooling", "deps"):
             self.assertIn(k, bk["parts"], f"成分里少了 {k} —— 少一样比没有键更危险")
-        self.assertEqual(len(bk["parts"]), 6, "成分的数量也要钉住")
+        self.assertEqual(len(bk["parts"]), 7, "成分的数量也要钉住")
         self.assertEqual(len(bk["key"]), 64)
 
     def test_依赖的key算进去(self):
@@ -214,8 +216,10 @@ class Test键的合成(unittest.TestCase):
 class Test要不要重建(unittest.TestCase):
 
     def _now(self, **over):
+        # ★ 形状要跟 `compute()` 一致 —— 原来这里还写着 `driver`（那是改名前的
+        #   名字），而少了 `toolchain` 就会被"上次那份没有 toolchain"那条判据抓出来。
         parts = {"arch": "x86_64", "recipe": "R", "epoch": "1",
-                 "buildenv": "sha256:aaa", "driver": "D", "deps": {}}
+                 "toolchain": "T", "buildenv": "sha256:aaa", "tooling": "D", "deps": {}}
         parts.update(over)
         return {"key": buildkey.key_of(parts), "parts": parts}
 
@@ -244,14 +248,14 @@ class Test要不要重建(unittest.TestCase):
 
     def test_环境取不到就当它变了(self):
         """拿不准就重建 —— 这是这套东西的默认。"""
-        now = self._now(buildenv=buildkey.UNKNOWN)
+        now = self._now(toolchain=buildkey.UNKNOWN)
         need, why = buildkey.needs_rebuild(now, now["parts"])
-        self.assertTrue(need, "buildenv 取不到时必须重建")
+        self.assertTrue(need, "工具链指纹取不到时必须重建")
         self.assertTrue(any("unknown" in str(w) for w in why))
 
     def test_上次取不到也重建(self):
         now = self._now()
-        before = dict(now["parts"], buildenv=buildkey.UNKNOWN)
+        before = dict(now["parts"], toolchain=buildkey.UNKNOWN)
         need, _ = buildkey.needs_rebuild(now, before)
         self.assertTrue(need)
 
@@ -446,3 +450,77 @@ class Test_产物那条路的模块清单是算出来的(unittest.TestCase):
             f"      要么把它加进 PAYLOAD_MODULES_UNDERIVED 并写清理由，"
             f"要么它根本不该在 PAYLOAD_MODULES 里（改它不改变产物，"
             f"却会让全部包白重建）。")
+
+
+class Test_镜像_Id_不进_build_key(unittest.TestCase):
+    """`buildenv` 只记录、不进键；进键的是 `toolchain` 指纹。
+
+    ★★★ 来历（2026-10-21）：`build_key` 里有一样叫 `buildenv`，值是
+      `docker image inspect --format {{.Id}}`。于是**任何一次镜像重建都让整个
+      仓库过期** —— 90 个包 × 2 架构 × 2 小时。这一整轮工作里为此跑了三次全量。
+
+      而它其实不该在键里。实测（临时工作流 `probe-toolchain`，用完已删）：
+      拿 devel 镜像 commit 出一个「只加了一个标记文件」的副本 —— Id 变了、工具链
+      一个字没动 —— 用它俩各建一次 `hello`：
+
+          原件  cc5d4006018b313e8eb22aa6797150b871bf784a8f59e91d11a663fd497c2bd2
+          副本  cc5d4006018b313e8eb22aa6797150b871bf784a8f59e91d11a663fd497c2bd2
+
+      **逐字节相同。**
+
+    ★ 而"指纹够不够"有判据：将来若有包在同一指纹下产出不同，说明指纹漏了一样
+      东西 —— 那时该补指纹，不是退回镜像 Id。
+    """
+
+    def _parts(self, **over):
+        d = {"arch": "x86_64", "recipe": "r", "epoch": "1",
+             "toolchain": "T1", "tooling": "g", "deps": {}, "buildenv": "sha256:aaa"}
+        d.update(over)
+        return d
+
+    def test_buildenv_不同而_key_相同(self):
+        """★★ 这条就是那 2 小时 × 3 的修复本身。"""
+        from skirtlib.buildkey import key_of
+        a = key_of(self._parts(buildenv="sha256:aaa"))
+        b = key_of(self._parts(buildenv="sha256:bbb"))
+        self.assertEqual(a, b, "镜像 Id 不该影响 build_key（实测产物逐字节相同）")
+
+    def test_toolchain_不同而_key_不同(self):
+        from skirtlib.buildkey import key_of
+        a = key_of(self._parts(toolchain="T1"))
+        b = key_of(self._parts(toolchain="T2"))
+        self.assertNotEqual(a, b, "工具链变了，产物可能变，键就该变")
+
+    def test_只记录不参与计键的清单(self):
+        """清单里只有 `buildenv`。加东西进来要连带更新上面那段实测。"""
+        from skirtlib.buildkey import RECORD_ONLY
+        self.assertEqual(set(RECORD_ONLY), {"buildenv"})
+
+    def test_取不到工具链时当它变了(self):
+        """UNKNOWN 不猜 —— 这是原来的语义，只是判据从 buildenv 挪到了 toolchain。"""
+        from skirtlib.buildkey import UNKNOWN, needs_rebuild
+        要, 因 = needs_rebuild({"parts": self._parts(toolchain=UNKNOWN)},
+                              self._parts(toolchain=UNKNOWN))
+        self.assertTrue(要)
+        self.assertTrue(any("toolchain" in x for x in 因), 因)
+
+    def test_旧产物没有_toolchain_时也当它变了(self):
+        """★ 2026-10-21 之前的 meta.json 里没这一项。**别拿旧结论冒充新结论。**"""
+        from skirtlib.buildkey import needs_rebuild
+        旧 = self._parts()
+        旧.pop("toolchain")
+        要, 因 = needs_rebuild({"parts": self._parts()}, 旧)
+        self.assertTrue(要)
+        self.assertTrue(any("没有 toolchain" in x for x in 因), 因)
+
+    def test_指纹对同一个值稳定(self):
+        """`SKIRT_TOOLCHAIN` 是 CI 算一次、所有包共用的，所以必须稳定。"""
+        import os
+        from unittest import mock
+        from skirtlib import buildkey
+        with mock.patch.dict(os.environ, {"SKIRT_TOOLCHAIN": "gcc 16.2.0;ld 2.47"}):
+            buildkey._TOOLCHAIN_CACHE.clear()
+            a = buildkey.toolchain_fingerprint("x86_64")
+            b = buildkey.toolchain_fingerprint("x86_64")
+        self.assertEqual(a, b)
+        self.assertNotEqual(a, buildkey.UNKNOWN)
