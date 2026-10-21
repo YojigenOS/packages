@@ -63,7 +63,10 @@ jobs:
           import tomllib,pathlib
           v=tomllib.loads(pathlib.Path('distro/variants/devel.toml').read_text())['variant']
           print(' '.join(v['packages']))")
-          CLOSURE=$(./skirt/skirt provides $DEVEL)
+          # ★ provides 是【一行一个】，而 GITHUB_ENV 只认单行 —— 第一版直接把
+          #   多行塞进去，报的是 `Invalid format 'automake'`（第二个包名）。
+          #   压成空格分隔的一行。
+          CLOSURE=$(./skirt/skirt provides $DEVEL | tr '\n' ' ' | sed 's/ *$//')
           echo "闭包 $(echo $CLOSURE | wc -w) 个"
           echo "SKIRT_PROVIDES=$CLOSURE" >> "$GITHUB_ENV"
 
