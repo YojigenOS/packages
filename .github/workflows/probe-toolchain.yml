@@ -78,7 +78,11 @@ jobs:
           #   而那看起来像"产物没生成"。
           SKIRT_BUILDENV=yojigenos/devel ./skirt/skirt build hello --arch x86_64
           SKIRT_BUILDENV=yojigenos/devel ./skirt/skirt pack hello --arch x86_64
-          A=$(find var/output/x86_64 -name 'hello-*.apk' | head -1)
+          # ★ .apk 在 var/pkgs/<架构>/，不是 var/output/（后者是 payload）。
+          #   而【空值守卫是必须的】：第一版找不到文件时 A 是空的，于是
+          #   "" = "" 成立、打出"逐字节相同" —— 一个空检查给出的假结论。
+          A=$(find var/pkgs/x86_64 -name 'hello-*.apk' | head -1)
+          if [ -z "$A" ]; then echo "✗ 没找到 .apk"; find var -name '*.apk' | head; exit 1; fi
           echo "APK_A=$(sha256sum "$A" | cut -d' ' -f1)" >> "$GITHUB_ENV"
           echo "── 产物与 meta.json 实际在哪 ──"
           find var/output -name "*.apk" | head -3
@@ -98,7 +102,11 @@ jobs:
           #   而那看起来像"产物没生成"。
           SKIRT_BUILDENV=probe ./skirt/skirt build hello --arch x86_64
           SKIRT_BUILDENV=probe ./skirt/skirt pack hello --arch x86_64
-          A=$(find var/output/x86_64 -name 'hello-*.apk' | head -1)
+          # ★ .apk 在 var/pkgs/<架构>/，不是 var/output/（后者是 payload）。
+          #   而【空值守卫是必须的】：第一版找不到文件时 A 是空的，于是
+          #   "" = "" 成立、打出"逐字节相同" —— 一个空检查给出的假结论。
+          A=$(find var/pkgs/x86_64 -name 'hello-*.apk' | head -1)
+          if [ -z "$A" ]; then echo "✗ 没找到 .apk"; find var -name '*.apk' | head; exit 1; fi
           echo "APK_B=$(sha256sum "$A" | cut -d' ' -f1)" >> "$GITHUB_ENV"
           echo "── 产物与 meta.json 实际在哪 ──"
           find var/output -name "*.apk" | head -3
@@ -113,8 +121,14 @@ jobs:
       - name: 比
         run: |
           set -euo pipefail
+          echo "（buildenv 那一项两次应当不同，而产物应当相同）"
           echo "原件: $APK_A"
           echo "副本: $APK_B"
+          # ★ 两个都得有值。否则 "" = "" 会成立，而这个实验的全部意义就没了。
+          if [ -z "$APK_A" ] || [ -z "$APK_B" ]; then
+            echo "✗ 有一个是空的 —— 这个结论不能采信"
+            exit 1
+          fi
           if [ "$APK_A" = "$APK_B" ]; then
             echo "★ 结论：产物逐字节相同 —— 镜像 Id 不是产物的一部分，可以换成工具链指纹"
           else
