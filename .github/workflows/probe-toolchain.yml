@@ -80,8 +80,15 @@ jobs:
           SKIRT_BUILDENV=yojigenos/devel ./skirt/skirt pack hello --arch x86_64
           A=$(find var/output/x86_64 -name 'hello-*.apk' | head -1)
           echo "APK_A=$(sha256sum "$A" | cut -d' ' -f1)" >> "$GITHUB_ENV"
-          echo "── meta.json 的 parts ──"
-          cat "$(dirname "$A")/meta.json" | python3 -c 'import json,sys; print(json.dumps(json.load(sys.stdin)["parts"], indent=2, ensure_ascii=False))'
+          echo "── 产物与 meta.json 实际在哪 ──"
+          find var/output -name "*.apk" | head -3
+          M=$(find var/output -name meta.json | head -1)
+          echo "meta: $M"
+          if [ -n "$M" ]; then
+            python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1]))["parts"], indent=2, ensure_ascii=False))' "$M" || cat "$M"
+          else
+            echo "（没找到 meta.json）"
+          fi
 
       - name: 用副本建一次 hello
         run: |
@@ -93,8 +100,15 @@ jobs:
           SKIRT_BUILDENV=probe ./skirt/skirt pack hello --arch x86_64
           A=$(find var/output/x86_64 -name 'hello-*.apk' | head -1)
           echo "APK_B=$(sha256sum "$A" | cut -d' ' -f1)" >> "$GITHUB_ENV"
-          echo "── meta.json 的 parts ──"
-          cat "$(dirname "$A")/meta.json" | python3 -c 'import json,sys; print(json.dumps(json.load(sys.stdin)["parts"], indent=2, ensure_ascii=False))'
+          echo "── 产物与 meta.json 实际在哪 ──"
+          find var/output -name "*.apk" | head -3
+          M=$(find var/output -name meta.json | head -1)
+          echo "meta: $M"
+          if [ -n "$M" ]; then
+            python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1]))["parts"], indent=2, ensure_ascii=False))' "$M" || cat "$M"
+          else
+            echo "（没找到 meta.json）"
+          fi
 
       - name: 比
         run: |
