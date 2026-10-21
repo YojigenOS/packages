@@ -121,20 +121,69 @@ def cmd_build(args) -> None:
     print()
     log("开始", f"{name} {ver}-{rel} [{arch}]")
 
+    # ── 该不该重建 ───────────────────────────────────────────────────────────
+    #
+    # ★★★ 2026-10-21：这是「增量」落地的那一步，而它一直是【缺的】。
+    #
+    #   在此之前 `build_key` / `.buildkey` / `skirt stale` 那一整套只用来
+    #   **报告** —— `cmd_build` 从来不问它，`cmd_bootstrap` 也就无条件全量。
+    #   于是每一轮都是 90 个包 × 2 架构 × 约 2 小时，而其中绝大多数这一轮
+    #   一个字都没变。实测：同一份 main、同一份镜像连跑两轮，第二轮照样重建
+    #   全部 —— 那一刻人会去查"key 里哪一样变了"，而真相是**没人问它**。
+    #
+    #   ★ 判据是算出来的（`needs_rebuild`），不是"var/pkgs 里有没有同名 .apk"
+    #     —— 后者靠人记得升 release，是这条欠账的老版本（见 `cmd_stale` 的说明）。
+    #
+    #   ★★ 而跳过的【前提】是盘上真的有一份可用的产物：`payload/` 在、且非空。
+    #     光"key 相同"不够 —— 一个 key 相同而 payload 空着的目录会悄悄产出空包，
+    #     而那正是这个项目一直在修的那类（`check_dest` 就是为它加的）。
+    host_provides = load_host_provides()
+    order = dep_closure(spec, arch, host_provides, include_rebuild=True)
+    print()
+    epoch_k = source_date_epoch(spec, arch, host_provides)
+    dep_keys: list[tuple[str, str]] = []
+    for dep in order:
+        d, dep_rel = output_dir(dep, arch)
+        k = stored_key_of(d)
+        if k is None:
+            # 拿不准就说拿不准 —— 它会让上面那个包被判为"该重建"
+            k = f"unknown（{dep_rel} 盘上没有 build_key）"
+        dep_keys.append((dep, k))
+    bk = compute_key(spec, arch, epoch_k, dep_keys)
+
+    out_dir, out_rel = output_dir(name, arch)
+    payload = out_dir / "payload"
+    上次 = stored_parts(out_dir)
+    该建, 原因 = needs_rebuild(bk, 上次)
+
+    # ★ 光"key 相同"不够：盘上得真有一份可用的 payload。否则一个空目录会让它
+    #   悄悄产出一个空包（`check_dest` 当初就是为这一类加的）。
+    if not 该建 and not (payload.is_dir() and any(payload.iterdir())):
+        该建 = True
+        原因 = ["盘上没有可用的 payload（只有 key 相同不算）"]
+
+    if 该建:
+        if 上次 is not None:
+            log("重建", "变了：" + "、".join(原因[:4]))
+    else:
+        log("跳过", f"build_key 没变（{bk['key'][:16]}…）—— 盘上那份就是它")
+        log("跳过", f"          {out_rel}/payload 还在，"
+                    f"共 {sum(1 for _ in payload.rglob('*'))} 项")
+        log("跳过", "          要强制重建：删掉 var/output/<架构>/<上面那个目录>/，"
+                    "或用 release.yml 的 force 输入")
+        return
+
     rmtree_force(BUILD_DIR)
     (BUILD_DIR / "dest").mkdir(parents=True)
 
     # 依赖
-    host_provides = load_host_provides()
-    # ★★★ include_rebuild=True —— 这是 readline 那笔账的另一半（2026-10-21）。
     #
-    #   不加它的时候：`SKIRT_REBUILD` 里的包会被【重建】（`order.py` 的边回来了），
-    #   而它们【从不进 sysroot】（这里原来按 `host_provides` 一把跳过），于是
-    #   重建了没人用 —— 下游拿的还是镜像里那份。实测：`python3` 的「需自建」
-    #   闭包在 CI 那 62 个 PROVIDES 下是空的。
-    #
-    #   ★ 而 glibc / filesystem 由 `deps.SYSRROOT_NEVER` 挡在门外（命根子）。
-    order = dep_closure(spec, arch, host_provides, include_rebuild=True)
+    # `order` 在上面判 staleness 时已经算过（同一个闭包，别算两次）。而它带
+    # `include_rebuild=True` —— 这是 readline 那笔账的另一半（2026-10-21）：
+    # 不加它的时候 `SKIRT_REBUILD` 里的包会被重建而【从不进 sysroot】，于是
+    # 重建了没人用、下游拿的还是镜像里那份。实测：`python3` 的「需自建」闭包
+    # 在 CI 那 62 个 PROVIDES 下是空的。而 glibc / filesystem 由
+    # `deps.SYSRROOT_NEVER` 挡在门外（命根子）。
     if order:
         log("解析", f"依赖链: {' → '.join(order + [name])}")
     else:
@@ -216,27 +265,19 @@ def cmd_build(args) -> None:
     # 引号、变量展开都不必经过任何转义——脚本就是脚本。
     (BUILD_DIR / "run.sh").write_text(make_build_script(spec, arch), encoding="utf-8")
 
-    # ★ build_key —— 在构建【之前】算。它的成分和"这次构建结果如何"无关，
-    #   所以放前面不会漏掉什么。（见 buildkey.py 顶上那段。）
-    print()
-    epoch = source_date_epoch(spec, arch, host_provides)
-    dep_keys: list[tuple[str, str]] = []
-    for dep in order:
-        d, dep_rel = output_dir(dep, arch)
-        k = stored_key_of(d)
-        if k is None:
-            # 拿不准就说拿不准 —— 也正因为如此，上面那个包会被判为"该重建"
-            k = f"unknown（{dep_rel} 盘上没有 build_key）"
-        dep_keys.append((dep, k))
-    bk = compute_key(spec, arch, epoch, dep_keys)
-    # ★ 把【构建环境】也打出来。
+    # ★ build_key 在【上面】已经算过了（判 staleness 要用它，而它的成分和
+    #   "这次构建结果如何"无关 —— 见 buildkey.py 顶上那段）。
     #
-    #   为什么：那个键里有一项是构建环境镜像的内容 Id，而它变了会让**所有**
-    #   包的键都变（于是全部重建）。而那是对的 —— 实测过换环境产物就不同
-    #   （13 字节那次）。但"全部重建"这件事必须能一眼看出原因，不然它看起来
-    #   就像随机行为。`skirt stale` 会说出是哪一项变的，而这行让人平时就看得见。
+    # ★★ 而这里原来写着「那个键里有一项是构建环境镜像的内容 Id，它变了会让
+    #    所有包的键都变，而那是对的」—— **两句都不对了**（2026-10-21）：
+    #
+    #      · 镜像 Id 已经【不进键】了（实测同工具链不同镜像 → 产物逐字节相同），
+    #        进键的是 `toolchain` 指纹。
+    #      · 而"全部重建"从来不是"对的"——它那时是因为这里**不问** key 才发生的。
+    epoch = epoch_k
     env = str(bk["parts"].get("buildenv", "?"))
-    log("身份", f"build_key {bk['key'][:16]}…   构建环境 {env[:19]}…")
+    工具链 = str(bk["parts"].get("toolchain", "?"))
+    log("身份", f"build_key {bk['key'][:16]}…   工具链 {工具链[:12]}…   （镜像 {env[7:19]}…）")
     log("身份", "          （skirt stale 看它和盘上那份一不一样）")
 
     run_in_container(srcrel, srcname, arch, spec, epoch, unpack=unpack)
