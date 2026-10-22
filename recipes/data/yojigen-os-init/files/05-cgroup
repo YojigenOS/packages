@@ -1,0 +1,41 @@
+#!/bin/sh
+# 首启：把 cgroup v2 挂起来。
+#
+# 由 /init 按 /usr/lib/yojigen-os/boot.d/ 下的名字顺序调用 —— 05 排在最前面，
+# 因为【容器运行时之类的服务要靠它】。没有 cgroup，dockerd 起来就死在这一句：
+#
+#     failed to start daemon: Devices cgroup isn't mounted
+#
+# ── 为什么这件事必须由系统做，而不是由 docker 那个包做 ──────────────────────
+#
+# cgroup 不是 docker 的私有资源：内存限制、CPU 配额、进程数上限都靠它。哪个包
+# 先装就得先挂，那等于把系统级的东西塞进某个应用的钩子里 —— 第二个要用 cgroup
+# 的包（runc、Podman、systemd…）就得再写一遍。
+#
+# ── 只挂 v2 ────────────────────────────────────────────────────────────────
+#
+# 统一层级，现代做法。而 v2 的 **devices 控制器要靠内核的 BPF**
+# （`CONFIG_CGROUP_BPF`）—— 那一条现在已经在 config.fragment 里开了。
+#
+# ★ 这里【曾经】写过"没有 BPF 就退回 v1"的分支，2026-10-22 去掉了：
+#   那条分支是在替内核的缺口做妥协，而缺口已经补上。留着它的效果是——哪天 BPF
+#   又被关掉，系统会**悄悄**降级到 v1 而不是让人看见问题。
+#   一声不响地降级比降级本身更糟。
+#
+# ★★ 而挂不上就【说话】：这是系统级的前提，不是可选装饰。
+
+if [ -d /sys/fs/cgroup ] && [ -n "$(ls -A /sys/fs/cgroup 2>/dev/null)" ]; then
+  echo "  cgroup 已经挂好了，跳过"
+  exit 0
+fi
+
+mkdir -p /sys/fs/cgroup 2>/dev/null
+
+if mount -t cgroup2 none /sys/fs/cgroup 2>/dev/null; then
+  echo "  cgroup v2 挂好了"
+else
+  # ★ 不降级、不沉默。能不能用 v2 由内核决定，而"决定不了"这件事要让人看见。
+  echo "  ⚠ cgroup v2 挂不上 —— 容器运行时（docker 之类）会起不来"
+  echo "    判据: grep cgroup2 /proc/filesystems  · dmesg 里找 cgroup"
+fi
+exit 0

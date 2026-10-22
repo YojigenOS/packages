@@ -27,6 +27,10 @@ package() {
 
     # 首启钩子，按名字顺序跑。05 排在 10（扩盘）前面：
     # 主机名要尽早设——日志、DHCP、sshd 都会用到它。
+    # ★ 2026-10-22：挂 cgroup（容器运行时的前提）。名字 05，排在最前面。
+    install -Dm755 "$PKGDIR/files/05-cgroup" \
+        "$PKGDEST/usr/lib/yojigen-os/boot.d/05-cgroup"
+
     install -Dm755 "$PKGDIR/files/05-hostname" \
         "$PKGDEST/usr/lib/yojigen-os/boot.d/05-hostname"
 

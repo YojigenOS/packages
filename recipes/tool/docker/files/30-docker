@@ -5,9 +5,23 @@
 #
 # 【为什么这里不该失败就拦住启动】
 #
-# 照 20-sshd 那条约定：启动脚本的责任是"让它起来"，不是"拦住启动"。起不来
-# 就吵一声、继续跑 —— 一台进不去又起不来的机器比一台只起不来 docker 的机器
-# 糟得多。
+# 照 20-sshd 那条约定：启动脚本的责任是"让它起来"，不是"拦住启动"。起不来就
+# 吵一声、继续跑 —— 一台进不去又起不来的机器比一台只起不来 docker 的机器糟得多。
+#
+# ── ★ 这里【没有】任何"按内核能力挑参数"的逻辑 ──────────────────────────────
+#
+# 2026-10-22 写过一版：没 overlayfs 就 `--storage-driver=vfs`、没 iptables 就
+# `--iptables=false`、bridge 起不来就 `--bridge=none`。那是在真机上撞到三个内核
+# 缺口之后写的，而它被**去掉了** —— 理由：
+#
+#   ① 那三个缺口是【内核配置】的事，已经补进 config.fragment；
+#   ② 自适应参数会让"内核少了一样东西"变成**静默降级**：系统照样起、docker 照样
+#      能用，只是慢（vfs）、没独立网络（bridge=none）。而没人会去查为什么。
+#   ③ 一条为某个缺口写的降级分支，在缺口补上之后没人敢删 —— 于是它永远在那儿，
+#      而将来内核回归时它会把问题藏起来。
+#
+# ★ 所以现在的规矩是：**dockerd 就按它该有的样子起**。缺什么它会自己报错，
+#   而那正是我们想看见的。
 
 [ -x /usr/bin/dockerd ] || { echo "  ⚠ dockerd 不在，跳过"; exit 0; }
 
@@ -19,26 +33,11 @@ if [ -S /var/run/docker.sock ]; then
   exit 0
 fi
 
-# ── iptables 那件事 ─────────────────────────────────────────────────────────
-#
-# dockerd 默认要建 NAT 规则，而【没有 iptables 它会直接起不来】。我们的仓库
-# 现在还没有 iptables 那个包，所以这里按"有没有"决定：
-#
-#   有 iptables → 什么都不加（正常网络）
-#   没有       → --iptables=false（`docker run` 能用，但容器不通外网）
-#
-# ★ 这是一条【临时让步】，不是设计。等 iptables 进了仓库，这一段自动走正常
-#   那条路 —— 而它自己会说出走的是哪条，所以不会悄悄降级。
-if command -v iptables >/dev/null 2>&1; then
-  echo "  起 dockerd…"
-  /usr/bin/dockerd >>/var/log/dockerd.log 2>&1 &
-else
-  echo "  ⚠ 没有 iptables —— 用 --iptables=false 起（容器不会通外网）"
-  /usr/bin/dockerd --iptables=false >>/var/log/dockerd.log 2>&1 &
-fi
+echo "  起 dockerd…"
+/usr/bin/dockerd >>/var/log/dockerd.log 2>&1 &
 
-# 等 socket 建出来，最多 10 秒。**等到就报好消息，等不到也照样返回** ——
-# 容器启动慢不代表系统有问题。
+# 等 socket 建出来，最多 10 秒。**等到就报好消息，等不到也说清楚** ——
+# 容器启动慢不代表系统有问题，而"没起来"必须能被看见。
 i=0
 while [ ! -S /var/run/docker.sock ] && [ "$i" -lt 20 ]; do
   i=$((i + 1))
@@ -48,6 +47,7 @@ done
 if [ -S /var/run/docker.sock ]; then
   echo "  ✓ dockerd 起来了"
 else
-  echo "  ⚠ dockerd 10 秒内没建出 socket —— 见 /var/log/dockerd.log"
+  echo "  ⚠ dockerd 没起来 —— 见 /var/log/dockerd.log 的最后几行"
+  tail -3 /var/log/dockerd.log 2>/dev/null | sed 's/^/     /'
 fi
 exit 0

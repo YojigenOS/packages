@@ -23,7 +23,7 @@
 [package]
 name        = "linux"
 version     = "7.2.9"
-release     = 3
+release     = 4
 date        = 2026-10-11T13:00:00Z
 description = "Linux 内核（可启动镜像）"
 url         = "https://www.kernel.org/"
