@@ -20,7 +20,17 @@
 #
 #   ★ 这不是我们的错，也不是 git 的错：是"编译器默认标准变了"这件事。而
 #     **必须显式钉住标准**，否则同一个配方在不同的 gcc 上行为不同。
-CFLAGS="-std=gnu17 -O2 -pipe"
+# ★★ 还要 `-pthread`（同一个构建里撞出来的第二条）：
+#
+#       builtin/index-pack.c:393: error: expected '{' before 'thread_local'
+#       builtin/index-pack.c:197: error: 'thread_data' undeclared
+#
+#   git 的线程支持是一整块 #if 包着的，而那个 #if 看的是 `_REENTRANT` ——
+#   它只有传 `-pthread` 才有。不传的话那一块被跳过，于是下面用到的
+#   thread_data 全成了未声明。
+#
+#   ★ 光 `-std=gnu17` 不够：那是解决 C23 的 unreachable 宏，这是另一件事。
+CFLAGS="-std=gnu17 -O2 -pipe -pthread"
 
 build() {
   make -j"$(nproc)" \
