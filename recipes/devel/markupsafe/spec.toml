@@ -6,7 +6,7 @@
 [package]
 name        = "markupsafe"
 version     = "3.0.4"
-release     = 1
+release     = 2
 date        = 2026-10-22T11:00:00Z
 description = "安全的字符串标记（jinja2 的前置）"
 url         = "https://pypi.org/project/MarkupSafe/"

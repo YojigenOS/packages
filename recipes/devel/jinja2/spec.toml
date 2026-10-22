@@ -13,7 +13,7 @@
 [package]
 name        = "jinja2"
 version     = "3.1.6"
-release     = 1
+release     = 2
 date        = 2026-10-22T11:00:00Z
 description = "模板引擎（systemd 构建需要）"
 url         = "https://pypi.org/project/Jinja2/"
