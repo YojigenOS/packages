@@ -272,6 +272,12 @@ def make_build_script(spec: dict, arch: str = "") -> str:
     # 前三类（build_type / cflags / patches）对所有 kind 都生效。
     known = {
         "type", "out_of_tree", "autoreconf", "patches", "configure", "nostrip", "cflags",
+        # ★★ 2026-10-22 加的：决策记录 0022 的 `vendor` / 0022 的 5.12.3 的
+        #   `vendor_check`。它们【不改构建】，但必须在这一份清单里 ——
+        #   否则第一个分发包（docker）会在生成构建脚本这一步就 die：
+        #   「[build] 里有多余的键 ['vendor', 'vendor_check']」。
+        #   而那一句本身是对的：这个白名单的职责就是"写错键要大声失败"。
+        "vendor", "vendor_check",
     }
     unknown = sorted(set(b) - known)
     if unknown:

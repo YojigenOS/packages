@@ -75,3 +75,69 @@ class TestSrcrelOnlyReadsNames(unittest.TestCase):
         self.assertIn("pkg-1.0/include/uapi/linux/netfilter/xt_MARK.h", names)
         self.assertIn("pkg-1.0/include/uapi/linux/netfilter/xt_mark.h", names)
         self.assertEqual(srcrel_of(t), "pkg-1.0")
+
+
+class Test_sha256_按架构给(unittest.TestCase):
+    """`sha256` 可以是 `{x86_64 = "…", aarch64 = "…"}`。
+
+    ★★★ 来历（2026-10-22，接 docker 的时候）：决策记录 0022/0023 那条路的
+      常态是**分发上游自己的二进制**，而它们几乎总是**按架构分开发布**的：
+
+          …/static/stable/x86_64/docker-29.9.2.tgz    86 MB
+          …/static/stable/aarch64/docker-29.9.2.tgz   78 MB
+
+      两个文件不同，摘要当然也不同。而原来的 `sha256` 只能是【一个字符串】,
+      所以这种包根本写不出来。
+
+    ★ 而"缺当前架构那一份"必须【直接报错】，不猜、不退回另一个架构的值 ——
+      退回会让 aarch64 拿 x86_64 的摘要去校验，那必然失败，而报出来的是
+      「校验不通过」，指向不了真正的原因。
+    """
+
+    def _spec(self, sha):
+        return {"package": {"name": "probe", "version": "1.0"}, "_dir": Path("/tmp"),
+                "source": [{"url": "https://example.invalid/d-$ARCH.tgz",
+                            "sha256": sha}],
+                "dependencies": {"x86_64": {"runtime": [], "build": []},
+                                 "aarch64": {"runtime": [], "build": []}}}
+
+    def test_两个架构各用各的摘要(self):
+        """★ 正向：按 URL 里的架构给不同的摘要，两边都该通过。"""
+        from unittest import mock
+        from tempfile import TemporaryDirectory
+        from skirtlib import source
+
+        for arch, 该用的 in (("x86_64", "a" * 64), ("aarch64", "b" * 64)):
+            with TemporaryDirectory() as d:
+                d = Path(d)
+                with mock.patch.object(source, "_scratch",
+                                       lambda n, d=d: d / n), \
+                     mock.patch.object(source, "_download",
+                                       lambda url, tmp: tmp.write_bytes(b"x")), \
+                     mock.patch.object(source, "sha256_of", lambda p: 该用的):
+                    spec = self._spec({"x86_64": "a" * 64, "aarch64": "b" * 64})
+                    得 = source.fetch(spec, arch)
+                    self.assertEqual(得.name, f"d-{arch}.tgz")
+
+    def test_缺当前架构那一份就报错(self):
+        """★★ 这条比"能取到"更重要 —— 它是那个"不猜"的判据。"""
+        import contextlib, io
+        from skirtlib import source
+        输出 = io.StringIO()
+        with contextlib.redirect_stderr(输出), self.assertRaises(SystemExit):
+            source.fetch(self._spec({"x86_64": "a" * 64}), "aarch64")
+        说明 = 输出.getvalue()
+        self.assertIn("没有 aarch64 那一份", 说明)
+        self.assertIn("x86_64", 说明, "要说清写了哪些")
+
+    def test_字符串写法照旧(self):
+        """★ 别修坏老写法：90 个配方全是字符串。"""
+        import contextlib, io
+        from skirtlib import source
+        输出 = io.StringIO()
+        with contextlib.redirect_stderr(输出), self.assertRaises(SystemExit):
+            source.fetch(self._spec("c" * 64), "x86_64")
+        说明 = 输出.getvalue()
+        self.assertNotIn("那一份", 说明)
+        # 摘要那一关过了，才会走到下载并失败（域名是 .invalid）
+        self.assertIn("所有源都取不到", 说明)

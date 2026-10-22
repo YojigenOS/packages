@@ -1,0 +1,53 @@
+#!/bin/sh
+# 首启：起 dockerd。
+#
+# 由 /init 按 /usr/lib/yojigen-os/boot.d/ 下的名字顺序调用（30 在 sshd 的 20 之后）。
+#
+# 【为什么这里不该失败就拦住启动】
+#
+# 照 20-sshd 那条约定：启动脚本的责任是"让它起来"，不是"拦住启动"。起不来
+# 就吵一声、继续跑 —— 一台进不去又起不来的机器比一台只起不来 docker 的机器
+# 糟得多。
+
+[ -x /usr/bin/dockerd ] || { echo "  ⚠ dockerd 不在，跳过"; exit 0; }
+
+mkdir -p /var/lib/docker /var/run /etc/docker
+
+# 已经在跑就不重复起（/init 可能被重跑，或者有人手动起过）
+if [ -S /var/run/docker.sock ]; then
+  echo "  dockerd 已经在跑（/var/run/docker.sock 在）"
+  exit 0
+fi
+
+# ── iptables 那件事 ─────────────────────────────────────────────────────────
+#
+# dockerd 默认要建 NAT 规则，而【没有 iptables 它会直接起不来】。我们的仓库
+# 现在还没有 iptables 那个包，所以这里按"有没有"决定：
+#
+#   有 iptables → 什么都不加（正常网络）
+#   没有       → --iptables=false（`docker run` 能用，但容器不通外网）
+#
+# ★ 这是一条【临时让步】，不是设计。等 iptables 进了仓库，这一段自动走正常
+#   那条路 —— 而它自己会说出走的是哪条，所以不会悄悄降级。
+if command -v iptables >/dev/null 2>&1; then
+  echo "  起 dockerd…"
+  /usr/bin/dockerd >>/var/log/dockerd.log 2>&1 &
+else
+  echo "  ⚠ 没有 iptables —— 用 --iptables=false 起（容器不会通外网）"
+  /usr/bin/dockerd --iptables=false >>/var/log/dockerd.log 2>&1 &
+fi
+
+# 等 socket 建出来，最多 10 秒。**等到就报好消息，等不到也照样返回** ——
+# 容器启动慢不代表系统有问题。
+i=0
+while [ ! -S /var/run/docker.sock ] && [ "$i" -lt 20 ]; do
+  i=$((i + 1))
+  sleep 0.5 2>/dev/null || sleep 1
+done
+
+if [ -S /var/run/docker.sock ]; then
+  echo "  ✓ dockerd 起来了"
+else
+  echo "  ⚠ dockerd 10 秒内没建出 socket —— 见 /var/log/dockerd.log"
+fi
+exit 0

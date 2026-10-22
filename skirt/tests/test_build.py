@@ -362,8 +362,11 @@ class Test配方里的键都是真的(unittest.TestCase):
     """
 
     # 从驱动代码里数出来的——grep 一遍所有 b.get(...)
+    # ★ 这份清单是【第二份】—— 而"两份清单要一致"这件事正是
+    #   `test_vendor.py` 里 `test_白名单和_build_读的键一致` 守着的那个形状。
+    #   加 `vendor` / `vendor_check` 时两处都要改（2026-10-22，接 docker）。
     KNOWN = {"type", "out_of_tree", "autoreconf", "patches",
-             "configure", "nostrip", "cflags"}
+             "configure", "nostrip", "cflags", "vendor", "vendor_check"}
     KINDS = {"autotools", "meson", "cmake", "custom"}
 
     def test_所有配方的_build_键都是真的(self):

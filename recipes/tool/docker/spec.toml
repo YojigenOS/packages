@@ -1,0 +1,68 @@
+# docker —— 容器运行时，用【上游自己的静态二进制】
+#
+# ── 这是决策记录 0022 / 0023 的第一个真包 ────────────────────────────────────
+#
+# 0022 定的是：有能直接运行的官方二进制，就只分发、不编译。
+# 0023 定的是"什么叫可信源"：**上游项目自己发布的二进制**。三条缺一不算 ——
+# 发布者是上游本身、摘要来自同一渠道、那个平台必须有官方二进制。
+#
+# docker 三条都满足：
+#
+#   发布者  Docker Inc. 自己（download.docker.com 是它的官方分发点）
+#   平台    x86_64 和 aarch64 各有一份，不是"只有 amd64 其余靠转译"
+#   摘要    我们钉住（上游那个目录不带 .sha256 文件，所以是首次取时算的）
+#
+# ── 为什么是 static/stable 而不是 .deb ─────────────────────────────────────
+#
+# Docker 的 .deb 是给 Debian/Ubuntu 的：它带 systemd 单元、依赖 Debian 的
+# iptables/libc 版本、安装路径按 Debian 的习惯来。我们不是 Debian，装那个
+# 包里的一半东西没有意义。
+#
+# 而 static/stable 那份是**一组静态链接的二进制**（实测 docker / dockerd /
+# containerd / runc 的 NEEDED 都是 0），它只依赖内核 —— 那正是"能直接运行"
+# 的定义。对一个自己建 glibc 的发行版，这点尤其值：不用为了跑 docker 去追
+# 某个 glibc 版本。
+#
+# ★ 而它也是 0022 里那条"分发包的库依赖检查"（5.12.2）最省事的形态：
+#   静态 = `vendor_risky_needs` 什么都不该报。如果哪天报了，说明上游换了
+#   构建方式，那件事本身值得知道。
+#
+# ── 多架构的摘要 ──────────────────────────────────────────────────────────
+#
+# 两个架构的文件不同（86 MB / 78 MB），所以摘要也不同。而 `sha256` 原来
+# 只接受一个字符串 —— 2026-10-22 为此加了按架构的写法（见 source.py 里
+# 「sha256 可以按架构给」那段，以及 test_source.py 的三条测试）。
+#
+# ★ 缺当前架构那一份会【直接报错】，不退回另一个架构的值。
+
+[package]
+name        = "docker"
+version     = "29.9.2"
+release     = 1
+date        = 2026-10-22T05:50:00Z
+description = "容器运行时：docker / dockerd / containerd / runc（上游静态二进制）"
+url         = "https://www.docker.com/"
+license     = "Apache-2.0"
+
+[[source]]
+url    = "https://download.docker.com/linux/static/stable/$ARCH/docker-$VERSION.tgz"
+# ★ TOML 的行内表【不能跨行】—— 写成两行会报
+#   `Invalid initial character for a key part`。所以这一行很长。
+sha256 = { x86_64 = "9ac225999fd5e863f7694c728ef23d480616b1e5639328fa309befd4243d69eb", aarch64 = "873b3e0207857c3b2f28392fb922f3ea6efe37620c16d4d4aaf2fef409c90b73" }
+
+# ★ 运行时依赖是【空的】—— 那几个二进制是静态的。而这一条不是"看起来对"，
+#   是对着产物量过的（4 个二进制的 NEEDED 都是 0）。
+[dependencies.x86_64]
+runtime = []
+build   = []
+
+[dependencies.aarch64]
+runtime = []
+build   = []
+
+[build]
+type         = "custom"
+# ★ 这个记号就是 0022 落地的那个字段：它告诉那两条检查"我在分发，不在编译"。
+vendor       = "docker 29.9.2 的官方静态二进制（download.docker.com/linux/static/stable），不分发源码、不编译"
+# 5.12.3：装了之后怎么验"它真的能跑"。包名和程序名不同，所以必须写明。
+vendor_check = "docker --version"

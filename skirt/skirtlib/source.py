@@ -260,7 +260,24 @@ def fetch(spec: dict, arch: str = "") -> Path:
 
     urls = _candidates(spec, src, arch)
 
-    want = str(src.get("sha256", "")).strip().lower()
+    # ★★★ 2026-10-22：`sha256` 可以按架构给 —— 因为上游常常把二进制【按架构
+    #   分开发布】，两边的文件不同、摘要当然也不同。
+    #
+    #   而这不是"将来可能"：决策记录 0022/0023 那条路（分发上游自己的二进制）
+    #   的常态就是按架构分开发布 —— docker / rust / go / node 全是。
+    #
+    #       sha256 = { x86_64 = "9ac2…", aarch64 = "873b…" }
+    #
+    #   ★ 缺当前架构那一份就【直接报错】，不猜、不退回另一个架构的值 ——
+    #     退回会让 aarch64 拿 x86_64 的摘要去校验，而那必然失败，
+    #     但报出来的是"校验不通过"，指向不了真正的原因。
+    raw_sha = src.get("sha256", "")
+    if isinstance(raw_sha, dict):
+        if arch not in raw_sha:
+            die(f"{pkg['name']}: sha256 是按架构给的，但没有 {arch} 那一份"
+                f"（写了的有：{', '.join(sorted(raw_sha)) or '一个都没有'}）")
+        raw_sha = raw_sha[arch]
+    want = str(raw_sha).strip().lower()
     if len(want) != 64:
         die(f"{pkg['name']}: 源码没有声明有效的 sha256"
             f"（不接受未校验的源码，当前值: {want!r}）")

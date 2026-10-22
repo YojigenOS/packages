@@ -209,7 +209,17 @@ class Test每个配方的字段都合法(unittest.TestCase):
             d = tomllib.loads(sp.read_text())
             for s2 in (d.get("source") or []):
                 h = s2.get("sha256")
-                if h and not _re.fullmatch(r"[0-9a-f]{64}", h):
+                # ★ 2026-10-22：`sha256` 可以是 {x86_64 = …, aarch64 = …}
+                #   （上游按架构分开发布二进制时必需，见 source.py）。
+                #   所以逐个值都要是这个格式，而【键也必须是架构名】——
+                #   写错一个字（`amd64`）在运行时才会报"没有 x86_64 那一份"。
+                if isinstance(h, dict):
+                    for k, v in h.items():
+                        if k not in ("x86_64", "aarch64"):
+                            bad.append(f"{sp.parent.name}: sha256 里有个不认识的架构 {k!r}")
+                        if not _re.fullmatch(r"[0-9a-f]{64}", str(v)):
+                            bad.append(f"{sp.parent.name}[{k}]: {v!r}")
+                elif h and not _re.fullmatch(r"[0-9a-f]{64}", h):
                     bad.append(f"{sp.parent.name}: {h!r}")
         self.assertFalse(bad, "sha256 格式不对（要 64 位小写十六进制）：\n  "
                               + "\n  ".join(bad))
