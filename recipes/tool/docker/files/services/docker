@@ -43,11 +43,21 @@ case "$1" in
       sleep 0.5 2>/dev/null || sleep 1
     done
 
+    # ★★★ 光"等 socket 出现"是【一次假成功】（2026-10-22 在真机上撞到）：
+    #   dockerd 会先建 socket、再因为缺 iptables/nft 而退出。于是这里报了
+    #   "✓ 起来了"，而两秒后进程已经没了 —— 那正是这个项目一直在修的那类
+    #   （一个不会失败的成功判断）。
+    #
+    #   所以：socket 出现之后【再等两秒】，然后查进程还在不在。
     if [ -S /var/run/docker.sock ]; then
-      echo "  ✓ dockerd 起来了"
+      sleep 2
+    fi
+
+    if [ -S /var/run/docker.sock ] && pgrep -x dockerd >/dev/null 2>&1; then
+      echo "  ✓ dockerd 起来了（进程在，socket 在）"
     else
-      echo "  ⚠ dockerd 没起来 —— 见 /var/log/dockerd.log 的最后几行："
-      tail -3 /var/log/dockerd.log 2>/dev/null | sed 's/^/     /'
+      echo "  ⚠ dockerd 没起来（或者起来又退了）—— /var/log/dockerd.log 的最后 5 行："
+      tail -5 /var/log/dockerd.log 2>/dev/null | cut -c1-160 | sed 's/^/     /'
       exit 1
     fi
     ;;

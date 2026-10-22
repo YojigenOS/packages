@@ -38,7 +38,7 @@
 [package]
 name        = "docker"
 version     = "29.9.2"
-release     = 4
+release     = 5
 date        = 2026-10-22T05:50:00Z
 description = "容器运行时：docker / dockerd / containerd / runc（上游静态二进制）"
 url         = "https://www.docker.com/"
