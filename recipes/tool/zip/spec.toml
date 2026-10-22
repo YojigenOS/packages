@@ -1,0 +1,28 @@
+# zip —— 打 .zip
+#
+# ★ 和 unzip 一对，理由相同（1Panel 的文件管理 / 打包下载）。
+#   同样不走 autotools，走 `unix/Makefile`。
+
+[package]
+name        = "zip"
+version     = "3.0"
+release     = 1
+date        = 2026-10-22T10:00:00Z
+description = "打 .zip 压缩包（Info-ZIP）"
+url         = "https://infozip.sourceforge.net/Zip.html"
+license     = "Info-ZIP"
+
+[[source]]
+url    = "https://downloads.sourceforge.net/infozip/zip30.tar.gz"
+sha256 = "f0e8bb1f9b7eb0b01285495a2699df3a4b766784c1765a8f1aeedf63c0806369"
+
+[dependencies.aarch64]
+runtime = ["glibc", "bzip2"]
+build   = ["make", "gcc", "bzip2"]
+
+[dependencies.x86_64]
+runtime = ["glibc", "bzip2"]
+build   = ["make", "gcc", "bzip2"]
+
+[build]
+type = "custom"

@@ -1,0 +1,31 @@
+# git —— 版本控制
+#
+# ★ 补它的原因：1Panel 的应用商店里有一部分应用要 `git clone` 源码（源码里
+#   `git` 出现若干处，且用 `cmd.Which` 判在不在）。
+#
+# ★★ 它不是 autotools —— git 用自己那套 Makefile（`make prefix=/usr all`）。
+#    所以这里 type = "custom"，安装步骤写在 steps.sh 里。
+
+[package]
+name        = "git"
+version     = "2.47.0"
+release     = 1
+date        = 2026-10-22T10:00:00Z
+description = "分布式版本控制系统"
+url         = "https://git-scm.com/"
+license     = "GPL-2.0-only"
+
+[[source]]
+url    = "https://www.kernel.org/pub/software/scm/git/git-$VERSION.tar.xz"
+sha256 = "1ce114da88704271b43e027c51e04d9399f8c88e9ef7542dae7aebae7d87bc4e"
+
+[dependencies.aarch64]
+runtime = ["glibc", "zlib", "openssl", "curl", "perl", "expat"]
+build   = ["make", "gcc", "zlib", "openssl", "curl", "perl", "expat"]
+
+[dependencies.x86_64]
+runtime = ["glibc", "zlib", "openssl", "curl", "perl", "expat"]
+build   = ["make", "gcc", "zlib", "openssl", "curl", "perl", "expat"]
+
+[build]
+type = "custom"

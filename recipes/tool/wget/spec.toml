@@ -1,0 +1,36 @@
+# wget —— 从网上取东西
+#
+# ★ 补它的原因：1Panel 有少数下载路径直接调 `wget`（源码里 1 处），而我们的
+#   系统上原来只有 `curl`。缺它时那些路径报 "command not found"。
+
+[package]
+name        = "wget"
+version     = "1.25.0"
+release     = 1
+date        = 2026-10-22T10:00:00Z
+description = "非交互式网络下载器"
+url         = "https://www.gnu.org/software/wget/"
+license     = "GPL-3.0-or-later"
+
+[[source]]
+url    = "https://ftp.gnu.org/gnu/wget/wget-$VERSION.tar.gz"
+sha256 = "766e48423e79359ea31e41db9e5c289675947a7fcf2efdcedb726ac9d0da3784"
+
+[dependencies.aarch64]
+runtime = ["glibc", "openssl", "pcre2"]
+build   = ["make", "gcc", "pkgconf", "openssl", "pcre2"]
+
+[dependencies.x86_64]
+runtime = ["glibc", "openssl", "pcre2"]
+build   = ["make", "gcc", "pkgconf", "openssl", "pcre2"]
+
+[build]
+type      = "autotools"
+configure = [
+    "--prefix=/usr",
+    "--disable-static",
+    # ★ 用 openssl 而不是 gnutls：gnutls 我们没建，而 openssl 有
+    "--with-ssl=openssl",
+    # 翻译文件是给人看的，不在构建链里
+    "--disable-nls",
+]

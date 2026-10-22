@@ -1,0 +1,32 @@
+# unzip —— 解 .zip
+#
+# ★ 补它的原因：1Panel 的**文件管理**和**应用安装包**都用 `unzip`
+#   （源码里 `unzip` 3 处、`zip` 6 处，且用 `cmd.Which` 判在不在）。
+#   缺它时那两处报 "command not found"。
+#
+# ★★ Info-ZIP 不用 autotools，也不吃 configure —— 它在 `unix/Makefile` 里有一堆
+#    平台目标（`linux` / `generic` …）。所以 type = "custom"。
+
+[package]
+name        = "unzip"
+version     = "6.0"
+release     = 1
+date        = 2026-10-22T10:00:00Z
+description = "解 .zip 压缩包（Info-ZIP）"
+url         = "https://infozip.sourceforge.net/UnZip.html"
+license     = "Info-ZIP"
+
+[[source]]
+url    = "https://downloads.sourceforge.net/infozip/unzip60.tar.gz"
+sha256 = "036d96991646d0449ed0aa952e4fbe21b476ce994abc276e49d30e686708bd37"
+
+[dependencies.aarch64]
+runtime = ["glibc"]
+build   = ["make", "gcc"]
+
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["make", "gcc"]
+
+[build]
+type = "custom"
