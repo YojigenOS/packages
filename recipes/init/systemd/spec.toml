@@ -71,7 +71,10 @@ build   = ["meson", "ninja", "gcc", "pkgconf", "gperf", "python3",
 [build]
 type = "meson"
 configure = [
-    "-Dmode=systemd",
+    # ★ v258 里 `mode` 只有 developer/release —— **"是不是 PID 1"不再是构建选项**
+    #   （它在运行时判断）。原来写 `systemd` 会让 meson 当场报
+    #   "Value "systemd" for option "mode" is not one of the choices"。
+    "-Dmode=release",
     # ── 关的（理由见文件头）──────────────────────────────────────────
     "-Dudev=false",
     "-Dkmod=false",

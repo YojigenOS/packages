@@ -8,8 +8,8 @@
 
 [package]
 name        = "git"
-version     = "2.47.0"
-release     = 4
+version     = "2.52.0"
+release     = 1
 date        = 2026-10-22T10:00:00Z
 description = "分布式版本控制系统"
 url         = "https://git-scm.com/"
@@ -17,7 +17,7 @@ license     = "GPL-2.0-only"
 
 [[source]]
 url    = "https://www.kernel.org/pub/software/scm/git/git-$VERSION.tar.xz"
-sha256 = "1ce114da88704271b43e027c51e04d9399f8c88e9ef7542dae7aebae7d87bc4e"
+sha256 = "3cd8fee86f69a949cb610fee8cd9264e6873d07fa58411f6060b3d62729ed7c5"
 
 [dependencies.aarch64]
 runtime = ["glibc", "zlib", "openssl", "curl", "perl", "expat"]

@@ -4,11 +4,20 @@
 # ★ 和 unzip 一个路子：`unix/Makefile` + 平台目标 `generic`（linux 那个目标在
 #   某些版本上会去 link 没有的库，generic 最稳）。
 #
+# ★★ 而 `-DHAVE_MEMSET/-DHAVE_MEMCPY/-DHAVE_STRCHR/-DHAVE_STRRCHR` 是必须的：
+#   zip 3.0（1999 年）的 zip.h 在这些函数"没被检测到"时会**自己声明**它们，
+#   而那份声明是老签名：
+#
+#       char *memset(char *, int, unsigned int);      # → 撞现代 glibc
+#       error: conflicting types for 'memset'
+#
+#   告诉它"系统有这些函数"，它就不声明了。
+#
 # ★ 中文/Unicode 文件名：`-DUNICODE_SUPPORT`（zip 3.0 支持，要显式开）。
 
 build() {
   make -f unix/Makefile \
-    LOCFLAGS="-DUNICODE_SUPPORT" \
+    LOCFLAGS="-DUNICODE_SUPPORT -DHAVE_MEMSET -DHAVE_MEMCPY -DHAVE_STRCHR -DHAVE_STRRCHR" \
     generic
 }
 

@@ -9,38 +9,13 @@
 # ★ 留着的：openssl（https）、curl（http(s) 的 remote helper）、perl（git svn
 #   之类的脚本）、expat（.gitattributes 的 xml 处理不是必需，但 Debian 也开）。
 
-# ★★ 必须 `-std=gnu17`（2026-10-22 撞到的）：
+# ★ CFLAGS 不再钉标准（2026-10-22 第二轮）：
 #
-#       reflog.c:213:104: error: macro 'unreachable' passed 3 arguments,
-#                              but takes just 0
+#   2.47 在现代 gcc 上连着撞两处（C23 的 `unreachable` 宏、以及 `thread_local`
+#   在 C17 里没有定义）。两处补丁都只能"治一个、冒一个"。
+#   **换成 2.52 之后两处都不需要** —— 上游自己适配了 C23。
 #
-#   我们的 gcc 默认是 C23，而 C23 的 <stddef.h> 里有一个 `unreachable()` 宏
-#   （零参数）。git 自己的代码里也有一个叫 unreachable 的宏/函数、带参数 ——
-#   于是被 C23 那个顶掉，整份源码编不过。
-#
-#   ★ 这不是我们的错，也不是 git 的错：是"编译器默认标准变了"这件事。而
-#     **必须显式钉住标准**，否则同一个配方在不同的 gcc 上行为不同。
-# ★★ 还要 `-pthread`（同一个构建里撞出来的第二条）：
-#
-#       builtin/index-pack.c:393: error: expected '{' before 'thread_local'
-#       builtin/index-pack.c:197: error: 'thread_data' undeclared
-#
-#   git 的线程支持是一整块 #if 包着的，而那个 #if 看的是 `_REENTRANT` ——
-#   它只有传 `-pthread` 才有。不传的话那一块被跳过，于是下面用到的
-#   thread_data 全成了未声明。
-#
-#   ★ 光 `-std=gnu17` 不够：那是解决 C23 的 unreachable 宏，这是另一件事。
-# ★★★ 第三条：`thread_local` 这个 token 得有人定义（2026-10-22）。
-#
-#       builtin/index-pack.c:97: error: expected '{' before 'thread_local'
-#
-#   它在 gcc 的 **C23** 里是关键字；而在 **C17** 里它只是 <threads.h> 里的一个
-#   宏，git 又没 include 那个头（它只 include <pthread.h>）。于是我们钉了
-#   `-std=gnu17` 之后，这个 token 谁都不认 —— 换了个错法，还是错。
-#
-#   ★ 显式钉住：`__thread` 是 GCC 的线程局部存储扩展，语义和 _Thread_local 一样。
-#     这一条比"升级到某个能过的 git 版本"可靠：它不依赖上游哪天改。
-CFLAGS="-std=gnu17 -O2 -pipe -pthread -Dthread_local=__thread"
+#   ★ 记一笔判据：补丁是最后手段。同一处连着要打第二个补丁，说明选错了版本。
 
 build() {
   make -j"$(nproc)" \
