@@ -25,7 +25,7 @@
 [package]
 name        = "iptables"
 version     = "1.8.12"
-release     = 3
+release     = 4
 date        = 2026-10-22T07:30:00Z
 description = "防火墙与 NAT 规则工具（legacy + nft 两个后端）"
 url         = "https://netfilter.org/projects/iptables/"

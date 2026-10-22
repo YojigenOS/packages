@@ -26,7 +26,17 @@
 package() {
   make DESTDIR="$PKGDEST" install
 
-  for n in iptables iptables-save iptables-restore; do
+  # ★★ 6 是【v6 的那一套】。2026-10-22 只改了 v4 的三个名字，而 1Panel 的日志
+  #   立刻把漏掉的那一半喊出来了：
+  #
+  #       ip6tables v1.8.12 (legacy): can't initialize ip6tables table `filter`:
+  #       Table does not exist
+  #       [ERROR] restore iptables base chains failed
+  #       [WARNING] synchronize firewall whitelist on startup failed
+  #
+  #   —— 同一个原因（内核里没有 legacy 那套表），只是名字带 6。**漏三个等于没改。**
+  for n in iptables iptables-save iptables-restore \
+           ip6tables ip6tables-save ip6tables-restore; do
     if [ -L "$PKGDEST/usr/sbin/$n" ] || [ -f "$PKGDEST/usr/sbin/$n" ]; then
       ln -sf xtables-nft-multi "$PKGDEST/usr/sbin/$n"
     fi
