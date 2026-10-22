@@ -1,0 +1,34 @@
+GitHub 的 tag tarball 会把文件名里的反斜杠转义成 `\x2d`（十六进制）。
+
+    真实文件名   dm-back\slash.swap
+    tarball 里   dm-back\x2d slash.swap      ← 字面上没有反斜杠
+
+而 `test/fuzz/meson.build` 那段本来就为这个坑写了跳过：
+
+        # Also, backslashes get mangled, so skip test. See
+        # https://github.com/mesonbuild/meson/issues/1564.
+        if p.contains('\\')
+                continue
+        endif
+
+★ 但它只看**字面**反斜杠 —— 而转义之后那个字符不存在了，于是这层保护失效：
+
+        test/fuzz/meson.build:61:52: ERROR:
+            File fuzz-unit-file/dm-back-slash.swap does not exist.
+
+一行修：把 `\x2d` 这个转义形式也当成"被搞坏的名字"，同样跳过。
+
+--- a/test/fuzz/meson.build
++++ b/test/fuzz/meson.build
+@@ -55,7 +55,10 @@
+         #
+         # Also, backslashes get mangled, so skip test. See
+         # https://github.com/mesonbuild/meson/issues/1564.
+-        if p.contains('\\')
++        #
++        # And GitHub's tag tarballs escape those backslashes as \x2d, so the
++        # literal backslash is gone and the check above no longer catches it.
++        if p.contains('\\') or p.contains('\\x2d')
+                 continue
+         endif
+         fuzzer = fs.name(fs.parent(p))

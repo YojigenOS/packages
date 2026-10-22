@@ -45,7 +45,7 @@
 [package]
 name        = "systemd"
 version     = "258"
-release     = 2
+release     = 3
 date        = 2026-10-22T10:30:00Z
 description = "系统与服务管理器（决策记录 0022：自己建）"
 url         = "https://systemd.io/"
@@ -70,6 +70,8 @@ build   = ["meson", "ninja", "gcc", "pkgconf", "gperf", "python3", "jinja2",
 
 [build]
 type = "meson"
+# ★ GitHub 的 tag tarball 转义了文件名里的反斜杠，撞坏了 test/fuzz 那层保护
+patches = ["0001-skip-github-escaped-fuzz-filenames.patch"]
 configure = [
     # ★ v258 里 `mode` 只有 developer/release —— **"是不是 PID 1"不再是构建选项**
     #   （它在运行时判断）。原来写 `systemd` 会让 meson 当场报
