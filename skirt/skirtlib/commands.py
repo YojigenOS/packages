@@ -162,6 +162,22 @@ def cmd_build(args) -> None:
         该建 = True
         原因 = ["盘上没有可用的 payload（只有 key 相同不算）"]
 
+    # ★★ meta.json 也是产物的一部分（2026-10-22 加）。
+    #
+    #   它由 collect 阶段写，而 `<产物目录>/meta.json` 是 **`skirt pack` 的输入**
+    #   —— 没有它，pack 会打一行 `跳过 xxx（没有 meta.json）` 然后什么也不打。
+    #
+    #   于是「payload 在、key 没变、但没有 meta.json」这个状态会两头被绕过：
+    #   build 说"不用重建"，pack 说"没有 meta.json"——**这个包的 .apk 就永远
+    #   停在上一轮的版本上，而两边都不报错**。
+    #
+    #   实测撞到：改了 systemd 的 spec（加 replaces、release 6）→ build 因为
+    #   payload 还在而跳过 → pack 因为没有 meta.json 而跳过 → deploy 把上一轮的
+    #   `systemd-258-r5.apk` 当成最新的传上去，`Transferred: 0 B`。
+    if not 该建 and not (out_dir / "meta.json").is_file():
+        该建 = True
+        原因 = ["盘上没有 meta.json（pack 拿它当输入，缺了就打不出包）"]
+
     if 该建:
         if 上次 is not None:
             log("重建", "变了：" + "、".join(原因[:4]))
