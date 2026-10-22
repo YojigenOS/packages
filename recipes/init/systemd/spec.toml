@@ -1,0 +1,120 @@
+# systemd —— 决策记录 0022 里"必须自己建"的那一个
+#
+# 0022 把交付物分成两类，判据是**上游给不给通用二进制**：
+#
+#     上游给通用二进制的   = 应用 → 只分发
+#     上游给不了的         = 系统 → 自己建
+#          内核 · libc · 引导器 · init · 包管理器 · **systemd** …
+#
+# 而它原文还写着：「systemd 那条也没被绕开：它是 1panel 的硬前提，而它按这条
+# 规则必须自己建。**该难的还是难**。」
+#
+# ── 这个配方怎么"把难的地方关掉" ──────────────────────────────────────────
+#
+# systemd 的依赖列表很长，但**大部分是 `required : get_option(...)`** —— 可以关。
+# 我们数过（v258 的 meson.build）：唯一的硬程序依赖是 `gperf`。
+#
+# 而关哪些，判据都是**我们这台系统的实际情况**，不是"省事"：
+#
+#   -Dudev=false       ★★ 内核 CONFIG_MODULES **没开**（只有个残留的
+#                      MODULES_USE_ELF_RELA 符号）。没有模块加载，udev 存在的
+#                      理由就没了 —— 我们的设备节点靠 boot.d 里的 mount 和
+#                      CONFIG_DEVTMPFS 出来。
+#   -Dkmod=false       同上。
+#   -Dseccomp=false    libseccomp 没建；而 SECCOMP 那侧内核是开的，不影响。
+#   -Dapparmor=false -Dselinux=false   都不做。
+#   -Daudit=false      libaudit 没建。
+#   -Dpam=false -Dlogind=false        没有 PAM。1Panel 不用 logind。
+#   -Dcryptsetup=false -Dlibcryptsetup=false -Delfutils=false
+#   -Dgcrypt=false（用 openssl）-Dlibidn2=false -Dlz4=false -Dmicrohttpd=false
+#   -Dqrencode=false -Dgnutls=false -Dlibcurl=false -Dpolkit=false
+#   -Dman=false -Dhtml=false           文档要 docbook，给人看的。
+#   -Dtests=false
+#   -Dfirstboot=false -Dquotacheck=false
+#   -Dnetworkd=false -Dresolved=false  我们用自己的 15-network + dhcpcd。
+#   -Defi=false -Dtpm=false -Dima=false -Dbpf-framework=false
+#
+# ★ 而**留下的**都是 1Panel 或我们自己真用的：
+#   hostnamed（主机名页）· timedated（时间页）· tmpfiles · sysusers
+#   journald（它要读日志）· sysv-generator（读 /etc/init.d + rc2.d）
+#
+# ★★ 还有一条关键的：`-Dsysvinit-path` / `-Dsysvrcnd-path` 指向我们已有的
+#     那套 SysV 兼容骨架 —— 于是 1Panel 装的服务在 systemd 下**照样能起**，
+#     不需要为它改任何东西。
+
+[package]
+name        = "systemd"
+version     = "258"
+release     = 1
+date        = 2026-10-22T10:30:00Z
+description = "系统与服务管理器（决策记录 0022：自己建）"
+url         = "https://systemd.io/"
+license     = "LGPL-2.1-or-later"
+
+[[source]]
+# ★ 用 upstream 的 tag tarball（不是 release 里的 .tar.gz）：
+#   github 的 archive 接口给的是同一个 git 树，而 systemd 官方发布页
+#   （github.com/systemd/systemd-stable）只在特定版本上才更新。
+url    = "https://github.com/systemd/systemd/archive/refs/tags/v$VERSION.tar.gz"
+sha256 = "07a580cf21856f468f82b77b82973a926f42ccc696462459b53f8b88893dff8e"
+
+[dependencies.aarch64]
+runtime = ["glibc", "util-linux", "openssl", "zstd", "xz", "libcap"]
+build   = ["meson", "ninja", "gcc", "pkgconf", "gperf", "python3",
+           "util-linux", "openssl", "zstd", "xz", "libcap"]
+
+[dependencies.x86_64]
+runtime = ["glibc", "util-linux", "openssl", "zstd", "xz", "libcap"]
+build   = ["meson", "ninja", "gcc", "pkgconf", "gperf", "python3",
+           "util-linux", "openssl", "zstd", "xz", "libcap"]
+
+[build]
+type = "meson"
+configure = [
+    "-Dmode=systemd",
+    # ── 关的（理由见文件头）──────────────────────────────────────────
+    "-Dudev=false",
+    "-Dkmod=false",
+    "-Dseccomp=false",
+    "-Dapparmor=false",
+    "-Dselinux=false",
+    "-Daudit=false",
+    "-Dpam=false",
+    "-Dlogind=false",
+    "-Dcryptsetup=false",
+    "-Dlibcryptsetup=false",
+    "-Delfutils=false",
+    "-Dgcrypt=false",
+    "-Dlibidn2=false",
+    "-Dlz4=false",
+    "-Dmicrohttpd=false",
+    "-Dqrencode=false",
+    "-Dgnutls=false",
+    "-Dlibcurl=false",
+    "-Dpolkit=false",
+    "-Dman=false",
+    "-Dhtml=false",
+    "-Dtests=false",
+    "-Dfirstboot=false",
+    "-Dquotacheck=false",
+    "-Dnetworkd=false",
+    "-Dresolved=false",
+    "-Defi=false",
+    "-Dtpm=false",
+    "-Dima=false",
+    "-Dbpf-framework=false",
+    # ── 留的 ────────────────────────────────────────────────────────
+    "-Dopenssl=true",
+    "-Dzstd=true",
+    "-Dxz=true",
+    "-Dblkid=true",
+    "-Dsysusers=true",
+    "-Dtmpfiles=true",
+    "-Dhostnamed=true",
+    "-Dtimedated=true",
+    "-Dlocaled=true",
+    "-Ddefault-hierarchy=unified",
+    # ★★ SysV 兼容：让它读我们那套 init.d + rc2.d（1Panel 装的服务靠这个）
+    "-Dsysvinit-path=/etc/init.d",
+    "-Dsysvrcnd-path=/etc",
+]

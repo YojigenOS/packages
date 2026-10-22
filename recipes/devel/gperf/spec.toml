@@ -1,0 +1,33 @@
+# gperf —— 完美哈希函数生成器
+#
+# ★ 它进得来只有一个原因：**systemd 的 meson.build 硬要它**。
+#
+#       gperf = find_program('gperf')      # 没有 required: false
+#
+#   —— 而我们数过 systemd 的依赖，`required: false` 那一大堆都能关，
+#   `gperf` 是唯一一个关不掉的外部程序。
+
+[package]
+name        = "gperf"
+version     = "3.3"
+release     = 1
+date        = 2026-10-22T10:30:00Z
+description = "完美哈希函数生成器（systemd 构建需要）"
+url         = "https://www.gnu.org/software/gperf/"
+license     = "GPL-3.0-or-later"
+
+[[source]]
+url    = "https://ftp.gnu.org/gnu/gperf/gperf-$VERSION.tar.gz"
+sha256 = "fd87e0aba7e43ae054837afd6cd4db03a3f2693deb3619085e6ed9d8d9604ad8"
+
+[dependencies.aarch64]
+runtime = ["glibc"]
+build   = ["make", "gcc"]
+
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["make", "gcc"]
+
+[build]
+type      = "autotools"
+configure = ["--prefix=/usr", "--disable-static"]
