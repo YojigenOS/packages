@@ -78,6 +78,9 @@ BUILD_KEYS = frozenset({
     "autoreconf",     # 要不要先跑 autoreconf
     "cflags",
     "configure",      # 交给 configure/cmake/meson 的参数（★ 会【追加】在默认值之后）
+    # ★ 用哪个 shell 跑 configure（形如 "/bin/bash"）。见 build.py 那段：
+    #   nftables 的 configure 里嵌了 bash 专有循环，而 /bin/sh 是 dash。
+    "configure_shell",
     "nostrip",
     "out_of_tree",
     "patches",

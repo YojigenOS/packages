@@ -183,15 +183,32 @@ def make_build_script(spec: dict, arch: str = "") -> str:
             opts_list.append(f"--build={triple}")
             opts_list.append(f"--host={triple}")
         opts = " ".join(opts_list)
+
+        # ★★ configure 用哪个 shell 跑（2026-10-22 加）。
+        #
+        #   起因很具体：nftables 1.1.6 的 configure **自己嵌了一段 bash 循环**：
+        #
+        #       for ((i = 56; i >= 0; i-= 8)); do
+        #
+        #   而它顶上是 `#! /bin/sh`，我们的 /bin/sh 是 dash —— 于是
+        #
+        #       ./config.status: 2044: Syntax error: Bad for loop variable
+        #
+        #   `CONFIG_SHELL` 是 autoconf 认的标准口子：给了它，configure 会用那个
+        #   shell 重新执行自己。所以配方写 `configure_shell = "/bin/bash"` 就够了，
+        #   不用在 steps.sh 里重写 build()。
+        sh = b.get("configure_shell")
+        env = f"CONFIG_SHELL={sh} " if sh else ""
+
         if oot:
             body = ('  mkdir -p "$BUILDDIR"\n'
                     '  cd "$BUILDDIR"\n'
-                    f'  "$SRCDIR/configure" {opts}\n'
+                    f'  {env}"$SRCDIR/configure" {opts}\n'
                     '  make')
             pkgstep = ('  cd "$BUILDDIR"\n'
                        '  make DESTDIR="$PKGDEST" install')
         else:
-            body = f"  ./configure {opts}\n  make"
+            body = f"  {env}./configure {opts}\n  make"
             pkgstep = '  make DESTDIR="$PKGDEST" install'
     elif kind == "meson":
         # ★★ 和上面 cmake 那段一样的修法 —— 前缀【永远由驱动给】。
@@ -278,6 +295,9 @@ def make_build_script(spec: dict, arch: str = "") -> str:
         #   「[build] 里有多余的键 ['vendor', 'vendor_check']」。
         #   而那一句本身是对的：这个白名单的职责就是"写错键要大声失败"。
         "vendor", "vendor_check",
+        # ★★ 2026-10-22：`configure_shell` —— 见下面 emit 那段。
+        #   nftables 的 configure 里嵌了 bash 循环，而 /bin/sh 是 dash。
+        "configure_shell",
     }
     unknown = sorted(set(b) - known)
     if unknown:

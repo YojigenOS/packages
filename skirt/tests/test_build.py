@@ -366,7 +366,8 @@ class Test配方里的键都是真的(unittest.TestCase):
     #   `test_vendor.py` 里 `test_白名单和_build_读的键一致` 守着的那个形状。
     #   加 `vendor` / `vendor_check` 时两处都要改（2026-10-22，接 docker）。
     KNOWN = {"type", "out_of_tree", "autoreconf", "patches",
-             "configure", "nostrip", "cflags", "vendor", "vendor_check"}
+             "configure", "configure_shell", "nostrip", "cflags",
+             "vendor", "vendor_check"}
     KINDS = {"autotools", "meson", "cmake", "custom"}
 
     def test_所有配方的_build_键都是真的(self):

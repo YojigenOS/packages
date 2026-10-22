@@ -41,6 +41,10 @@ build   = ["make", "gcc", "pkgconf", "libmnl", "libnftnl", "gmp", "readline"]
 
 [build]
 type      = "autotools"
+# ★★ 它的 configure 里嵌了一段 bash 专有循环（`for ((i = 56; ...))`），
+#   而顶上是 #!/bin/sh —— 我们的 /bin/sh 是 dash，于是 config.status 报
+#   "Bad for loop variable"。CONFIG_SHELL 让 configure 用 bash 重新执行自己。
+configure_shell = "/bin/bash"
 configure = [
     "--prefix=/usr",
     "--sbindir=/usr/sbin",
