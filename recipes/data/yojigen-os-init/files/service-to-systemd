@@ -40,9 +40,19 @@ UNITDIR=/usr/lib/systemd/system
   name=$1
   [ -e "$DEFS/$name" ] || { echo "✗ 没有定义: $name" >&2; return 1; }
 
-  cat > "$UNITDIR/yojigen-$name.service" <<UNIT
+  # ★★ heredoc 必须【加引号】（`<<'UNIT'`）—— 不加引号时 bash 会展开里面的
+  #   `$DEFS/$name start`，而那种展开的结果是 `… 被当成命令执行`。
+  #
+  #   实测撞到（2026-10-22）：`/usr/sbin/service-to-systemd: line 43:
+  #   forking: command not found`，而**后面紧跟着 dockerd 的启动日志** ——
+  #   也就是说它真的去起了一次服务，而不是在写一个 unit 文件。
+  #
+  #   ★ 判据：写"文件内容"的 heredoc **一律加引号**。要让变量进去，用占位符 +
+  #     sed 替换（下面 @@NAME@@ 那种），这样"内容里有什么"是看得见的。
+  cat > "$UNITDIR/yojigen-$name.service" <<'UNIT'
+# @@占位符：下面用 sed 替换（见 UNIT 之后那几行）
 [Unit]
-Description=Yojigen OS 服务: $name
+Description=@@UNITDESC@@
 # ★ After=network.target 而不是 network-online：我们那两个（sshd、docker）
 #   都不需要"网卡拿到地址"才起得来。要等的那些该自己写。
 After=network.target
@@ -64,8 +74,8 @@ Wants=basic.target
 #     （实测教训：只看 socket 存在会误判，见 docker 那份定义里的注释）。
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=$DEFS/$name start
-ExecStop=$DEFS/$name stop
+ExecStart=@@DEFS@@/@@NAME@@ start
+ExecStop=@@DEFS@@/@@NAME@@ stop
 TimeoutStartSec=120
 # 重启策略：只在异常退出时重来，次数有上限（不做成"永远重试"）
 Restart=on-failure
@@ -74,6 +84,14 @@ RestartSec=5
 [Install]
 WantedBy=multi-user.target
 UNIT
+
+  # 占位符替换（heredoc 不加引号会执行里面的东西，所以只能这么来）
+  sed -i \
+    -e "s|@@NAME@@|$name|g" \
+    -e "s|@@UNITDESC@@|Yojigen OS 服务: $name|g" \
+    -e "s|@@DEFS@@|$DEFS|g" \
+    "$UNITDIR/yojigen-$name.service"
+
   echo "  + yojigen-$name.service"
 }
 
