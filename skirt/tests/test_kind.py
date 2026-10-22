@@ -152,6 +152,34 @@ class TestKindMatchesArtifacts(unittest.TestCase):
                 if 可:
                     exe = True
             看了.append(f"{sub}({len(项)}): " + " ".join(详情))
+        # ── ★★ 2026-10-22：`usr/libexec` 也算 ──────────────────────────────
+        #
+        # 起因：接 docker 的两个插件（`docker-buildx` / `docker-compose`）时这条
+        # 判据把它们判成了「tool 但 bin/ 里没有可执行文件」。
+        #
+        # 而它们的 kind 确实是对的：别人依赖它们是为了【在命令行跑】
+        # （`docker buildx build …`），只是那个程序不叫 buildx、也不在 PATH 上
+        # —— 它叫 `docker-buildx`，装在 CLI 找插件的目录里。
+        #
+        # ★ 而 `usr/libexec` 这个词的意思本来就是"系统私有的可执行文件"，
+        #   把它排除在外是这条判据的一个漏洞，不是一种严格。
+        #
+        # ★★ 但它必须【递归】找、且只认普通文件：`os.access(目录, os.X_OK)`
+        #   对目录也是 True —— 直接按 usr/bin 那套写，任何装了一个空目录的包
+        #   都会算"有可执行文件"。那是把判据变松，不是修好它。
+        libexec = payload / "usr/libexec"
+        if libexec.is_dir():
+            # `is_file()` 会跟着链接走 —— 和上面那条去掉 `not is_symlink()`
+            # 的注释是同一个道理。
+            可执行 = [x for x in libexec.rglob("*")
+                      if x.is_file() and os.access(x, os.X_OK)]
+            if 可执行:
+                exe = True
+            看了.append(f"usr/libexec({len(可执行)} 个可执行): "
+                        + " ".join(x.name for x in 可执行[:4]))
+        else:
+            看了.append("usr/libexec(不在)")
+
         hdr = bool(list(payload.rglob("*.h")))
         文件 = [str(f.relative_to(payload)) for f in payload.rglob("*") if f.is_file()]
         # ★★ 文件少的时候【把它们列出来】—— 2026-10-17。
@@ -172,9 +200,9 @@ class TestKindMatchesArtifacts(unittest.TestCase):
             so, exe, hdr = self._shape(payload)
             checked += 1
             if kind == "lang" and not exe:
-                bad.append(f"{name}: lang 但 bin/ 里没有可执行文件")
+                bad.append(f"{name}: lang 但没有可执行文件（找过 usr/bin usr/sbin bin sbin usr/libexec）")
             elif kind == "tool" and not exe:
-                bad.append(f"{name}: tool 但 bin/ 里没有可执行文件")
+                bad.append(f"{name}: tool 但没有可执行文件（找过 usr/bin usr/sbin bin sbin usr/libexec）")
             elif kind == "net" and not exe:
                 # ★ 这一条是 2026-10-15 补的。`net` 那 7 个包
                 #   （chrony curl dbus dhcpcd iproute2 iputils openssh）
@@ -183,7 +211,7 @@ class TestKindMatchesArtifacts(unittest.TestCase):
                 #
                 #   而它们该有的形态是明确的：都是【能跑的东西】（守护进程或
                 #   客户端命令）。所以和 tool 同一条判据。
-                bad.append(f"{name}: net 但 bin/ 里没有可执行文件")
+                bad.append(f"{name}: net 但没有可执行文件（找过 usr/bin usr/sbin bin sbin usr/libexec）")
             elif kind == "lib" and not so:
                 bad.append(f"{name}: lib 但没有 .so/.a")
             elif kind == "data" and so:
@@ -212,3 +240,48 @@ class TestKindMatchesArtifacts(unittest.TestCase):
                 for n in sorted(self.payloads) if any(b.startswith(f"{n}:") for b in bad))
             self.assertFalse(bad, "分类和产物对不上：\n         "
                              + "\n         ".join(bad) + "\n      看过的：\n         " + 细节)
+
+
+class Test_libexec_也算可执行位置(unittest.TestCase):
+    """docker 的 CLI 插件装在 `usr/libexec/docker/cli-plugins/`。
+
+    ★ 2026-10-22：接 `docker-buildx` / `docker-compose` 时，`test_kind` 把它们
+      判成「tool 但 bin/ 里没有可执行文件」。而它们的 kind 是对的 —— 别人依赖
+      它们是为了在命令行跑（`docker buildx build …`），只是那个程序不在 PATH 上。
+
+    ★★ 而"加一条路径"这件事必须小心：`os.access(目录, os.X_OK)` 对目录也是
+      True，所以如果不限定"普通文件"，任何装了一个**空目录**的包都会算"有
+      可执行文件"—— 那是把判据变松，而不是修好它。所以下面第二条专门盯它。
+    """
+
+    def _shape(self, 文件们):
+        from tempfile import TemporaryDirectory
+        from pathlib import Path
+        from test_kind import TestKindMatchesArtifacts
+        类 = TestKindMatchesArtifacts("test_kind_和产物一致")
+        类._看了 = {}
+        with TemporaryDirectory() as d:
+            root = Path(d)
+            for rel, mode in 文件们:
+                f = root / rel
+                f.parent.mkdir(parents=True, exist_ok=True)
+                if mode is None:
+                    f.mkdir(parents=True, exist_ok=True)
+                else:
+                    f.write_text("#!/bin/sh\n", encoding="utf-8")
+                    f.chmod(mode)
+            so, exe, hdr = 类._shape(root)
+            return so, exe, hdr, 类._看了[id(root)]
+
+    def test_插件装在_libexec_里就算有可执行文件(self):
+        so, exe, hdr, 看了 = self._shape([
+            ("usr/libexec/docker/cli-plugins/docker-buildx", 0o755),
+        ])
+        self.assertTrue(exe, f"该认出来，而它说：{看了}")
+
+    def test_但空目录不算(self):
+        """★★ 这一条守的是"别把判据变松"。"""
+        so, exe, hdr, 看了 = self._shape([
+            ("usr/libexec/docker/cli-plugins", None),
+        ])
+        self.assertFalse(exe, f"空目录不该算可执行文件，而它说：{看了}")
