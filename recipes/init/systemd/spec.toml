@@ -45,7 +45,7 @@
 [package]
 name        = "systemd"
 version     = "258"
-release     = 4
+release     = 5
 date        = 2026-10-22T10:30:00Z
 description = "系统与服务管理器（决策记录 0022：自己建）"
 url         = "https://systemd.io/"
@@ -70,6 +70,18 @@ build   = ["meson", "ninja", "gcc", "pkgconf", "gperf", "python3", "jinja2",
 
 [build]
 type = "meson"
+# ★★ gcc 16 把 `-Wdiscarded-qualifiers` 变严了，而 systemd 用 `-Werror`：
+#
+#       src/basic/string-util.h:13:16: error: return discards 'const' qualifier
+#                                       from pointer target type
+#                                       [-Werror=discarded-qualifiers]
+#
+#   `strstr()` 的参数是 `const char*` 而返回 `char*` —— 上游那个 helper 返回
+#   `char*`，于是一次"丢弃 const"的返回。旧 gcc 不报，gcc 16 报。
+#
+# ★ 只降级这一条，**不关掉 `-Werror`** —— 那会掩盖真问题。
+#   同一个做法在 `recipes/lib/libxcrypt` 里已经用过（同一个 gcc 16 的坑）。
+cflags = ["-Wno-error=discarded-qualifiers"]
 # ★ GitHub 的 tag tarball 转义了文件名里的反斜杠，撞坏了 test/fuzz 那层保护
 patches = ["0001-skip-github-escaped-fuzz-filenames.patch"]
 configure = [
