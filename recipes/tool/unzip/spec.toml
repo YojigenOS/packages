@@ -10,7 +10,7 @@
 [package]
 name        = "unzip"
 version     = "6.0"
-release     = 2
+release     = 3
 date        = 2026-10-22T10:00:00Z
 description = "解 .zip 压缩包（Info-ZIP）"
 url         = "https://infozip.sourceforge.net/UnZip.html"

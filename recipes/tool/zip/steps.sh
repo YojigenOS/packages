@@ -3,39 +3,44 @@
 #
 # ── 上游给了什么 ─────────────────────────────────────────────────────────
 #
-# 顶层**没有** configure、没有 configure.ac、没有 Makefile —— 一切在
-# `unix/Makefile` 里，靠平台目标（`generic` / `linux` / …）选。
-# 而 `unix/configure` 是它自己写的一个纯 sh 探测脚本（不是 autoconf）。
+# 顶层**没有** configure / configure.ac / Makefile —— 一切在 `unix/Makefile`
+# 里，靠平台目标（`generic` / `linux` / …）选。`unix/configure` 是它自己写的
+# 纯 sh 探测脚本（不是 autoconf）。
 #
-# ── 那个探测脚本为什么必须用 gnu89 跑 ────────────────────────────────────
+# ── 为什么探测必须按 1999 年的语义跑 ──────────────────────────────────────
 #
-# `unix/configure` 判 memset 是这样：
+# 它判 memset 是这样（unix/configure）：
 #
 #     echo "int main(){ char k; memset(&k,0,0); return 0; }" > conftest.c
 #     $CC -o conftest conftest.c
 #     [ $? -ne 0 ] && CFLAGS="${CFLAGS} -DZMEM"
 #
-# ★ 那个测试程序**没有 #include <string.h>**。1999 年的 C 里这没问题（隐式声明
-#   只是个警告）；而现代 gcc（C23 默认）把它当**硬错误**。
+# ★ 那个测试程序**没有 `#include <string.h>`**。1999 年的 C 里没问题（隐式声明
+#   只是警告）；现代 gcc（C23 默认）把它当**硬错误**。于是探测"失败"，它自己
+#   加 `-DZMEM`，而 `zip.h` 的 `#ifdef ZMEM` 就会声明老签名的 memset/memcpy/
+#   memcmp —— 撞现代 glibc：`conflicting types for 'memset'`。
 #
-#   于是：探测"失败" → 它自己加 `-DZMEM` → `zip.h` 里那份 `#ifdef ZMEM`
-#   就会声明老签名的 memset/memcpy/memcmp → 撞现代 glibc：
+#   **它误判我们缺 memset。我们并不缺。**
 #
-#       zip.h:726: error: conflicting types for 'memset';
-#                  have 'char *(char *, int, unsigned int)'
+# ── 而那个开关必须走 LOCAL_ZIP，不是 CFLAGS ──────────────────────────────
 #
-# ★★ 所以修法不是"关掉它的声明"（那是猜它的宏名），而是**让它的探测按 1999 年
-#    的语义跑**：传 `-std=gnu89` 给 unix/configure，隐式声明就只是警告，
-#    探测通过，它不会加 ZMEM，也就不会声明那些函数。
+# `unix/Makefile` 里：
 #
-# ★ 而 `__STDC_VERSION__` 那条一起带上：让源码知道自己按什么标准编。
-
-CFLAGS_BASE="-O2 -pipe -std=gnu89"
+#     CFLAGS_NOOPT = -I. -DUNIX $(LOCAL_ZIP)
+#     CFLAGS       = -O2 $(CFLAGS_NOOPT)
+#     flags: unix/configure
+#             sh unix/configure "${CC}" "${CFLAGS_NOOPT}" "${IZ_BZIP2}"
+#
+# ★★ 它把 **CFLAGS_NOOPT** 传给探测，不是 CFLAGS。所以第一次改的时候
+#    往 CFLAGS 里塞 `-std=gnu89`：**编译用了、探测没用**，报错原样还在。
+#    而 `LOCAL_ZIP` 是它留的口子 —— 它会进 CFLAGS_NOOPT，也就进了探测。
+#
+#     LOCAL_ZIP="-std=gnu89"  →  -I. -DUNIX -std=gnu89  →  unix/configure
 
 build() {
-  # ★ 先跑它自己的探测（生成 flags 文件），再 make
-  sh unix/configure "$(command -v gcc)" "$CFLAGS_BASE -I. -DUNIX" "" >/dev/null 2>&1 || true
-  make -f unix/Makefile CFLAGS="$CFLAGS_BASE" generic
+  make -f unix/Makefile \
+    LOCAL_ZIP="-std=gnu89" \
+    generic
 }
 
 package() {
