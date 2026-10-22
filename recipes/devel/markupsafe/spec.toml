@@ -1,0 +1,28 @@
+# MarkupSafe —— 安全的字符串标记（jinja2 的依赖）
+#
+# ★ 它有一个 C 扩展（`_speedups`），所以走 sdist + setuptools 编。
+#   纯 Python 的回落也在，但编出来更快，而且"能编就编"和别的包一致。
+
+[package]
+name        = "markupsafe"
+version     = "3.0.4"
+release     = 1
+date        = 2026-10-22T11:00:00Z
+description = "安全的字符串标记（jinja2 的前置）"
+url         = "https://pypi.org/project/MarkupSafe/"
+license     = "BSD-3-Clause"
+
+[[source]]
+url    = "https://files.pythonhosted.org/packages/source/M/MarkupSafe/markupsafe-$VERSION.tar.gz"
+sha256 = "2e9ad7dd851bf45fab9f75cbff4cb493fee9979e8d8c7c9c3ee119022518edd6"
+
+[dependencies.aarch64]
+runtime = ["glibc", "python3"]
+build   = ["python3", "pip", "gcc", "make"]
+
+[dependencies.x86_64]
+runtime = ["glibc", "python3"]
+build   = ["python3", "pip", "gcc", "make"]
+
+[build]
+type = "custom"

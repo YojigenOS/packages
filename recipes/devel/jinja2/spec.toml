@@ -1,0 +1,36 @@
+# jinja2 —— 模板引擎
+#
+# ★ 它进得来只有一个原因：**systemd 的 meson.build 硬要它**。
+#
+#       pymod = import('python')
+#       python = pymod.find_installation('python3', required : true,
+#                                        modules : ['jinja2'])
+#
+#   —— `required : true`，绕不过。systemd 用它生成一部分文档和代码。
+#
+# ★ 纯 Python，没有 C 扩展，所以直接装 sdist 里的 wheel。
+
+[package]
+name        = "jinja2"
+version     = "3.1.6"
+release     = 1
+date        = 2026-10-22T11:00:00Z
+description = "模板引擎（systemd 构建需要）"
+url         = "https://pypi.org/project/Jinja2/"
+license     = "BSD-3-Clause"
+
+[[source]]
+url    = "https://files.pythonhosted.org/packages/source/J/Jinja2/jinja2-$VERSION.tar.gz"
+sha256 = "0137fb05990d35f1275a587e9aee6d56da821fc83491a0fb838183be43f66d6d"
+
+[dependencies.aarch64]
+# ★ runtime 里有 markupsafe —— jinja2 在 import 时就要它
+runtime = ["glibc", "python3", "markupsafe"]
+build   = ["python3", "pip", "markupsafe"]
+
+[dependencies.x86_64]
+runtime = ["glibc", "python3", "markupsafe"]
+build   = ["python3", "pip", "markupsafe"]
+
+[build]
+type = "custom"

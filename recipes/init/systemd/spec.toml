@@ -60,12 +60,12 @@ sha256 = "07a580cf21856f468f82b77b82973a926f42ccc696462459b53f8b88893dff8e"
 
 [dependencies.aarch64]
 runtime = ["glibc", "util-linux", "openssl", "zstd", "xz", "libcap"]
-build   = ["meson", "ninja", "gcc", "pkgconf", "gperf", "python3",
+build   = ["meson", "ninja", "gcc", "pkgconf", "gperf", "python3", "jinja2",
            "util-linux", "openssl", "zstd", "xz", "libcap"]
 
 [dependencies.x86_64]
 runtime = ["glibc", "util-linux", "openssl", "zstd", "xz", "libcap"]
-build   = ["meson", "ninja", "gcc", "pkgconf", "gperf", "python3",
+build   = ["meson", "ninja", "gcc", "pkgconf", "gperf", "python3", "jinja2",
            "util-linux", "openssl", "zstd", "xz", "libcap"]
 
 [build]
@@ -74,6 +74,7 @@ configure = [
     # ★ v258 里 `mode` 只有 developer/release —— **"是不是 PID 1"不再是构建选项**
     #   （它在运行时判断）。原来写 `systemd` 会让 meson 当场报
     #   "Value "systemd" for option "mode" is not one of the choices"。
+    # ★★ jinja2 是硬依赖（meson.build 里 `required : true`），见 devel/jinja2
     "-Dmode=release",
     # ── 关的（理由见文件头）──────────────────────────────────────────
     # ★★ v258 里 **udev 没有开关**了 —— 它无条件建（meson.build 里直接
