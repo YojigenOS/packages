@@ -20,12 +20,52 @@ build() {
     # 再把我们真正在乎的那几项盖上去。
     #
     # -m 是"只合并，不立刻 olddefconfig"，因为要连着做。
-    # merge_config.sh 会在某个选项不存在时报出来——这正是我们要的：
-    # 升级内核时，消失的选项应该吵一声，而不是被静默忽略。
+    # ★ 这里原来写着「merge_config.sh 会在某个选项不存在时报出来 —— 这正是
+    #   我们要的」。**那句话是错的**（2026-10-22 实测）：符号在内核里根本不存在
+    #   时，它一声不吭把那一行丢掉。所以下面补了一道真校验 —— 拿最终 .config
+    #   对数，不是信工具的话。
     scripts/kconfig/merge_config.sh -m .config "$PKGDIR/config.fragment"
 
     # 合并只改了值，依赖关系要重算一遍。新增的选项取默认值。
     make olddefconfig
+
+    # ★★ 校验：片段里【每一项】都必须真的出现在最终 .config 里。
+    #
+    #   上面那句注释原来写着「merge_config.sh 会在某个选项不存在时报出来 ——
+    #   这正是我们要的」。**2026-10-22 发现那句话是错的。**
+    #
+    #   实测：片段里写了 `CONFIG_IP_NF_TARGET_MASQUERADE=y`，而 7.2.9 里这个
+    #   符号已经被 `NETFILTER_XT_TARGET_MASQUERADE` 取代 —— merge_config.sh
+    #   **一声没吭**，那一项就被静默丢掉了。而我们是在核对产物里的 config 时
+    #   才发现的（不是它自己说的）。
+    #
+    #   ★ 而"静默丢掉"的后果正是这个项目一直在修的那一类：你以为开了，其实没开。
+    #     docker 的 NAT 规则会加不上，而报错离这个片段十万八千里。
+    #
+    #   ★★ 判据是【产物】不是【工具的话】：把片段里每个符号拿去 .config 里找。
+    #     `=n` 的那种要注意：olddefconfig 会把它写成 `# CONFIG_X is not set`。
+    缺=""
+    while IFS= read -r line; do
+      case "$line" in
+        CONFIG_*=*) ;;
+        *) continue ;;
+      esac
+      sym="${line%%=*}"
+      val="${line#*=}"
+      if [ "$val" = "n" ]; then
+        grep -qE "^# ${sym} is not set$|^${sym}=n$" .config || 缺="$缺 $sym"
+      else
+        grep -q "^${sym}=" .config || 缺="$缺 $sym"
+      fi
+    done < "$PKGDIR/config.fragment"
+    if [ -n "$缺" ]; then
+      echo "✗ 片段里这些 CONFIG_ 没进最终 .config：$缺" >&2
+      echo "  可能的原因：（a）这个内核版本里符号改名或删除了；" >&2
+      echo "              （b）它的依赖没满足（例如写了 =y 而依赖是 =m，而我们是 MODULES=n）。" >&2
+      echo "  ★ 这两种都不会让 merge_config.sh 报错 —— 它只是把那一行丢掉。" >&2
+      exit 1
+    fi
+    echo "  ✓ 片段里 $(grep -cE '^CONFIG_' "$PKGDIR/config.fragment") 项全都进了 .config"
 
     # 编译。文件系统镜像（Image / bzImage）是自解的，不需要额外工具。
     #
