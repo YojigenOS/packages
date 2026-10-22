@@ -212,13 +212,19 @@ CONFIG_NETFILTER_XT_MATCH_COMMENT=y
 CONFIG_NETFILTER_XT_MATCH_CONNTRACK=y
 CONFIG_NETFILTER_XT_MATCH_MULTIPORT=y
 CONFIG_IP_NF_IPTABLES=y
-CONFIG_IP_NF_FILTER=y
-CONFIG_IP_NF_NAT=y
-CONFIG_IP_NF_MANGLE=y
-CONFIG_IP_NF_RAW=y
 # ★ 7.2.9 里【没有】CONFIG_IP_NF_TARGET_MASQUERADE 这个符号 —— 它已经被
 #   NETFILTER_XT_TARGET_MASQUERADE 取代。第一次写时用了旧名字，而
 #   merge_config.sh **一声没吭**把它丢了（见 steps.sh 里那道新加的校验）。
 CONFIG_NETFILTER_XT_TARGET_MASQUERADE=y
 CONFIG_NF_NAT_MASQUERADE=y
+# ★★ 2026-10-22：这里原来还写了 CONFIG_IP_NF_FILTER / IP_NF_NAT /
+#   IP_NF_MANGLE / IP_NF_RAW —— 而 **7.2.9 里没有这几个符号**，它们被
+#   merge_config.sh 静默丢掉了（那时守卫里用了中文变量名，所以守卫也没跑起来）。
+#
+#   实测的后果很具体：legacy 后端的 iptables 报
+#       can't initialize iptables table `filter`: Table does not exist
+#   而 /proc/net/ip_tables_names 是空的 —— legacy 那套表在这个内核上不存在。
+#
+#   ★ 所以 iptables 必须用 **nft 后端**（走 NF_TABLES，那条链开了，且实测
+#     `iptables-nft -L` 能出 Chain）。见 iptables 配方的 --enable-nftables。
 CONFIG_IP_NF_TARGET_REJECT=y

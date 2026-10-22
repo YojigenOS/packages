@@ -28,9 +28,19 @@ case "$1" in
 
     mkdir -p /var/lib/docker /var/run /etc/docker
 
-    if [ -S /var/run/docker.sock ]; then
-      echo "  dockerd 已经在跑（/var/run/docker.sock 在）"
+    # ★★ 2026-10-22：判断"已经在跑"不能只看 socket。上一次异常退出会留下一个
+    #   死的 /var/run/docker.sock，而 `-S` 只问"这个文件是不是 socket" ——
+    #   于是这里会报"已经在跑"、什么都不做，而进程根本没有。
+    #
+    #   实测撞到：dockerd 因为缺 iptables 退出之后，socket 留在那儿；再
+    #   `service start docker` 就打印"已经在跑"并 exit 0 —— **一次静默的空转**。
+    if [ -S /var/run/docker.sock ] && pgrep -x dockerd >/dev/null 2>&1; then
+      echo "  dockerd 已经在跑（进程在，socket 在）"
       exit 0
+    fi
+    if [ -S /var/run/docker.sock ]; then
+      echo "  清掉上一次留下的死 socket（/var/run/docker.sock）"
+      rm -f /var/run/docker.sock
     fi
 
     echo "  起 dockerd…"

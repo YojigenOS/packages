@@ -25,7 +25,7 @@
 [package]
 name        = "iptables"
 version     = "1.8.12"
-release     = 1
+release     = 2
 date        = 2026-10-22T07:30:00Z
 description = "防火墙与 NAT 规则工具（legacy + nft 两个后端）"
 url         = "https://netfilter.org/projects/iptables/"
@@ -49,7 +49,15 @@ configure = [
     "--prefix=/usr",
     "--sbindir=/usr/sbin",
     "--disable-static",
-    # ★ 只留我们真需要的两个后端。nfsim 是给规则打分用的测试工具，
-    #   要 libpcap 和一堆仿真依赖 —— 那是给 iptables 自己开发用的。
+    # ★★ 必须开这个：我们的内核里 legacy 那套表不存在
+    #   （/proc/net/ip_tables_names 是空的，实测 iptables -L 报
+    #   "Table does not exist"）。只有 nft 后端能用 —— 它走 NF_TABLES。
+    #
+    #   而 --enable-nftables 让 make install 把 iptables 那个名字指向
+    #   iptables-nft。不加这个开关，装出来的 iptables 是 legacy，
+    #   dockerd 一 exec 就失败。
+    "--enable-nftables",
+    # nfsim 是给规则打分用的测试工具，要 libpcap 和一堆仿真依赖 ——
+    # 那是给 iptables 自己开发用的。
     "--disable-nfsim",
 ]

@@ -44,7 +44,7 @@ build() {
     #
     #   ★★ 判据是【产物】不是【工具的话】：把片段里每个符号拿去 .config 里找。
     #     `=n` 的那种要注意：olddefconfig 会把它写成 `# CONFIG_X is not set`。
-    缺=""
+    MISSING=""
     while IFS= read -r line; do
       case "$line" in
         CONFIG_*=*) ;;
@@ -53,13 +53,13 @@ build() {
       sym="${line%%=*}"
       val="${line#*=}"
       if [ "$val" = "n" ]; then
-        grep -qE "^# ${sym} is not set$|^${sym}=n$" .config || 缺="$缺 $sym"
+        grep -qE "^# ${sym} is not set$|^${sym}=n$" .config || MISSING="$MISSING $sym"
       else
-        grep -q "^${sym}=" .config || 缺="$缺 $sym"
+        grep -q "^${sym}=" .config || MISSING="$MISSING $sym"
       fi
     done < "$PKGDIR/config.fragment"
-    if [ -n "$缺" ]; then
-      echo "✗ 片段里这些 CONFIG_ 没进最终 .config：$缺" >&2
+    if [ -n "$MISSING" ]; then
+      echo "✗ 片段里这些 CONFIG_ 没进最终 .config：$MISSING" >&2
       echo "  可能的原因：（a）这个内核版本里符号改名或删除了；" >&2
       echo "              （b）它的依赖没满足（例如写了 =y 而依赖是 =m，而我们是 MODULES=n）。" >&2
       echo "  ★ 这两种都不会让 merge_config.sh 报错 —— 它只是把那一行丢掉。" >&2
