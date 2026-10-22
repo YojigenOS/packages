@@ -6,14 +6,21 @@
 #   CONFIG_NF_TABLES / NFT_NAT / NFT_MASQ / NFT_CT），所以这个包一装上，
 #   `iptables-nft` 就能真的下规则 —— 不需要再动内核。
 #
-# ★ 版本选 1.2.8 而不是最新的 1.3.0：1.3.0 是 2026 年的新主版本，而 iptables
-#   1.8.12 发布的年代对着 1.2.x 测过。**保守一次，等真出问题再升** —— 反正
-#   `skirt stale` 会因为摘要变了提示重建。
+# ★★ 2026-10-22 升到 1.3.1 —— 因为 `nftables` 要它。
+#
+#   nftables 1.1.6 的 configure.ac 里那条是硬的：
+#
+#       PKG_CHECK_MODULES([LIBNFTNL], [libnftnl >= 1.3.1])
+#
+#   而我们原来装的是 1.2.8（当时为了对着 iptables 1.8.12 保守一次）。现在
+#   `nft` 那个程序是 1Panel 防火墙页的判据（源码里 38 处），所以这条必须满足。
+#
+#   ★ 1.3.1 同时满足 iptables 1.8.12 那句（>= 1.2.x），所以三者都在一套上。
 
 [package]
 name        = "libnftnl"
-version     = "1.2.8"
-release     = 1
+version     = "1.3.1"
+release     = 2
 date        = 2026-10-22T07:30:00Z
 description = "nftables 的用户态消息库（iptables-nft 的后端）"
 url         = "https://netfilter.org/projects/libnftnl/"
@@ -23,7 +30,7 @@ license     = "GPL-2.0-or-later"
 # ★ 注意扩展名：libnftnl 发的是 .tar.xz，而 libmnl 还是 .tar.bz2。
 #   同一批项目里两种格式并存 —— 写配方时照它的实际名字来。
 url    = "https://netfilter.org/projects/libnftnl/files/libnftnl-$VERSION.tar.xz"
-sha256 = "37fea5d6b5c9b08de7920d298de3cdc942e7ae64b1a3e8b880b2d390ae67ad95"
+sha256 = "607da28dba66fbdeccf8ef1395dded9077e8d19f2995f9a4d45a9c2f0bcffba8"
 
 [dependencies.aarch64]
 runtime = ["glibc", "libmnl"]
