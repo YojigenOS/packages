@@ -10,7 +10,7 @@ version     = "5.3"
 #
 #   这是第一个用上新三元组的包。其余 autotools 包会在下次重建时跟上——驱动层
 #   已经会无条件加 --host 了（37 个包共用那一处）。
-release     = 2
+release     = 3
 date        = 2026-10-12T18:00:00Z
 description = "Bourne Again Shell，命令行解释器"
 url         = "https://www.gnu.org/software/bash/"
@@ -47,3 +47,35 @@ build   = ["make", "gettext", "gcc", "readline"]
 [build]
 type      = "autotools"
 configure = ["--prefix=/usr", "--without-bash-malloc"]
+
+# ── bash-binsh：让 /bin/sh 指向 bash ─────────────────────────────────────────
+#
+# ★ 这一个是 `dash` 配方注释里预言过的那个（"将来要的话照这个写"），2026-10-22
+#   真的需要了 —— 起因是 1Panel：
+#
+#       /etc/init.d/1panel-core: 124: Syntax error: "(" unexpected
+#
+#   它的 init 脚本在 `#!/bin/sh` 里写了 bash 数组（`local rc_dirs=( … )`）。
+#   而 dash 不认 —— 于是那个服务【装了但重启之后起不来】。
+#
+# ── 而这不是"对 dash 那次决定的推翻"，是【让风味自己选】───────────────
+#
+#   dash 配方里那条理由仍然成立：**只要 /bin/sh 是 bash，大家就会用扩展**，
+#   那是个可移植性陷阱。所以默认（base / devel / minimal）仍然是 dash。
+#
+#   而 `server` 是【要跑别人写的安装脚本】的那一类 —— 而生态里大多数这类脚本
+#   假设 /bin/sh 是 bash（RHEL 系就是这样，而 1Panel 的用户大多在 RHEL 系）。
+#   让 server 用 bash，是把"纪律"和"跑得起"分开处理的正确位置：**风味选**。
+#
+# ★ provider-priority 比 dash-binsh（100）**小**：
+#   两个都装上时 apk 按这个数解析 `/bin/sh` 的提供者。而实际上两个都装会撞
+#   同一个文件（usr/bin/sh），所以风味只能装一个 —— 见 distro 那边的
+#   `exclude = ["dash-binsh"]`。
+[[subpackage]]
+name        = "bash-binsh"
+description = "让 /bin/sh 指向 bash（server 那类风味用）"
+files       = ["usr/bin/sh"]
+depends     = ["bash", "glibc"]
+provides    = ["/bin/sh"]
+provider-priority = 90
+
