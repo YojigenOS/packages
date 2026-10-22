@@ -36,7 +36,18 @@ build() {
   sh unix/configure \
     "$(command -v gcc) -std=gnu89 -Wno-implicit-function-declaration -Wno-error=implicit-function-declaration -DNO_LCHMOD -DLARGE_FILE_SUPPORT -DZIP64_SUPPORT -DUNICODE_SUPPORT" \
     "-I. -DUNIX" "" || true
-  make -f unix/Makefile linux
+  # ★★ 用 `linux_noasm`，不是 `linux` —— 上游自己在 Makefile 里写了：
+  #
+  #       # NOTE:  use linux_noasm target for non-Intel Linux compiles.
+  #
+  #   而 `linux` 那个目标硬编 `-DASM_CRC` + `-Di386`，去编 `crc_i386.S` ——
+  #   那是 1993 年的 i386 汇编，在 x86_64 上直接非法：
+  #
+  #       crc_i386.S:203: Error: invalid instruction suffix for `push'
+  #
+  #   ★ 更糟的是它**在 aarch64 上也是错的目标**（那里根本没有 i386）。
+  #     `linux_noasm` 用 C 版本的 CRC，两个架构都对。
+  make -f unix/Makefile linux_noasm
 }
 
 package() {
