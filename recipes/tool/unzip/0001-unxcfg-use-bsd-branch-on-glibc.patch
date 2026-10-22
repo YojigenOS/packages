@@ -1,0 +1,25 @@
+`unix/unxcfg.h` 在**非 BSD** 的分支里无条件声明：
+
+    struct tm *gmtime(), *localtime();
+
+那是 1993 年的写法（K&R 隐式 int、不 include 原型）。而现代 glibc 的
+<time.h> 只声明 `struct tm *gmtime(const time_t *)` —— 参数表不同，于是
+`conflicting types for 'gmtime'`。
+
+★ 而这个文件自己已经写好了正确的路：`#ifdef BSD` 那个分支对 glibc 会
+  `#include <time.h>`（见里面那句 `defined(__GLIBC__)`）并且**不声明**它们。
+  也就是说：**glibc 该走 BSD 分支**，只是 1993 年写这段时 glibc 还不存在。
+
+一行修：让 `__GLIBC__` 也进那个分支。
+
+--- a/unix/unxcfg.h
++++ b/unix/unxcfg.h
+@@ -109,7 +109,7 @@
+ #  endif
+ #endif
+ 
+-#ifdef BSD
++#if defined(BSD) || defined(__GLIBC__)
+ #  include <sys/time.h>
+ #  include <sys/timeb.h>
+ #  if (defined(_AIX) || defined(__GLIBC__) || defined(__GNU__))

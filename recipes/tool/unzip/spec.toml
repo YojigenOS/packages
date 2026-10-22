@@ -10,7 +10,7 @@
 [package]
 name        = "unzip"
 version     = "6.0"
-release     = 6
+release     = 7
 date        = 2026-10-22T10:00:00Z
 description = "解 .zip 压缩包（Info-ZIP）"
 url         = "https://infozip.sourceforge.net/UnZip.html"
@@ -30,3 +30,5 @@ build   = ["make", "gcc"]
 
 [build]
 type = "custom"
+# ★ unxcfg.h 在非 BSD 分支里声明老签名的 gmtime/localtime —— 见这个补丁
+patches = ["0001-unxcfg-use-bsd-branch-on-glibc.patch"]
