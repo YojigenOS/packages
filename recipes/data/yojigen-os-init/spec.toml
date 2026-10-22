@@ -10,7 +10,7 @@
 [package]
 name        = "yojigen-os-init"
 version     = "1.0"
-release     = 12
+release     = 13
 date        = 2026-10-11T12:30:00Z
 description = "开机后运行的第一个程序（/init）"
 url         = "https://github.com/YojigenOS/packages"

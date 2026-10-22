@@ -50,14 +50,22 @@ After=network.target
 Wants=basic.target
 
 [Service]
-Type=forking
-# ★ 就绪判据交给定义自己 —— 它比 systemd 更清楚"什么算起来了"。
-#   （实测教训：只看 socket 存在会误判，见 docker 那份定义里的注释）
+# ★★ `Type=oneshot` + `RemainAfterExit=yes`，不是 `forking`。
+#
+#   理由：我们的定义是**一个会返回的脚本** —— 它 `dockerd &` 之后等到就绪
+#   再 exit 0，自己不写 pid 文件。而 `Type=forking` 要求 `PIDFile=`，
+#   没有它就报 "Can't open PID file" 然后把服务判成失败。
+#
+#   而 oneshot + RemainAfterExit 的语义正好对上：
+#     · start 那次调用**返回 0** 就算起来了
+#     · 之后 systemd 认为它"在跑"，直到 ExecStop 被调用
+#
+#   ★ 就绪判据仍然交给定义自己 —— 它比 systemd 更清楚"什么算起来了"
+#     （实测教训：只看 socket 存在会误判，见 docker 那份定义里的注释）。
+Type=oneshot
+RemainAfterExit=yes
 ExecStart=$DEFS/$name start
 ExecStop=$DEFS/$name stop
-# ★ forking 类型要求有 PIDFile。而我们的定义不写 pid 文件（它们自己管进程），
-#   所以用 RemainAfterExit —— "start 返回 0 就算起来了"。
-RemainAfterExit=yes
 TimeoutStartSec=120
 # 重启策略：只在异常退出时重来，次数有上限（不做成"永远重试"）
 Restart=on-failure
