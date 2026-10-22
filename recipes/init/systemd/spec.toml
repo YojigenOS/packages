@@ -45,7 +45,7 @@
 [package]
 name        = "systemd"
 version     = "258"
-release     = 3
+release     = 4
 date        = 2026-10-22T10:30:00Z
 description = "系统与服务管理器（决策记录 0022：自己建）"
 url         = "https://systemd.io/"

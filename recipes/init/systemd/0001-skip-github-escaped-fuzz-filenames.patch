@@ -1,34 +1,40 @@
-GitHub 的 tag tarball 会把文件名里的反斜杠转义成 `\x2d`（十六进制）。
+GitHub 的 tag tarball 会把文件名里的反斜杠写成 `\x2d`，而 `sh` 展开通配符时
+会把那个反斜杠**吃掉**、`x2d` 变 `-`：
 
-    真实文件名   dm-back\slash.swap
-    tarball 里   dm-back\x2d slash.swap      ← 字面上没有反斜杠
+    盘上的文件    dm-back\x2dslash.swap      （22 字节）
+    sh 展开得到   dm-back-slash.swap         （18 字节）
 
-而 `test/fuzz/meson.build` 那段本来就为这个坑写了跳过：
+于是 meson 拿到的名字和盘上的**不是一个字符串**：
 
-        # Also, backslashes get mangled, so skip test. See
-        # https://github.com/mesonbuild/meson/issues/1564.
-        if p.contains('\\')
-                continue
-        endif
+    test/fuzz/meson.build: ERROR:
+        File fuzz-unit-file/dm-back-slash.swap does not exist.
 
-★ 但它只看**字面**反斜杠 —— 而转义之后那个字符不存在了，于是这层保护失效：
+而那段本来就为这个坑写了跳过，但它判的是 `p.contains('\\')` —— 而 `p` 是
+**sh 展开之后**的字符串，反斜杠已经没了，所以永远判断不到。
 
-        test/fuzz/meson.build:61:52: ERROR:
-            File fuzz-unit-file/dm-back-slash.swap does not exist.
-
-一行修：把 `\x2d` 这个转义形式也当成"被搞坏的名字"，同样跳过。
+★ 修法不是补一个字符串判断（那要猜 shell 怎么吃掉转义），而是**整段包起来**：
+  那个 foreach 只往 `fuzz_regression_tests` 里塞东西，而那个字典只在
+  `oss-fuzz` / `llvm-fuzz` 构建里才有意义 —— 我们两个都关着。
 
 --- a/test/fuzz/meson.build
 +++ b/test/fuzz/meson.build
-@@ -55,7 +55,10 @@
-         #
-         # Also, backslashes get mangled, so skip test. See
-         # https://github.com/mesonbuild/meson/issues/1564.
--        if p.contains('\\')
-+        #
-+        # And GitHub's tag tarballs escape those backslashes as \x2d, so the
-+        # literal backslash is gone and the check above no longer catches it.
-+        if p.contains('\\') or p.contains('\\x2d')
-                 continue
-         endif
-         fuzzer = fs.name(fs.parent(p))
+@@ -45,6 +45,13 @@
+         out = run_command(sh, '-c', 'cd "@0@"; echo @1@/*/*'.format(meson.project_source_root(), fuzz_testsdir), check: true)
+ endif
+ 
++# Only collect the in-repo regression inputs for actual fuzzer builds.
++#
++# Otherwise GitHub's tag tarballs break us: they escape the backslash in
++# dm-back\slash.swap as \x2d, and sh eats that backslash when expanding the
++# glob above, so meson ends up looking for "dm-back-slash.swap".
++if fuzzer_build
++
+ # Add crafted fuzz inputs we have in the repo
+ foreach p : out.stdout().split()
+         # Remove the last entry which is ''.
+@@ -61,3 +68,5 @@
+         dict += { 'files' : dict.get('files', []) + files(fuzzer / fuzz_in) }
+         fuzz_regression_tests += { fuzzer : dict }
+ endforeach
++
++endif
