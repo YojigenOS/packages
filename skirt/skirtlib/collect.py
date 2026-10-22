@@ -306,6 +306,11 @@ def collect(spec: dict, arch: str,
         if priority is not None:
             meta["provider_priority"] = priority
 
+        # ★ replaces：这个包的文件和别的包撞在一起时谁赢（2026-10-22 加）。
+        #   写在 spec 的 [package] 段里，形如 replaces = ["yojigen-os-init"]。
+        if src.get("replaces"):
+            meta["replaces"] = list(src["replaces"])
+
         # ★ build_key —— 这个包的身份，从内容算出来。见 buildkey.py 顶上那段。
         #
         #   两个地方都写：

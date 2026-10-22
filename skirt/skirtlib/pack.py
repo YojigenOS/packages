@@ -415,6 +415,14 @@ def info_fields(job: Job, depends: list[str], provides: list[str]
         fields.append(("provides", " ".join(provides)))
     if m.get("provider_priority") is not None:
         fields.append(("provider-priority", str(m["provider_priority"])))
+    # ★★ replaces：这个包的文件和别的一个包【撞在一起】时，谁赢。
+    #   2026-10-22 加，起因很具体：systemd 也提供 usr/sbin/reboot 和 poweroff，
+    #   而 `yojigen-os-init` 也在提供（那两个脚本自己的注释里就写着
+    #   "Alpine → busybox，Debian → systemd"）。装 systemd 时 apk 报
+    #       ERROR: trying to overwrite usr/sbin/reboot owned by yojigen-os-init
+    #   —— 而这两个命令该由 systemd 接管。
+    if m.get("replaces"):
+        fields.append(("replaces", " ".join(m["replaces"])))
     return [(k, v) for k, v in fields if v]
 
 

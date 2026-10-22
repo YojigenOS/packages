@@ -45,11 +45,20 @@
 [package]
 name        = "systemd"
 version     = "258"
-release     = 5
+release     = 6
 date        = 2026-10-22T10:30:00Z
 description = "系统与服务管理器（决策记录 0022：自己建）"
 url         = "https://systemd.io/"
 license     = "LGPL-2.1-or-later"
+# ★★ systemd 也提供 usr/sbin/reboot 和 usr/sbin/poweroff，而 `yojigen-os-init`
+#   也在提供（那两个脚本就是"没有 systemd 时的替代"，它们自己的注释里写着
+#   "Alpine → busybox，Debian → systemd"）。
+#
+#   不写这一行的话，装 systemd 时 apk 直接报：
+#       ERROR: trying to overwrite usr/sbin/reboot owned by yojigen-os-init-1.0-r11
+#
+#   ★ 而这两个命令该由 systemd 接管 —— 它知道 cgroup 里还有什么在跑。
+replaces    = ["yojigen-os-init"]
 
 [[source]]
 # ★ 用 upstream 的 tag tarball（不是 release 里的 .tar.gz）：
