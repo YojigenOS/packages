@@ -1,0 +1,36 @@
+# flit_core —— 另一个 Python 构建后端
+#
+# ★ 为什么需要它：**不同的包用不同的构建后端**，而这件事在
+#   `pyproject.toml` 里写着：
+#
+#       markupsafe   build-backend = "setuptools.build_meta"   → 要 setuptools
+#       jinja2       build-backend = "flit_core.buildapi"      → 要 flit_core
+#
+#   而 `pip wheel --no-build-isolation` **不装后端** —— 它假设环境里已经有。
+#   所以缺哪个就报 `BackendUnavailable: Cannot import 'flit_core.buildapi'`。
+#
+# ★ 纯 Python、有现成 wheel，不用编。
+
+[package]
+name        = "flit-core"
+version     = "4.1.0"
+release     = 1
+date        = 2026-10-22T12:00:00Z
+description = "Python 构建后端（jinja2 用的是它，不是 setuptools）"
+url         = "https://pypi.org/project/flit_core/"
+license     = "BSD-3-Clause"
+
+[[source]]
+url    = "https://files.pythonhosted.org/packages/py3/f/flit-core/flit_core-$VERSION-py3-none-any.whl"
+sha256 = "17398cdd2c38b24047a5a9c93089ec5c0bf12ec3d1469bbf69c27ed7965299db"
+
+[dependencies.aarch64]
+runtime = ["python3"]
+build   = ["python3"]
+
+[dependencies.x86_64]
+runtime = ["python3"]
+build   = ["python3"]
+
+[build]
+type = "custom"

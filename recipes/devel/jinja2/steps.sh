@@ -1,5 +1,5 @@
 #!/bin/sh
-# jinja2 —— 用 pip 从 sdist 编出 wheel，再装进 $PKGDEST。
+# jinja2 —— 用 pip 从 sdist 编出 wheel，再装进 ${PKGDEST}。
 #
 # ★★ 两个坑（2026-10-22 都撞过）：
 #
@@ -8,7 +8,7 @@
 #
 #   2. **`build` 和 `package` 是【分两次调用】run.sh 的**（package 要以 root 跑）。
 #      所以 build 阶段产出的东西必须落在**两个阶段都看得见**的地方 ——
-#      `/tmp/wheels`（同一个容器里）。不要用 $BUILDDIR（它只在一次调用里有意义）。
+#      `/tmp/wheels`（同一个容器里）。不要用 ${BUILDDIR}（它只在一次调用里有意义）。
 #
 # ★ `--no-build-isolation`：默认 pip 会为构建另开隔离环境、**从网上下载**
 #   setuptools —— 构建里不该有网络。关掉它，用我们自己那份（devel/setuptools）。

@@ -26,11 +26,11 @@ sha256 = "0137fb05990d35f1275a587e9aee6d56da821fc83491a0fb838183be43f66d6d"
 [dependencies.aarch64]
 # ★ runtime 里有 markupsafe —— jinja2 在 import 时就要它
 runtime = ["glibc", "python3", "markupsafe"]
-build   = ["python3", "pip", "setuptools", "markupsafe"]
+build   = ["python3", "pip", "flit-core", "markupsafe"]
 
 [dependencies.x86_64]
 runtime = ["glibc", "python3", "markupsafe"]
-build   = ["python3", "pip", "setuptools", "markupsafe"]
+build   = ["python3", "pip", "flit-core", "markupsafe"]
 
 [build]
 type = "custom"
