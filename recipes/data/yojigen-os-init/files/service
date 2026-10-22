@@ -157,6 +157,18 @@ case "$ACT" in
     need_def "$NAME"
     run_def "$NAME" stop ;;
 
+  restart)
+    [ -n "$NAME" ] || { usage; exit 1; }
+    need_def "$NAME"
+    if sysv_def "$NAME"; then
+      # SysV 的定义自己有 restart，原样交给它（它知道要不要等进程退出）
+      "/etc/init.d/$NAME" restart
+    else
+      run_def "$NAME" stop
+      sleep 1
+      run_def "$NAME" start
+    fi ;;
+
   status)
     [ -n "$NAME" ] || { usage; exit 1; }
     need_def "$NAME"
