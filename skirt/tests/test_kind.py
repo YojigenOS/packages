@@ -181,6 +181,17 @@ class TestKindMatchesArtifacts(unittest.TestCase):
             看了.append("usr/libexec(不在)")
 
         hdr = bool(list(payload.rglob("*.h")))
+
+        # ★★ 纯 Python 的包：装到 site-packages 下，是 .py + dist-info
+        #   （2026-10-22 加。撞到的是 flit-core / jinja2 / markupsafe /
+        #   setuptools —— 四个都是"拿它来构建"的东西，而它们既没有可执行
+        #   文件也没有 C 头文件）。
+        #
+        #   ★ 判据用 site-packages 下的 *.py，不用"payload 里有 .py" ——
+        #     后者太宽（任何一个包顺手带个脚本都算）。
+        py = bool(list(payload.rglob("usr/lib/python3*/site-packages/**/*.py")))
+        if py:
+            hdr = True
         文件 = [str(f.relative_to(payload)) for f in payload.rglob("*") if f.is_file()]
         # ★★ 文件少的时候【把它们列出来】—— 2026-10-17。
         #   那两轮里 meson 和 pip 都是"payload 里 1 个文件"，而"1 个"不说
@@ -217,10 +228,13 @@ class TestKindMatchesArtifacts(unittest.TestCase):
             elif kind == "data" and so:
                 bad.append(f"{name}: data 但有 .so——数据包不该有代码")
             elif kind == "devel" and not (exe or hdr):
-                # devel 给你的是「拿它来构建」的东西——工具【或者】头文件。
-                # linux-headers 就是纯头文件包：一个可执行文件都没有，但没它
-                # 你构建不了任何东西。
-                bad.append(f"{name}: devel 但既没有可执行文件，也没有头文件")
+                # devel 给你的是「拿它来构建」的东西——工具【或者】头文件
+                # 【或者 Python 模块】。
+                # linux-headers 是纯头文件包；jinja2 是纯 Python 包（只有
+                # site-packages 里的 .py）。两个都是"一个可执行文件都没有，但
+                # 没它你构建不了任何东西"。
+                bad.append(f"{name}: devel 但既没有可执行文件，也没有头文件，"
+                           f"也没有 Python 模块")
             elif kind == "kernel" and not (payload / "boot" / "vmlinuz").exists():
                 # 内核单独一类，因为它的产物形态是独有的：既不是库，也不是
                 # usr/bin 下的命令，也没有头文件（那是 linux-headers 的事）。
