@@ -1,0 +1,111 @@
+#!/bin/sh
+# service —— 启用 / 停用 / 起停一个服务。
+#
+# 决策记录 0024：**服务由风味启用，包只提供定义。**
+#
+#   /usr/lib/yojigen-os/services/<名字>   定义（包提供，只有 start / stop）
+#   /etc/services/<名字>                  启用的软链（属于管理员，走 conffiles）
+#
+# 而 /init 在跑完 boot.d 之后，逐个 start 这个目录里启用的那些。
+#
+# ★ 为什么"启用"是一条软链而不是一份配置里的名字列表：
+#   软链在盘上看得见（`ls /etc/services/`），而删掉它就是停用 —— 不需要一个
+#   解析器，也不会出现"配置里写了但那个文件不在"的悬空状态。
+#
+# ★★ 而这份脚本里【标识符全是 ASCII】：变量名和函数名在 POSIX sh 里只允许
+#    [A-Za-z_][A-Za-z0-9_]*。中文注释随便写，中文【标识符】会被 dash 拒（函数名）
+#    或者静默变成空（变量名）—— 后者更糟，因为它不报错。
+
+SETS=/etc/services
+DEFS=/usr/lib/yojigen-os/services
+
+usage() {
+  cat <<EOF
+用法: service <动作> [名字]
+
+  list              列出所有定义，以及启用/停用
+  enable <名字>     开机自启
+  disable <名字>    取消自启
+  start <名字>      现在起一个（不改变自启状态）
+  stop <名字>       现在停一个
+  status <名字>     它这次开机起过没有
+
+定义在 ${DEFS}，启用状态在 ${SETS}。
+EOF
+}
+
+list_all() {
+  if [ ! -d "$DEFS" ] || [ -z "$(ls -A "$DEFS" 2>/dev/null)" ]; then
+    echo "  （这个系统里一个服务定义都没有）"
+    return 0
+  fi
+  n_on=0
+  n_off=0
+  for d in "$DEFS"/*; do
+    [ -e "$d" ] || continue
+    n=$(basename "$d")
+    if [ -e "$SETS/$n" ]; then
+      echo "  ✓ $n    （已启用）"
+      n_on=$((n_on + 1))
+    else
+      echo "  · $n    （未启用）"
+      n_off=$((n_off + 1))
+    fi
+  done
+  echo
+  echo "  已启用 $n_on 个，未启用 $n_off 个。"
+}
+
+need_def() {
+  if [ ! -e "$DEFS/$1" ]; then
+    echo "✗ 没有这个服务: $1" >&2
+    echo "  有的定义: $(ls "$DEFS" 2>/dev/null | tr '\n' ' ')" >&2
+    exit 1
+  fi
+}
+
+ACT=$1
+NAME=$2
+
+case "$ACT" in
+  list|"")
+    list_all ;;
+
+  enable)
+    [ -n "$NAME" ] || { usage; exit 1; }
+    need_def "$NAME"
+    mkdir -p "$SETS"
+    ln -sf "$DEFS/$NAME" "$SETS/$NAME"
+    echo "  已启用 ${NAME}（下次开机会自己起）" ;;
+
+  disable)
+    [ -n "$NAME" ] || { usage; exit 1; }
+    if [ -e "$SETS/$NAME" ]; then
+      rm -f "$SETS/$NAME"
+      echo "  已停用 $NAME"
+    else
+      echo "  $NAME 本来就没启用"
+    fi ;;
+
+  start)
+    [ -n "$NAME" ] || { usage; exit 1; }
+    need_def "$NAME"
+    "$DEFS/$NAME" start ;;
+
+  stop)
+    [ -n "$NAME" ] || { usage; exit 1; }
+    need_def "$NAME"
+    "$DEFS/$NAME" stop ;;
+
+  status)
+    [ -n "$NAME" ] || { usage; exit 1; }
+    need_def "$NAME"
+    if grep -q "^$NAME " /run/yojigen-os/services.log 2>/dev/null; then
+      echo "  $NAME: 这次开机起过（见 /run/yojigen-os/services.log）"
+    else
+      echo "  $NAME: 这次开机没起过"
+    fi ;;
+
+  *)
+    usage; exit 1 ;;
+esac

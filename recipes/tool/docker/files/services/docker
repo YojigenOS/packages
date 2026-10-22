@@ -1,0 +1,67 @@
+#!/bin/sh
+# dockerd 的服务定义（决策记录 0024）。
+#
+# ★ 它原来是 `boot.d/30-docker` —— 那是错的：boot.d 是【系统】的启动阶段
+#   （挂 cgroup、设 hostname、扩根分区），而 docker 是一个应用。它没起来，
+#   系统照样是系统。
+#
+# ★★ 而这个定义【默认不启用】：装 docker 不等于开机自启。启用是风味的决定
+#   （组装镜像时）或者管理员的决定（`service enable docker`）。而在一台
+#   【正在跑的系统】上 `apk add docker`，post-install 会替你做这件事 ——
+#   判据见 ../scripts/post-install。
+#
+# ── 这里【没有】"按内核能力挑参数"的逻辑 ────────────────────────────────────
+#
+# 2026-10-22 写过一版：没 overlayfs 就 `--storage-driver=vfs`、没 iptables 就
+# `--iptables=false`、bridge 起不来就 `--bridge=none`。**去掉了**：
+#
+#   · 那些缺口是【内核配置】的事，已经补进 config.fragment（实测重启后
+#     overlay / bridge / BPF / cgroup2 全在）；
+#   · 自适应参数会把"内核少了一样"变成**静默降级** —— 系统照样起、docker 照样
+#     能用，只是慢（vfs）、没独立网络（bridge=none）。而没人会去查为什么。
+#
+# ★ 所以：**dockerd 按它该有的样子起**。缺什么它自己报错，那正是要看见的。
+
+case "$1" in
+  start)
+    [ -x /usr/bin/dockerd ] || { echo "  ⚠ dockerd 不在"; exit 1; }
+
+    mkdir -p /var/lib/docker /var/run /etc/docker
+
+    if [ -S /var/run/docker.sock ]; then
+      echo "  dockerd 已经在跑（/var/run/docker.sock 在）"
+      exit 0
+    fi
+
+    echo "  起 dockerd…"
+    /usr/bin/dockerd >>/var/log/dockerd.log 2>&1 &
+
+    # 等 socket 建出来，最多 10 秒。
+    i=0
+    while [ ! -S /var/run/docker.sock ] && [ "$i" -lt 20 ]; do
+      i=$((i + 1))
+      sleep 0.5 2>/dev/null || sleep 1
+    done
+
+    if [ -S /var/run/docker.sock ]; then
+      echo "  ✓ dockerd 起来了"
+    else
+      echo "  ⚠ dockerd 没起来 —— 见 /var/log/dockerd.log 的最后几行："
+      tail -3 /var/log/dockerd.log 2>/dev/null | sed 's/^/     /'
+      exit 1
+    fi
+    ;;
+
+  stop)
+    if pkill -x dockerd 2>/dev/null; then
+      echo "  dockerd 停了"
+    else
+      echo "  dockerd 本来就没在跑"
+    fi
+    ;;
+
+  *)
+    echo "用法: docker start|stop" >&2
+    exit 1
+    ;;
+esac

@@ -44,7 +44,17 @@ package() {
   install -d -m 700 "$d/var/lib/docker"
   install -d -m 755 "$d/var/run"
 
-  # ── 3. 没有 3 ─────────────────────────────────────────────────────────────
+  # ── 3. 服务定义（决策记录 0024）───────────────────────────────────────────
+  #
+  # ★ 装的是【定义】，不是启用。装 docker ≠ 开机自启：启用是风味的决定（组装
+  #   镜像时）或者管理员的决定（`service enable docker`）。
+  #
+  #   而"在一台跑着的系统上 apk add docker"这条路上，scripts/post-install 会
+  #   替你启用并起起来 —— 判据是 /run/yojigen-os/booted 在不在。
+  install -Dm755 "$PKGDIR/files/services/docker" \
+      "$d/usr/lib/yojigen-os/services/docker"
+
+  # ── 4. 没有 4 ─────────────────────────────────────────────────────────────
   #
   # ★ 这里【曾经】装过一个 `boot.d/30-docker`（起 dockerd 的钩子），2026-10-22 拿掉了。
   #

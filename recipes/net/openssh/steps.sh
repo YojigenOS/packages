@@ -53,7 +53,11 @@ package() {
     #
     # /init 按名字顺序跑 /usr/lib/yojigen-os/boot.d/ 下的东西。这个钩子做两件
     # 事：没有主机密钥就生成，然后起 sshd。
-    install -Dm755 "$PKGDIR/files/20-sshd" "$PKGDEST/usr/lib/yojigen-os/boot.d/20-sshd"
+    # ★ 2026-10-22：从 boot.d 搬到【服务定义】（决策记录 0024）。
+    #   boot.d 是系统的启动阶段，不是外部软件的服务表。而"要不要开机自启"
+    #   由风味声明（`services = ["sshd"]`），不再由"装没装这个包"决定。
+    install -Dm755 "$PKGDIR/files/services/sshd" \
+        "$PKGDEST/usr/lib/yojigen-os/services/sshd"
 
     # ── 3b. "保证 root 公钥在"那个小工具 ────────────────────────────────
     #

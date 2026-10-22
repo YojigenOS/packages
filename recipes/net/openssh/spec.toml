@@ -44,7 +44,7 @@ name        = "openssh"
 #
 #   Alpine 也是写作 10.5_p1。——所以这里不是"翻译一下"，是两套语法各写各的。
 version     = "10.5_p1"
-release     = 8
+release     = 9
 date        = 2026-10-12T10:15:00Z
 description = "SSH 客户端与服务端"
 url         = "https://www.openssh.com/"

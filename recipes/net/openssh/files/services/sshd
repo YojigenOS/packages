@@ -1,0 +1,155 @@
+#!/bin/sh
+# sshd 的服务定义（决策记录 0024）。
+#
+# 这里原来叫 `boot.d/20-sshd` —— 一个【外部软件】把自己的启动塞进了系统的
+# 启动阶段。而那条分界应该是：
+#
+#   boot.d   【没有它这台机器不算能用】—— 挂 cgroup、设 hostname、扩根分区
+#   服务     它没起来，系统照样是系统 —— sshd、dockerd
+#
+# 所以它搬到这里，内容基本原样：那几件事（解开 root、生成主机密钥、建 /run/sshd
+# 和 /var/empty、补公钥、起 sshd）本来就是"起 sshd"这件事的全部。
+#
+# ★ 而搬过来之后多了一条好处：**它不再是无条件执行的**。原来的 boot.d 钩子只要
+#   装了 openssh 就会在每次开机跑（包括容器镜像里，只要有人跑 /init）；现在只有
+#   风味声明 `services = ["sshd"]` 才有那条启用软链。
+#
+# ★★ 用法：`service enable sshd` / `service start sshd` / `service stop sshd`。
+
+case "$1" in
+  start)
+    # 首启：生成 SSH 主机密钥（如果还没有），然后启动 sshd。
+    #
+    # 由 /init 按 /usr/lib/yojigen-os/boot.d/ 下的名字顺序调用。
+    #
+    # 【为什么不把主机密钥打进包】
+    #
+    # 见 ../spec.toml。一句话：带了就是所有机器共用同一把主机密钥，那等于没有。
+    # 所以每台机器第一次启动时自己生成——`ssh-keygen -A` 按 sshd_config 里出现的
+    # 类型逐个生成，只做一次（RSA 2048 要几百毫秒，之后不再有代价）。
+    #
+    # 【为什么这里不能失败**
+    #
+    # 启动脚本的责任是"让它起来"，不是"拦住启动"。起不来就吵一声，继续跑——
+    # 用户还能从串口/VNC 进去查。反过来说，如果这里 exit 1，整个系统就停在
+    # 一个连 shell 都没有的地方，那比 sshd 没起来严重得多。
+
+    set -u
+
+    # ── root 在 /etc/shadow 里是锁定的 ──────────────────────────────────────────
+    #
+    # ★ 这一条是真机上才暴露的：**sshd 对锁定账号拒绝一切认证，包括公钥。**
+    #
+    #   /etc/shadow 里那句注释说明了它的来历：
+    #
+    #       # 没有密码（!），root 只能通过提权或直接访问进入。
+    #       # 这是给【容器基础镜像】用的合理默认值；真机上【安装器会设置 root 密码】。
+    #       root:!::0:::::
+    #
+    #   而 DD 通道【没有安装器】——没有任何东西会去解开 root。于是：
+    #   系统起来了、sshd 起来了、公钥也在 /root/.ssh/authorized_keys 里，
+    #   但钥匙被拒：
+    #
+    #       root@…: Permission denied (publickey,password,keyboard-interactive)
+    #
+    #   而"连不上"在一台云主机上就是变砖：没有串口，VNC 又是另一回事。
+    #
+    # ★ 首启做，不在构建时做——理由和主机密钥一样：构建时做等于所有机器共用一个值。
+    #
+    # ★ 换成 `*` 而不是留空：留空表示"不需要密码"，而 * 表示"永远匹配不上"。
+    #   两者都不锁定，但只有后者是安全的。（下面另外把密码认证明确关掉，双保险。）
+    if [ "$(awk -F: '$1=="root"{print substr($2,1,1)}' /etc/shadow 2>/dev/null)" = "!" ]; then
+        echo "  解开 root（/etc/shadow 里是锁定的，sshd 会因此拒绝公钥）…"
+        awk -F: 'BEGIN{OFS=":"} $1=="root" && substr($2,1,1)=="!" {$2="*"} {print}' \
+            /etc/shadow > /etc/shadow.new && cat /etc/shadow.new > /etc/shadow && rm -f /etc/shadow.new
+        chmod 600 /etc/shadow
+    fi
+
+    # ── 主机密钥 ────────────────────────────────────────────────────────────────
+    if ! ls /etc/ssh/ssh_host_*_key >/dev/null 2>&1; then
+        echo "  生成 SSH 主机密钥（第一次启动，之后不再做）…"
+        ssh-keygen -A || echo "  ⚠ 主机密钥生成失败，sshd 起不来"
+    fi
+
+    # ── 启动 ────────────────────────────────────────────────────────────────────
+    if [ ! -x /usr/sbin/sshd ]; then
+        echo "  ⚠ 找不到 /usr/sbin/sshd"
+        exit 0
+    fi
+
+    # sshd 的权限分离用两个目录：
+    #
+    #   /run/sshd    运行时目录（Debian 那边由 systemd 的 RuntimeDirectory 提供，
+    #                我们没有 systemd，所以自己建）
+    #   /var/empty   降权后的沙箱。**sshd 对它有硬要求**：
+    #
+    #                    /var/empty must be owned by root and not group or world-writable.
+    #
+    #               包里建的时候是 711 root（recipe 里写着），但**实测在真机上它会
+    #                不对** —— 那就起不来 sshd，而表现是"钥匙被拒"，看着像密钥问题。
+    #
+    #             ★ 所以钩子自己兜一次：**它该保证自己的前提，而不是信任上游那一步
+    #               在每一层搬运之后还成立**。（cpio 那条注释说的是同一件事：
+    #               "静默漏掉一个东西，表现是发布时报一个指不到这里的错"。）
+    #               ★ 同理还有 /root 自己：StrictModes 会一路查到它。
+    #                 它应该是 0700 root —— 别的地方设过，但**不保证搬到最后还在**。
+    install -d -m 711 -o root -g root /var/empty
+    #               ★★ 属主也要对。只 chmod 是不够的——实测撞上：
+    #                      /root:  runner:runner 700
+    #                  模式 700 对，属主不是 root，StrictModes 照样拒绝。
+    #                  （建根那一步是在【构建用户】身份下跑的，/root 会被它建出来。）
+    install -d -m 700 -o root -g root /root 2>/dev/null || chmod 0700 /root 2>/dev/null || true
+
+    # ★★ 而 .ssh 和那份 authorized_keys 也一样要查属主。
+    #
+    #   上面那句注释写的是"属主也要对，只 chmod 是不够的"—— 那条教训对 /root 成立，
+    #   对 .ssh 里的东西同样成立，而这里原来漏了。
+    #
+    #   实测：在运行中的系统上 `apk upgrade openssh`（装的包里属主不对，见 steps.sh），
+    #   装完之后 SSH 进不去，而表现是"密钥被拒"，看着像密钥问题。
+    #
+    #   这个钩子兜一遍，是为了让【已经装坏的系统】重启一次自己修回来 ——
+    #   不然就只能进控制台手工 chown。
+    install -d -m 700 -o root -g root /root/.ssh 2>/dev/null || true
+
+    # ★★ root 的公钥 —— 逻辑在 /usr/libexec/yojigen-os/ensure-authorized-keys。
+    #
+    #   原来这里是一段内联的"文件不在就铺模板"，而同一件事在 post-install 和
+    #   post-upgrade 也要做（那两处是【升级路径】上的，比开机更早）。三处写三份
+    #   就会"改一处忘一处"——而这一格出的问题恰好全是那个形状。所以改成调它。
+    #
+    #   ★ 而这个文件的归属也变了：它【不归任何包所有】。原来归 openssh，于是
+    #     每次 `apk upgrade openssh` 都用包里那份替换盘上那份 —— 用户往里加过
+    #     的钥匙就没了。实测撞了两次，两次都把 SSH 弄断。
+    #     "配置文件归包、状态不归包" —— 这条线以前没划清楚。
+    if [ -x /usr/libexec/yojigen-os/ensure-authorized-keys ]; then
+        /usr/libexec/yojigen-os/ensure-authorized-keys || true
+    else
+        echo "  ⚠ 找不到 ensure-authorized-keys —— root 的公钥没人管了"
+    fi
+
+    # ★ 上面那个工具已经把"存在就校属主、不在就铺模板"两件事都做了 ——
+    #   这里原来还抄了一遍同样的两行，而那正是"改一处忘一处"的形状。删掉。
+    mkdir -p /run/sshd
+
+    # sshd 自己会 daemon 化并 fork，所以这里不加 &。
+    if /usr/sbin/sshd; then
+        echo "  sshd 已启动（端口 22，只认公钥）"
+    else
+        echo "  ⚠ sshd 启动失败——用 /usr/sbin/sshd -t 看配置哪里不对"
+    fi
+    ;;
+
+  stop)
+    if pkill -x sshd 2>/dev/null; then
+      echo "  sshd 停了"
+    else
+      echo "  sshd 本来就没在跑"
+    fi
+    ;;
+
+  *)
+    echo "用法: sshd start|stop" >&2
+    exit 1
+    ;;
+esac

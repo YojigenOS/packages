@@ -1,0 +1,31 @@
+#!/bin/sh
+# docker 装完之后：启用并起服务 —— 但只在【这台机器正在跑】的时候。
+#
+# ★★ 判据是一个【事实】而不是一个开关（决策记录 0024）：/run/yojigen-os/booted
+#   是 /init 启动时留下的痕迹，/run 是 tmpfs，所以它天然"这次开机才有"。
+#
+#   有两个场景，而它们该有不同的行为：
+#
+#     apk add docker（在一台跑着的系统上）  → 用户想要它跑起来 ✓ 启用 + 起
+#     apk add --root（离线组装镜像时）      → 启用与否是【风味】的决定，
+#                                            这里不该动 —— 而那时 booted 不存在 ✓
+#
+# ★ 没有那条判据的话，"装 openssh 就自启 sshd"这种荒唐事就会发生在容器镜像里
+#   （那里根本不跑 /init，所以那条启用是死的）。
+#
+# ★★ 而这里【不 exit 1】：服务没起来不该让 `apk add` 失败 —— 包本身装好了。
+#    但要吵一声，并说清去哪儿看。
+
+if [ -e /run/yojigen-os/booted ] && command -v service >/dev/null 2>&1; then
+    echo "  在一台正在运行的系统上装 —— 启用并启动 docker 服务"
+    service enable docker || true
+    if service start docker; then
+        :
+    else
+        echo "  ⚠ docker 服务没起来，见 /var/log/dockerd.log"
+    fi
+else
+    echo "  （离线组装：启用与否由风味决定，这里不动 —— 见决策记录 0024）"
+fi
+
+exit 0

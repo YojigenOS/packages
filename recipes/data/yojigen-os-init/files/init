@@ -40,6 +40,17 @@ fi
 mount -t tmpfs    tmpfs    /tmp     2>/dev/null
 mount -t tmpfs    tmpfs    /run     2>/dev/null
 
+# --- "这台机器已经起来了"这个事实 ---------------------------------------
+#
+# 决策记录 0024 里那条判据要用它：一个包的 `post-install` 想知道自己是在
+# 【一台正在跑的系统】上被装的（那就该顺手把服务启用并起起来），还是在
+# 【离线组装镜像】时被装进去的（那就不该动启用状态，交给风味声明）。
+#
+# ★ 判据必须是一个【事实】而不是一个开关：没有谁会去设它，它是启动过程留下的
+#   痕迹。/run 是 tmpfs，所以它天然"这次开机才有"，重启就没了 —— 正合适。
+mkdir -p /run/yojigen-os 2>/dev/null
+: > /run/yojigen-os/booted 2>/dev/null
+
 # ★★ /dev/fd 那一组符号链接 —— devtmpfs【不会】建它们。
 #
 #   devtmpfs（内核自动挂的那一个）只给【设备节点】。而 `/dev/fd`、`/dev/stdin`
@@ -117,6 +128,40 @@ if [ -d /usr/lib/yojigen-os/boot.d ]; then
         [ -x "$f" ] || continue
         echo "  ▸ $(basename "$f")"
         "$f" || echo "    ⚠ 这个钩子失败了，继续"
+    done
+    echo
+fi
+
+# --- 启用的服务 ---------------------------------------------------------
+#
+# 决策记录 0024：**服务由【风味】启用，包只提供定义。**
+#
+# 这里和上面 boot.d 的分界是这一句：
+#
+#   boot.d      【没有它这台机器不算能用】—— 挂 cgroup、设 hostname、扩根分区
+#   服务        它没起来，系统照样是系统 —— sshd、dockerd、将来的各种守护进程
+#
+# 启用状态就是 /etc/services/ 里的软链（由 `service enable` 或风味组装时建的），
+# 而定义在 /usr/lib/yojigen-os/services/。这里只负责"按启用的那些，逐个 start"。
+#
+# ★ 和 boot.d 一样：**任何一个失败都不拦启动**。一个服务起不来，人还能从串口
+#   进去查；而如果这里 exit，系统就停在一个连 shell 都没有的地方。
+#
+# ★★ 而"起了哪些、结果如何"要留痕：/run/yojigen-os/services.log。
+#   不然"开机后 ssh 连不上"只能靠猜 —— 那正是 0024 想避免的那类排查。
+if [ -d /etc/services ] && [ -n "$(ls -A /etc/services 2>/dev/null)" ]; then
+    echo "  启用的服务："
+    mkdir -p /run/yojigen-os 2>/dev/null
+    for s in /etc/services/*; do
+        [ -e "$s" ] || continue
+        name=$(basename "$s")
+        echo "  ▸ $name"
+        if "$s" start; then
+            echo "$name ok" >> /run/yojigen-os/services.log
+        else
+            echo "    ⚠ $name 没起来，继续"
+            echo "$name failed" >> /run/yojigen-os/services.log
+        fi
     done
     echo
 fi
