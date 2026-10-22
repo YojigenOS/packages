@@ -308,7 +308,7 @@ jobs:
           IMG: yojigenos/devel
         run: |
           set -euo pipefail
-          # ★★ 2026-10-22 修：这里原来是 `${{ matrix.arch }}` —— 而本工作流
+          # ★★ 2026-10-22 修：这里原来引用的是 matrix.arch —— 而本工作流
           #   **没有 matrix**（架构是 `inputs.arch`）。矩阵只在 bootstrap.yml 里
           #   有，两个文件里"架构"的名字【不一样】，而复制过来时没跟着改。
           #
