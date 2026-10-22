@@ -36,6 +36,7 @@ package() {
     usr/local usr/local/bin usr/local/lib usr/local/sbin \
     etc etc/profile.d etc/skel etc/ld.so.conf.d \
     etc/init.d etc/rc.d etc/rc2.d etc/rc3.d etc/rc4.d etc/rc5.d \
+    var/lock var/lock/subsys \
     var var/log var/tmp var/cache var/lib \
     tmp root home run mnt opt srv proc sys dev
   do

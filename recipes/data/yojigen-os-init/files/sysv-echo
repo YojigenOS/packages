@@ -1,0 +1,32 @@
+#!/bin/sh
+# SysV 的三个老接口：echo_success / echo_failure / log_error。
+#
+# ★ 它们本来是 RedHat 的 /etc/init.d/functions 里定义的【shell 函数】。而这样的
+#   脚本常见得很：
+#
+#       [ $RETVAL -eq 0 ] && echo_success || echo_failure
+#
+#   —— 在 RedHat 系上那一行能跑，因为我们这里没有那个 functions 文件，
+#   它会报 `echo_success: command not found`（实测 1Panel 的 .init 就撞了）。
+#
+# ★★ 而它们又叫不到 fs 里去：脚本没有 `source` 任何东西，所以只能【在 PATH 上】
+#   真的有这三个命令。所以这里做一个多调用（multi-call）的脚本，装成三个名字。
+#
+# 用法：sysv-echo <success|failure|error> [文字]
+
+case "$1" in
+  success)
+    # 绿底 [ OK ] —— 而终端不支持颜色时就不带色
+    if [ -t 1 ]; then printf '  \033[32m[ OK ]\033[0m\n'; else echo "  [ OK ]"; fi
+    exit 0 ;;
+  failure)
+    if [ -t 1 ]; then printf '  \033[31m[FAILED]\033[0m\n'; else echo "  [FAILED]"; fi
+    exit 1 ;;
+  error)
+    shift 2>/dev/null
+    echo "  [ERROR] $*" >&2
+    exit 1 ;;
+  *)
+    echo "用法: $0 success|failure|error [文字]" >&2
+    exit 2 ;;
+esac

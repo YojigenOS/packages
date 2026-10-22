@@ -54,13 +54,53 @@ list_all() {
   done
   echo
   echo "  已启用 $n_on 个，未启用 $n_off 个。"
+  if [ -d /etc/init.d ] && [ -n "$(ls -A /etc/init.d 2>/dev/null)" ]; then
+    echo
+    echo "  还有这些 SysV 的（/etc/init.d）："
+    for d in /etc/init.d/*; do
+      [ -e "$d" ] || continue
+      echo "  · $(basename "$d")"
+    done
+  fi
+}
+
+# ★★ 两套服务定义，`service` 两套都认（2026-10-22）。
+#
+#   我们自己那套     /usr/lib/yojigen-os/services/<名字>   起停由定义自己实现
+#   SysV 那套        /etc/init.d/<名字>                    转给它，动作原样传
+#
+# ★ 为什么必须认第二套：**很多既有的东西就是用 `service <名字> <动作>` 探测
+#   服务的**。实测 1Panel 的安装脚本判"服务起没起"就是
+#
+#       service 1panel-core status >/dev/null 2>&1 && echo active
+#
+#   而它装的服务是 /etc/init.d/1panel-core。第一版只认我们自己那套，于是这句
+#   必然失败 —— 于是安装器判"服务启动失败"并重试五次、最后报错退出，**而
+#   进程其实好好地在跑、端口也在监听**。一次纯粹的假阴性。
+sysv_def() {
+  [ -x "/etc/init.d/$1" ]
 }
 
 need_def() {
+  if sysv_def "$1"; then
+    return 0
+  fi
   if [ ! -e "$DEFS/$1" ]; then
     echo "✗ 没有这个服务: $1" >&2
-    echo "  有的定义: $(ls "$DEFS" 2>/dev/null | tr '\n' ' ')" >&2
+    echo "  /usr/lib/yojigen-os/services/ 里的: $(ls "$DEFS" 2>/dev/null | tr '\n' ' ')" >&2
+    echo "  /etc/init.d/ 里的: $(ls /etc/init.d 2>/dev/null | tr '\n' ' ')" >&2
     exit 1
+  fi
+}
+
+# 真正执行一个动作 —— 两套都走这里
+run_def() {
+  name=$1
+  act=$2
+  if sysv_def "$name"; then
+    "/etc/init.d/$name" "$act"
+  else
+    "$DEFS/$name" "$act"
   fi
 }
 
@@ -90,20 +130,26 @@ case "$ACT" in
   start)
     [ -n "$NAME" ] || { usage; exit 1; }
     need_def "$NAME"
-    "$DEFS/$NAME" start ;;
+    run_def "$NAME" start ;;
 
   stop)
     [ -n "$NAME" ] || { usage; exit 1; }
     need_def "$NAME"
-    "$DEFS/$NAME" stop ;;
+    run_def "$NAME" stop ;;
 
   status)
     [ -n "$NAME" ] || { usage; exit 1; }
     need_def "$NAME"
+    if sysv_def "$NAME"; then
+      # SysV 的定义自己有 status，而且它的返回码就是判据 —— 原样传出
+      "/etc/init.d/$NAME" status
+      exit $?
+    fi
     if grep -q "^$NAME " /run/yojigen-os/services.log 2>/dev/null; then
       echo "  $NAME: 这次开机起过（见 /run/yojigen-os/services.log）"
     else
       echo "  $NAME: 这次开机没起过"
+      exit 3
     fi ;;
 
   *)

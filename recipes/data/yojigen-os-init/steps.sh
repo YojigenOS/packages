@@ -28,6 +28,15 @@ package() {
     # 首启钩子，按名字顺序跑。05 排在 10（扩盘）前面：
     # 主机名要尽早设——日志、DHCP、sshd 都会用到它。
     # ★ 2026-10-22：挂 cgroup（容器运行时的前提）。名字 05，排在最前面。
+    # ★★ 2026-10-22：SysV 的三个老接口（echo_success / echo_failure /
+    #   log_error）。它们本来是 RedHat 的 /etc/init.d/functions 里的 shell 函数，
+    #   而很多老 init 脚本直接调 —— 没有它们就报 "command not found"（不影响
+    #   功能，但会把安装脚本的输出搅乱，而且让"失败"和"成功"看起来一样）。
+    #   做成一个多调用的脚本，装成三个名字。
+    install -Dm755 "$PKGDIR/files/sysv-echo" "$PKGDEST/usr/sbin/echo_success"
+    ln -sf echo_success "$PKGDEST/usr/sbin/echo_failure"
+    ln -sf echo_success "$PKGDEST/usr/sbin/log_error"
+
     # ★ 2026-10-22：`service` 命令（决策记录 0024）。放 /usr/bin 而不是
     #   /usr/sbin —— 它在 PATH 上，而且不是"只有 root 该碰"的东西（看 list 谁都能）。
     install -Dm755 "$PKGDIR/files/service" "$PKGDEST/usr/bin/service"
