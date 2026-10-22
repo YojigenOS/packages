@@ -6,7 +6,7 @@
 [package]
 name        = "zip"
 version     = "3.0"
-release     = 4
+release     = 5
 date        = 2026-10-22T10:00:00Z
 description = "打 .zip 压缩包（Info-ZIP）"
 url         = "https://infozip.sourceforge.net/Zip.html"
