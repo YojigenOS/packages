@@ -1,0 +1,39 @@
+# docker-compose —— docker 的 compose 插件（v2/v5 那条线）
+#
+# 和 `docker-buildx` 是同一个形状（见那个配方的说明），区别只有两处：
+#
+#   ① 资产名用【老叫法】x86_64 / aarch64 —— 所以用 $ARCH，不是 $GOARCH
+#      （同一个 docker 生态里两套架构名字并存，这是实测撞到的）
+#   ② compose 除了 checksums.txt，每个文件还单独发一份 `.sha256`
+#
+# 「docker-compose」这个名字是 v1 留下来了（那时它是一个独立的 Python 程序，
+# 命令是 `docker-compose`）。v2 之后它变成 docker 的插件，命令是
+# `docker compose`（中间是空格）—— 而二进制名仍然是 `docker-compose`，
+# 因为 CLI 是按 `docker-<子命令>` 找插件的。
+
+[package]
+name        = "docker-compose"
+version     = "5.6.1"
+release     = 1
+date        = 2026-10-22T06:10:00Z
+description = "docker 的 compose 插件（上游静态二进制）"
+url         = "https://github.com/docker/compose"
+license     = "Apache-2.0"
+
+[[source]]
+url    = "https://github.com/docker/compose/releases/download/v$VERSION/docker-compose-linux-$ARCH"
+unpack = false
+sha256 = { x86_64 = "47737f4236e6d3ccea7291995203f8f018058783b4c3a9469119811a0b5db8c0", aarch64 = "42cfa75f51ad0ccf290bad37899e0038a8c10a0069e85233ecc1d53e3ff1347d" }
+
+[dependencies.x86_64]
+runtime = ["docker"]
+build   = []
+
+[dependencies.aarch64]
+runtime = ["docker"]
+build   = []
+
+[build]
+type         = "custom"
+vendor       = "docker/compose v5.6.1 的官方静态二进制（GitHub release，摘要对过上游 checksums.txt）"
+vendor_check = "docker compose version"

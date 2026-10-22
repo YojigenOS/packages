@@ -323,3 +323,34 @@ class Test删掉的东西不许长回来(unittest.TestCase):
         self.assertFalse(坏, "这些地方又有 section 了 —— 见决策记录 0021：「一处信息"
                              "只该有一处」，而它那两个轴都已经有出处了：\n  "
                              + "\n  ".join(坏))
+
+
+class Test_GOARCH_占位符(unittest.TestCase):
+    """`$GOARCH` 是 x86_64→amd64、aarch64→arm64。
+
+    ★ 2026-10-22 加，起因是接 docker 插件时撞上的一件事：**同一个 docker 生态里
+      两套架构名字并存** ——
+
+          buildx-v0.38.1.linux-amd64       ← Go 的叫法
+          docker-compose-linux-x86_64      ← 老叫法
+
+      而 `$ARCH` 只能给一个，所以必须有第二个占位符，不能靠"猜上游用哪个"。
+
+    ★ 而名字取 `$GOARCH` 是因为那套叫法就是从 Go 来的（Go 的 GOARCH），
+      不是"我随便起的"——将来看见它的人能立刻知道是 amd64/arm64 那一套。
+    """
+
+    def _展开(self, arch):
+        from skirtlib.spec import expand
+        spec = {"package": {"name": "x", "version": "1"}}
+        return expand(spec, "$ARCH|$GOARCH", arch)
+
+    def test_x86_64(self):
+        self.assertEqual(self._展开("x86_64"), "x86_64|amd64")
+
+    def test_aarch64(self):
+        self.assertEqual(self._展开("aarch64"), "aarch64|arm64")
+
+    def test_不认识架构时展开成空(self):
+        """★ 不猜 —— 和 `$ARCH` 在 arch=None 时的行为一致。"""
+        self.assertEqual(self._展开(None), "|")

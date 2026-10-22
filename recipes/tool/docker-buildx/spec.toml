@@ -1,0 +1,61 @@
+# docker-buildx —— docker 的 buildx 插件
+#
+# ── 为什么是【单独的包】，不塞进 docker ──────────────────────────────────────
+#
+# 因为它和 docker 本体是【两个上游、两个发版节奏】：
+#
+#     docker 本体   Docker Inc.       29.9.2   （我们实时用的那个）
+#     buildx        docker/buildx     v0.38.1  （2026-10-20 发的）
+#
+# 塞进同一个包会有两个后果，而两个都不好：
+#
+#   ① 每升一次 buildx 就要重建 docker（71 MB 的包），而 docker 一个字没变
+#   ② 决策记录 0023 第一条就说不清了 —— "发布者是上游本身"要对着【哪个】上游
+#
+# 所以：`docker-buildx` 依赖 `docker`（反过来不依赖），各自独立升。
+#
+# ── 装到哪 ─────────────────────────────────────────────────────────────────
+#
+# docker CLI 会去这几个目录找插件（实测三个都认，见下面那段）：
+#
+#     /usr/libexec/docker/cli-plugins      ← 用这个（Debian/RHEL 的约定）
+#     /usr/lib/docker/cli-plugins
+#     /usr/local/lib/docker/cli-plugins    （/usr/local 是给管理员放的，不用）
+#
+# ★ 而"三个都认"这件事是【量过的】，不是照文档抄的：拿 base 镜像装好 docker，
+#   把 buildx 依次放进这三个目录，每次都跑 `docker buildx version`，三次都出
+#   版本号。见 §5.12 那段记录。
+#
+# ── 摘要来自【同一渠道】────────────────────────────────────────────────────
+#
+# buildx 的 release 里带 `checksums.txt`，所以这次的 sha256 是【对过上游那份】
+# 的，不是"我们首次取时算的"。0023 第二条要的就是这个。
+
+[package]
+name        = "docker-buildx"
+version     = "0.38.1"
+release     = 1
+date        = 2026-10-22T06:10:00Z
+description = "docker 的 buildx 插件（上游静态二进制）"
+url         = "https://github.com/docker/buildx"
+license     = "Apache-2.0"
+
+[[source]]
+# ★ 这里用 $GOARCH（amd64 / arm64），不是 $ARCH —— buildx 的资产名是 Go 的叫法。
+url    = "https://github.com/docker/buildx/releases/download/v$VERSION/buildx-v$VERSION.linux-$GOARCH"
+# ★ 单个文件，不是归档 —— 所以 unpack = false（那是给"源码就一个文件"用的）。
+unpack = false
+sha256 = { x86_64 = "e25d5cd675092bb5d1d03632fdc46cdf3fede7b514dc5f023a105e00d3ce5ad4", aarch64 = "3b83b3731916ba433feccaaa689fe5bcdc81c641d92c8e6c2ea865dfa141c97a" }
+
+[dependencies.x86_64]
+runtime = ["docker"]
+build   = []
+
+[dependencies.aarch64]
+runtime = ["docker"]
+build   = []
+
+[build]
+type         = "custom"
+vendor       = "docker/buildx v0.38.1 的官方静态二进制（GitHub release，摘要对过上游 checksums.txt）"
+vendor_check = "docker buildx version"

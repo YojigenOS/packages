@@ -122,6 +122,19 @@ def load_spec(name: str) -> dict:
     return spec
 
 
+#: 我们叫 x86_64 / aarch64，而很多上游用的是 Go / LLVM / Google 的叫法
+#: （amd64 / arm64）。**这是两套名字，不是一个东西的两种写法** ——
+#: 而它体现的地方是【文件名】：
+#:
+#:     buildx-v0.38.1.linux-amd64        ← Go 的叫法
+#:     docker-compose-linux-x86_64       ← 老叫法
+#:
+#: 2026-10-22 加，起因就是接 docker 的插件（buildx 用前者，compose 用后者，
+#: 同一个 docker 生态里两套并存）。而 `$ARCH` 只能给前者之一，所以要有
+#: 第二个占位符，不能靠"猜上游用哪个"。
+GOARCH = {"x86_64": "amd64", "aarch64": "arm64"}
+
+
 def expand(spec: dict, value, arch: str | None = None):
     """展开 $NAME / $VERSION / $ARCH 占位符。
 
@@ -144,7 +157,8 @@ def expand(spec: dict, value, arch: str | None = None):
         return (value
                 .replace("$NAME", pkg["name"])
                 .replace("$VERSION", pkg["version"])
-                .replace("$ARCH", arch or ""))
+                .replace("$ARCH", arch or "")
+                .replace("$GOARCH", GOARCH.get(arch or "", "")))
     if isinstance(value, list):
         return [expand(spec, v, arch) for v in value]
     if isinstance(value, dict):
