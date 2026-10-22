@@ -308,7 +308,14 @@ jobs:
           IMG: yojigenos/devel
         run: |
           set -euo pipefail
-          I="$IMG:${{ matrix.arch }}"
+          # ★★ 2026-10-22 修：这里原来是 `${{ matrix.arch }}` —— 而本工作流
+          #   **没有 matrix**（架构是 `inputs.arch`）。矩阵只在 bootstrap.yml 里
+          #   有，两个文件里"架构"的名字【不一样】，而复制过来时没跟着改。
+          #
+          #   后果：它展开成空 → `yojigenos/devel:` → 
+          #       docker: invalid reference format
+          #   而它是【这一步】报的，不是构建报的 —— 看起来像镜像名写错了。
+          I="$IMG:${{ inputs.arch }}"
           T=$(docker run --rm "$I" /bin/sh -c \
                 'gcc --version | head -1; ld --version | head -1; make --version | head -1; ldd --version | head -1' \
               | tr '\n' ';' | sed 's/;$//')
