@@ -1,0 +1,19 @@
+上游的 unix/configure 里，memset 那条探测是**唯一**不带 $CFLAGS 的编译
+（另外 12 条都写 `$CC $CFLAGS -c conftest.c`）。
+
+于是它总是按 gcc 的默认标准编那个不带 <string.h> 的测试程序 —— 而现代 gcc
+把隐式声明当硬错误 → 它误判"系统没有 memset" → 自己加 -DZMEM → zip.h 里那份
+1999 年的声明撞上现代 glibc：`conflicting types for 'memset'`。
+
+一行修：让那条探测也用 $CFLAGS。
+
+--- a/unix/configure
++++ b/unix/configure
+@@ -519,7 +519,7 @@
+ echo Check for memset
+ echo "int main(){ char k; memset(&k,0,0); return 0; }" > conftest.c
+-$CC -o conftest conftest.c >/dev/null 2>/dev/null
++$CC $CFLAGS -o conftest conftest.c >/dev/null 2>/dev/null
+ [ $? -ne 0 ] && CFLAGS="${CFLAGS} -DZMEM"
+ 
+ echo Check for memmove

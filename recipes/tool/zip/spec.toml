@@ -6,7 +6,7 @@
 [package]
 name        = "zip"
 version     = "3.0"
-release     = 3
+release     = 4
 date        = 2026-10-22T10:00:00Z
 description = "打 .zip 压缩包（Info-ZIP）"
 url         = "https://infozip.sourceforge.net/Zip.html"
@@ -26,3 +26,5 @@ build   = ["make", "gcc", "bzip2"]
 
 [build]
 type = "custom"
+# ★ 上游的 unix/configure 里 memset 那条探测漏了 $CFLAGS —— 见 patches/
+patches = ["0001-configure-memset-probe-use-CFLAGS.patch"]

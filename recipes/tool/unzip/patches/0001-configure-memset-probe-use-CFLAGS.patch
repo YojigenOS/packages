@@ -1,0 +1,14 @@
+同 zip：unzip 的 unix/configure 里 memset 那条探测漏了 $CFLAGS（其它探测都有）。
+
+现代 gcc 把隐式声明当硬错误 → 误判"没有 memset" → 加 -DZMEM → 老声明撞 glibc。
+
+--- a/unix/configure
++++ b/unix/configure
+@@ -403,7 +403,7 @@
+ echo Check for memset
+ echo "int main(){ char k; memset(&k,0,0); return 0; }" > conftest.c
+-$CC -o conftest conftest.c >/dev/null 2>/dev/null
++$CC $CFLAGS -o conftest conftest.c >/dev/null 2>/dev/null
+ [ $? -ne 0 ] && CFLAGSR="${CFLAGSR} -DZMEM"
+ 
+ echo Check for errno declaration
