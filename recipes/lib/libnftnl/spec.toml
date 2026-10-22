@@ -1,0 +1,38 @@
+# libnftnl —— 在用户态拼 nftables 消息的库
+#
+# `iptables-nft`（iptables 1.8 的默认后端）靠它和内核的 nf_tables 说话。
+#
+# ★ 而 nf_tables 那一侧的内核配置我们**已经开了**（config.fragment 里的
+#   CONFIG_NF_TABLES / NFT_NAT / NFT_MASQ / NFT_CT），所以这个包一装上，
+#   `iptables-nft` 就能真的下规则 —— 不需要再动内核。
+#
+# ★ 版本选 1.2.8 而不是最新的 1.3.0：1.3.0 是 2026 年的新主版本，而 iptables
+#   1.8.12 发布的年代对着 1.2.x 测过。**保守一次，等真出问题再升** —— 反正
+#   `skirt stale` 会因为摘要变了提示重建。
+
+[package]
+name        = "libnftnl"
+version     = "1.2.8"
+release     = 1
+date        = 2026-10-22T07:30:00Z
+description = "nftables 的用户态消息库（iptables-nft 的后端）"
+url         = "https://netfilter.org/projects/libnftnl/"
+license     = "GPL-2.0-or-later"
+
+[[source]]
+# ★ 注意扩展名：libnftnl 发的是 .tar.xz，而 libmnl 还是 .tar.bz2。
+#   同一批项目里两种格式并存 —— 写配方时照它的实际名字来。
+url    = "https://netfilter.org/projects/libnftnl/files/libnftnl-$VERSION.tar.xz"
+sha256 = "37fea5d6b5c9b08de7920d298de3cdc942e7ae64b1a3e8b880b2d390ae67ad95"
+
+[dependencies.aarch64]
+runtime = ["glibc", "libmnl"]
+build   = ["make", "gcc", "libmnl"]
+
+[dependencies.x86_64]
+runtime = ["glibc", "libmnl"]
+build   = ["make", "gcc", "libmnl"]
+
+[build]
+type      = "autotools"
+configure = ["--prefix=/usr", "--disable-static"]

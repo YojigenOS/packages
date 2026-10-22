@@ -38,7 +38,7 @@
 [package]
 name        = "docker"
 version     = "29.9.2"
-release     = 5
+release     = 6
 date        = 2026-10-22T05:50:00Z
 description = "容器运行时：docker / dockerd / containerd / runc（上游静态二进制）"
 url         = "https://www.docker.com/"
@@ -53,11 +53,14 @@ sha256 = { x86_64 = "9ac225999fd5e863f7694c728ef23d480616b1e5639328fa309befd4243
 # ★ 运行时依赖是【空的】—— 那几个二进制是静态的。而这一条不是"看起来对"，
 #   是对着产物量过的（4 个二进制的 NEEDED 都是 0）。
 [dependencies.x86_64]
-runtime = []
+# ★ 2026-10-22：`iptables` 是 dockerd 的**运行时**依赖 —— 它启动时直接 exec
+#   那个程序去建 NAT 规则。没有它，dockerd 会在建好 socket 之后退出，而症状
+#   是"起了一下又没了"。
+runtime = ["iptables"]
 build   = []
 
 [dependencies.aarch64]
-runtime = []
+runtime = ["iptables"]
 build   = []
 
 [build]

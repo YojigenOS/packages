@@ -1,0 +1,37 @@
+# libmnl —— 极简的 netlink 库
+#
+# 它只有一件事：把 netlink 消息的收发包一层。而 `libnftnl` 和 `iptables` 都要它。
+#
+# ★ 为什么它进得来：docker 要 `iptables` 那个用户态程序（它自己建 NAT 规则），
+#   而 iptables 1.8 的 nft 后端依赖这条链：
+#
+#       docker → iptables → libnftnl → libmnl
+#
+#   实测：这三个都没有，dockerd 起得来、socket 也建了，然后因为
+#       failed to find iptables: executable file not found in $PATH
+#   而退出 —— 内核那侧早就齐了（字符串 2026-10-22 在 TX 上验的）。
+
+[package]
+name        = "libmnl"
+version     = "1.0.5"
+release     = 1
+date        = 2026-10-22T07:30:00Z
+description = "极简 netlink 库（libnftnl / iptables 的前置）"
+url         = "https://netfilter.org/projects/libmnl/"
+license     = "LGPL-2.1-or-later"
+
+[[source]]
+url    = "https://netfilter.org/projects/libmnl/files/libmnl-$VERSION.tar.bz2"
+sha256 = "274b9b919ef3152bfb3da3a13c950dd60d6e2bcd54230ffeca298d03b40d0525"
+
+[dependencies.aarch64]
+runtime = ["glibc"]
+build   = ["make", "gcc"]
+
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["make", "gcc"]
+
+[build]
+type      = "autotools"
+configure = ["--prefix=/usr", "--disable-static"]

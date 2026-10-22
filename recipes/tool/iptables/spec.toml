@@ -1,0 +1,55 @@
+# iptables —— 防火墙 / NAT 规则工具
+#
+# ★ 它是 docker 最后一块拼图（2026-10-22）。dockerd 启动时要建 NAT 规则，而它
+#   **直接 exec `iptables`** —— 没有那个程序，dockerd 会在建好 socket 之后退出：
+#
+#       level=warning msg="failed to find iptables"
+#         error="exec: \"iptables\": executable file not found in $PATH"
+#
+#   而报这句话之前它已经把 socket 建出来了，所以"等 socket 出现"那个判据会
+#   报告成功 —— 那次假成功也是在真机上撞到的（见 docker 的 services/docker）。
+#
+# ── 两个后端 ──────────────────────────────────────────────────────────────
+#
+# iptables 1.8 同时建两个后端：
+#
+#   iptables-legacy   老的 get/setsockopt 那套（CONFIG_IP_NF_IPTABLES）
+#   iptables-nft      走内核的 nf_tables（CONFIG_NF_TABLES + libnftnl）
+#
+# 而 `iptables` 这个名字指向 nft 那个（1.8 的默认）。我们的内核两套都开了，
+# 所以指哪个都行 —— 而默认那个是现代的，就顺着它。
+#
+# ★ 为什么这比"给 dockerd 加 --iptables=false"好：那是一条让步，会让容器
+#   拿不到 NAT、也就出不了网。而工具装齐了它就能正常干活。
+
+[package]
+name        = "iptables"
+version     = "1.8.12"
+release     = 1
+date        = 2026-10-22T07:30:00Z
+description = "防火墙与 NAT 规则工具（legacy + nft 两个后端）"
+url         = "https://netfilter.org/projects/iptables/"
+license     = "GPL-2.0-or-later"
+
+[[source]]
+url    = "https://www.netfilter.org/projects/iptables/files/iptables-$VERSION.tar.xz"
+sha256 = "8e7ee962601492de6503d171d4a948092ab18f89f111de72e3037c1f40cfb846"
+
+[dependencies.aarch64]
+runtime = ["glibc", "libmnl", "libnftnl"]
+build   = ["make", "gcc", "libmnl", "libnftnl", "pkgconf"]
+
+[dependencies.x86_64]
+runtime = ["glibc", "libmnl", "libnftnl"]
+build   = ["make", "gcc", "libmnl", "libnftnl", "pkgconf"]
+
+[build]
+type      = "autotools"
+configure = [
+    "--prefix=/usr",
+    "--sbindir=/usr/sbin",
+    "--disable-static",
+    # ★ 只留我们真需要的两个后端。nfsim 是给规则打分用的测试工具，
+    #   要 libpcap 和一堆仿真依赖 —— 那是给 iptables 自己开发用的。
+    "--disable-nfsim",
+]
