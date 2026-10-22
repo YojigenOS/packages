@@ -18,11 +18,11 @@ sha256 = "2e9ad7dd851bf45fab9f75cbff4cb493fee9979e8d8c7c9c3ee119022518edd6"
 
 [dependencies.aarch64]
 runtime = ["glibc", "python3"]
-build   = ["python3", "pip", "gcc", "make"]
+build   = ["python3", "pip", "setuptools", "gcc", "make"]
 
 [dependencies.x86_64]
 runtime = ["glibc", "python3"]
-build   = ["python3", "pip", "gcc", "make"]
+build   = ["python3", "pip", "setuptools", "gcc", "make"]
 
 [build]
 type = "custom"

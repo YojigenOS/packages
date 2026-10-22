@@ -1,0 +1,35 @@
+# setuptools —— Python 的构建后端
+#
+# ★ 为什么需要它：**CPython 3.12 起 ensurepip 不再带 setuptools 了**。
+#   （Python 3.14 的 ensurepip 只带 pip。）而 pip 编任何 sdist 都要那个
+#   构建后端：
+#
+#       pip._vendor.pyproject_hooks._impl.BackendUnavailable:
+#           Cannot import 'setuptools.build_meta'
+#
+# ★ 而它是纯 Python、有现成 wheel —— 所以**不用编**，直接下 wheel 装。
+
+[package]
+name        = "setuptools"
+version     = "84.2.1"
+release     = 1
+date        = 2026-10-22T11:30:00Z
+description = "Python 构建后端（pip 编 sdist 需要）"
+url         = "https://pypi.org/project/setuptools/"
+license     = "MIT"
+
+[[source]]
+# ★ 直接下 wheel（不是 sdist）：纯 Python，没有东西要编。
+url    = "https://files.pythonhosted.org/packages/py3/s/setuptools/setuptools-$VERSION-py3-none-any.whl"
+sha256 = "ca140b45d5325a9478f880e351484f62fef15f336462e449ca0c03c873d589c2"
+
+[dependencies.aarch64]
+runtime = ["python3"]
+build   = ["python3"]
+
+[dependencies.x86_64]
+runtime = ["python3"]
+build   = ["python3"]
+
+[build]
+type = "custom"
