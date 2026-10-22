@@ -14,19 +14,28 @@
 #
 # 用法：sysv-echo <success|failure|error> [文字]
 
-case "$1" in
-  success)
+# ★★ 分派按【被调用的名字】($0)，不是按 $1 —— multi-call 脚本的规矩
+#   （busybox 那一套）。第一版按 $1 分派，于是 `echo_success`（无参数调用）
+#   落进了 usage 分支、打印用法并 exit 2 —— 而 init 脚本里那一行是
+#
+#       [ $RETVAL -eq 0 ] && echo_success || echo_failure
+#
+#   于是"成功"和"失败"两条路都变成了一句用法提示。实测在 1Panel 的安装里
+#   看到的就是「用法: /usr/sbin/echo_success ...」两行。
+NAME=$(basename "$0")
+
+case "$NAME" in
+  echo_success)
     # 绿底 [ OK ] —— 而终端不支持颜色时就不带色
     if [ -t 1 ]; then printf '  \033[32m[ OK ]\033[0m\n'; else echo "  [ OK ]"; fi
     exit 0 ;;
-  failure)
+  echo_failure)
     if [ -t 1 ]; then printf '  \033[31m[FAILED]\033[0m\n'; else echo "  [FAILED]"; fi
     exit 1 ;;
-  error)
-    shift 2>/dev/null
+  log_error)
     echo "  [ERROR] $*" >&2
     exit 1 ;;
   *)
-    echo "用法: $0 success|failure|error [文字]" >&2
+    echo "用法: echo_success | echo_failure | log_error [文字]" >&2
     exit 2 ;;
 esac

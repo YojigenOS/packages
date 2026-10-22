@@ -1,0 +1,3 @@
+#!/bin/sh
+动作词=a
+echo ok

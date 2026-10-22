@@ -104,8 +104,28 @@ run_def() {
   fi
 }
 
-ACT=$1
-NAME=$2
+# ── 参数顺序：两种都认（2026-10-22 真机上撞出来的）─────────────────────────
+#
+# **世界上那个 `service` 是 `service <名字> <动作>`**（Debian / RHEL 都这样）：
+#
+#     service 1panel-core status
+#     service sshd restart
+#
+# 而我第一版写成了 `<动作> <名字>`（`service start docker`）—— 那是我自己顺手，
+# 而它和真实世界相反。实测 1Panel 的安装脚本调 `service 1panel-core status`
+# 判"服务起没起"，于是我们打印了用法并 exit 1 → 它认为服务失败了五次、报错
+# 退出，**而进程好好地在跑**。
+#
+# ★ 所以：**认两种顺序**。判据是"第二个词是不是一个动作"——
+#   是 → SysV 那种（名字在前）；否则按我自己那种（动作在前）。
+ACTIONS='start|stop|restart|status|enable|disable|list'
+if echo "$2" | grep -qE "^($ACTIONS)$"; then
+  NAME=$1
+  ACT=$2
+else
+  ACT=$1
+  NAME=$2
+fi
 
 case "$ACT" in
   list|"")
