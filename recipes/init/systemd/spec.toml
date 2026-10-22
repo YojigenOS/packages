@@ -45,7 +45,7 @@
 [package]
 name        = "systemd"
 version     = "258"
-release     = 1
+release     = 2
 date        = 2026-10-22T10:30:00Z
 description = "系统与服务管理器（决策记录 0022：自己建）"
 url         = "https://systemd.io/"
@@ -76,7 +76,10 @@ configure = [
     #   "Value "systemd" for option "mode" is not one of the choices"。
     "-Dmode=release",
     # ── 关的（理由见文件头）──────────────────────────────────────────
-    "-Dudev=false",
+    # ★★ v258 里 **udev 没有开关**了 —— 它无条件建（meson.build 里直接
+    #   `subdir('src/udev')`）。而那不是问题：udev 的**构建**不依赖内核有没有
+    #   CONFIG_MODULES（那是运行时的事）。我们把 `-Dkmod=false` 给它，
+    #   它的模块加载那部分自动缩掉。
     "-Dkmod=false",
     "-Dseccomp=false",
     "-Dapparmor=false",
@@ -84,7 +87,6 @@ configure = [
     "-Daudit=false",
     "-Dpam=false",
     "-Dlogind=false",
-    "-Dcryptsetup=false",
     "-Dlibcryptsetup=false",
     "-Delfutils=false",
     "-Dgcrypt=false",
@@ -101,7 +103,7 @@ configure = [
     "-Dfirstboot=false",
     "-Dquotacheck=false",
     "-Dnetworkd=false",
-    "-Dresolved=false",
+    "-Dresolve=false",
     "-Defi=false",
     "-Dtpm=false",
     "-Dima=false",
@@ -116,7 +118,6 @@ configure = [
     "-Dhostnamed=true",
     "-Dtimedated=true",
     "-Dlocaled=true",
-    "-Ddefault-hierarchy=unified",
     # ★★ SysV 兼容：让它读我们那套 init.d + rc2.d（1Panel 装的服务靠这个）
     "-Dsysvinit-path=/etc/init.d",
     "-Dsysvrcnd-path=/etc",
