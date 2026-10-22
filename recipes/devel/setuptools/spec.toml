@@ -12,7 +12,7 @@
 [package]
 name        = "setuptools"
 version     = "84.2.1"
-release     = 1
+release     = 2
 date        = 2026-10-22T11:30:00Z
 description = "Python 构建后端（pip 编 sdist 需要）"
 url         = "https://pypi.org/project/setuptools/"
