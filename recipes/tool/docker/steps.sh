@@ -44,10 +44,19 @@ package() {
   install -d -m 700 "$d/var/lib/docker"
   install -d -m 755 "$d/var/run"
 
-  # ── 3. 首启钩子 ───────────────────────────────────────────────────────────
+  # ── 3. 没有 3 ─────────────────────────────────────────────────────────────
   #
-  # /init 按名字顺序跑 /usr/lib/yojigen-os/boot.d/ 下的东西。30 排在
-  # sshd(20) 之后 —— docker 不该抢在能登录之前起来。
-  install -Dm755 "$PKGDIR/files/30-docker" \
-      "$d/usr/lib/yojigen-os/boot.d/30-docker"
+  # ★ 这里【曾经】装过一个 `boot.d/30-docker`（起 dockerd 的钩子），2026-10-22 拿掉了。
+  #
+  #   理由是一条分界：**`boot.d` 是【系统】的启动阶段，不是外部软件的服务表。**
+  #
+  #     boot.d 该有的    挂 cgroup、设 hostname、扩根分区、控制台键盘 —— 没有它们
+  #                      这台机器不是一台能用的机器
+  #     docker 属于      一个应用。它没起来，系统照样是系统
+  #
+  #   而 `20-sshd`（openssh 那个包）犯的是同一个错，也要一起搬 —— 见
+  #   `data/yojigen-os-init` 里那条待办。
+  #
+  # ★★ 所以在服务层做出来之前，docker【不自启】。这是当前诚实的状态：
+  #    装了、能手工起（`dockerd &`）、`docker run` 能用，就是开机不会自己起来。
 }
