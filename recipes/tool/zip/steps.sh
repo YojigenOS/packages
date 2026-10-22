@@ -7,63 +7,63 @@
 # 里，靠平台目标（`generic` / `linux` / …）选。`unix/configure` 是它自己写的
 # 纯 sh 探测脚本（不是 autoconf）。
 #
-# ── 为什么探测必须按 1999 年的语义跑 ──────────────────────────────────────
+# ── 它为什么把"系统有这个函数"判成"没有" ──────────────────────────────────
 #
-# 它判 memset 是这样（unix/configure）：
+# 那个脚本里的探测长这样（**八处都是**，不只 memset）：
 #
 #     echo "int main(){ char k; memset(&k,0,0); return 0; }" > conftest.c
-#     $CC -o conftest conftest.c
+#     $CC -o conftest conftest.c >/dev/null 2>/dev/null      ← 没有 $CFLAGS
 #     [ $? -ne 0 ] && CFLAGS="${CFLAGS} -DZMEM"
 #
-# ★ 那个测试程序**没有 `#include <string.h>`**。1999 年的 C 里没问题（隐式声明
-#   只是警告）；现代 gcc（C23 默认）把它当**硬错误**。于是探测"失败"，它自己
-#   加 `-DZMEM`，而 `zip.h` 的 `#ifdef ZMEM` 就会声明老签名的 memset/memcpy/
-#   memcmp —— 撞现代 glibc：`conflicting types for 'memset'`。
+# ★★ 两个问题叠在一起：
+#
+#   1. 那些测试程序**不带 `<string.h>`** —— 1999 年的 C 里只是隐式声明（警告），
+#      而现代 gcc 当**硬错误**。
+#   2. 那八行**都不带 `$CFLAGS`**（脚本里另 12 条写的是 `$CC $CFLAGS -c`）。
+#
+#   于是它按 gcc 的默认标准编、编不过、判"系统没有 memset"、自己加 `-DZMEM`，
+#   而 `zip.h` 的 `#ifdef ZMEM` 就声明了 1999 年签名的 memset/memcpy/memcmp ——
+#   撞现代 glibc：`conflicting types for 'memset'`。
 #
 #   **它误判我们缺 memset。我们并不缺。**
 #
-# ── 而那个开关必须走 LOCAL_ZIP，不是 CFLAGS ──────────────────────────────
+# ── 修法：把旗子塞进 CC ──────────────────────────────────────────────────
 #
-# `unix/Makefile` 里：
+# `CC=${1-cc}` **没有引号**，所以 word split 会把它拆开 —— 塞进 CC 的旗子会进
+# 每一处探测（包括那八处不带 CFLAGS 的）：
 #
-#     CFLAGS_NOOPT = -I. -DUNIX $(LOCAL_ZIP)
-#     CFLAGS       = -O2 $(CFLAGS_NOOPT)
-#     flags: unix/configure
-#             sh unix/configure "${CC}" "${CFLAGS_NOOPT}" "${IZ_BZIP2}"
+#     sh unix/configure "gcc -std=gnu89" "-I. -DUNIX" ""
 #
-# ★★ 它把 **CFLAGS_NOOPT** 传给探测，不是 CFLAGS。所以第一次改的时候
-#    往 CFLAGS 里塞 `-std=gnu89`：**编译用了、探测没用**，报错原样还在。
-#    而 `LOCAL_ZIP` 是它留的口子 —— 它会进 CFLAGS_NOOPT，也就进了探测。
+# ★ 为什么不用 `CC="gcc -std=gnu89" make …`（那样会污染所有编译和链接）：
+#   探测只需要"按老标准能过"，而**真正的编译**可以按现代标准来。所以这里
+#   单独调一次 configure，把生成好的 `flags` 交给 make。
 #
-#     LOCAL_ZIP="-std=gnu89"  →  -I. -DUNIX -std=gnu89  →  unix/configure
+# ★ `unix/Makefile` 的 `flags:` 目标是 `sh unix/configure "${CC}" "${CFLAGS_NOOPT}"`。
+#   我们绕开它、自己调 —— 因为那个目标没法给 CC 加旗子。
 
-# ── 上一版为什么还没生效（第三次才对）────────────────────────────────────
+# ── 修法：让探测按 1999 年的"诊断级别"跑 ─────────────────────────────────
 #
-# 那个探测行是：
+# 上面说了那两个问题。而 `-std=gnu89` **只解决第一个**：在那个标准下隐式声明
+# 本该只是警告 —— 但**现代 gcc 即使给了 `-std=gnu89` 仍然把它当错误**
+# （实测：flags 里照样出现 -DZMEM）。
 #
-#     echo Check for memset
-#     echo "int main(){ char k; memset(&k,0,0); return 0; }" > conftest.c
-#     $CC -o conftest conftest.c >/dev/null 2>/dev/null        ← 注意这一行
-#     [ $? -ne 0 ] && CFLAGS="${CFLAGS} -DZMEM"
+# ★★ 所以真正管用的是把那条诊断**降级**：
 #
-# ★★ **它是整份 configure 里唯一一条不带 `$CFLAGS` 的编译**（另外 12 条都写的是
-#    `$CC $CFLAGS -c conftest.c`）。所以前三次塞的旗子（宏名、CFLAGS、
-#    LOCAL_ZIP）**它一次都没看见** —— 那不是传参通道的问题，是这一行的笔误。
+#       -Wno-implicit-function-declaration
+#       -Wno-error=implicit-function-declaration
 #
-# ★ 而 `CC=${1-cc}` **没有加引号**，于是 word split 会把它拆开。所以把旗子塞进
-#   CC 就能进这一行：
+#   加上之后，那个不带 `<string.h>` 的测试程序能编过 → 探测判"系统有 memset"
+#   → **不会**加 -DZMEM → zip.h 里那三行老声明不会被激活 → 不撞 glibc。
 #
-#       zip generic CC="gcc -std=gnu89"       ← 不选这条路
+# ★ 为什么不是 `-w`（全静默）：那也管用（实测 flags 里 ZMEM 也是 0），但它会把
+#   我们自己关心的警告一起吞掉。**只降级那一条诊断**，其余照常。
 #
-#   ★ 但我们**不这么做**：CC 里带旗子会污染所有编译（包括正常编译），而且
-#     `make` 里 CC 还用来链接，旗子混进去容易出别的问题。
-#
-# ★★★ 正路：**把那一行补上 `$CFLAGS`**（一个 patch）。上游的笔误，一行。
+# ★ 而旗子要放进 CC —— `CC=${1-cc}` 没引号，word split 会拆开，于是那八处不带
+#   `$CFLAGS` 的探测也能看见它。
 
 build() {
-  make -f unix/Makefile \
-    LOCAL_ZIP="-std=gnu89" \
-    generic
+  sh unix/configure "$(command -v gcc) -std=gnu89 -Wno-implicit-function-declaration -Wno-error=implicit-function-declaration" "-I. -DUNIX" "" || true
+  make -f unix/Makefile generic
 }
 
 package() {
