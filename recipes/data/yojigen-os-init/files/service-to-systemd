@@ -1,0 +1,108 @@
+#!/bin/sh
+# service-to-systemd —— 把我们那套服务定义【桥接】成 systemd unit。
+#
+# ── 为什么需要这座桥 ──────────────────────────────────────────────────────
+#
+# 决策记录 0024 定的服务模型是：
+#
+#     /usr/lib/yojigen-os/services/<名字>     定义（只有 start / stop）
+#     /etc/services/<名字> → 上面那个          启用（一条软链）
+#     /init                                   开机时逐个 start
+#
+# 而 systemd 只认两种：`.service` unit，或者 `/etc/init.d/` + `rc?.d/` 软链。
+# **它不认识 `/etc/services/`** —— 所以直接换 PID 1 的话，我们的 sshd 和 docker
+# 都不会起来。
+#
+# ★ 而"两套并行"不是妥协，是**分工**：
+#
+#     我们的定义    知道【怎么起这个服务】（参数、日志、就绪判据）
+#     systemd       知道【什么时候起、起失败了怎么办、依赖关系、日志归集】
+#
+#   所以 bridge 的做法是：unit 的 ExecStart 就调我们那份定义 —— 一份实现，
+#   两个调度器都能用。
+#
+# ★★ 而这个脚本不改决策 0024：`/etc/services/` 仍然是"启用"的唯一出处，
+#   这里只是把它**翻译**成 systemd 看得懂的形式。翻译是幂等的：删掉 unit
+#   再跑一次就是了。
+
+DEFS=/usr/lib/yojigen-os/services
+SETS=/etc/services
+UNITDIR=/usr/lib/systemd/system
+
+用法() {
+  echo "用法: service-to-systemd sync [名字...]" >&2
+  echo "      service-to-systemd clean" >&2
+  exit 2
+}
+
+# 把一个定义写成 unit
+写一份() {
+  name=$1
+  [ -e "$DEFS/$name" ] || { echo "✗ 没有定义: $name" >&2; return 1; }
+
+  cat > "$UNITDIR/yojigen-$name.service" <<UNIT
+[Unit]
+Description=Yojigen OS 服务: $name
+# ★ After=network.target 而不是 network-online：我们那两个（sshd、docker）
+#   都不需要"网卡拿到地址"才起得来。要等的那些该自己写。
+After=network.target
+# ★ Wants 而不是 Requires：一个服务起不来不该拦住别的。
+Wants=basic.target
+
+[Service]
+Type=forking
+# ★ 就绪判据交给定义自己 —— 它比 systemd 更清楚"什么算起来了"。
+#   （实测教训：只看 socket 存在会误判，见 docker 那份定义里的注释）
+ExecStart=$DEFS/$name start
+ExecStop=$DEFS/$name stop
+# ★ forking 类型要求有 PIDFile。而我们的定义不写 pid 文件（它们自己管进程），
+#   所以用 RemainAfterExit —— "start 返回 0 就算起来了"。
+RemainAfterExit=yes
+TimeoutStartSec=120
+# 重启策略：只在异常退出时重来，次数有上限（不做成"永远重试"）
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+  echo "  + yojigen-$name.service"
+}
+
+同步() {
+  mkdir -p "$UNITDIR"
+  n=0
+  for d in "$SETS"/*; do
+    [ -e "$d" ] || continue
+    name=$(basename "$d")
+    if [ $# -gt 0 ]; then
+      case " $* " in *" $name "*) ;; *) continue ;; esac
+    fi
+    写一份 "$name" && n=$((n+1))
+  done
+  echo "  共 $n 个"
+  if [ "$n" -gt 0 ] && command -v systemctl >/dev/null 2>&1; then
+    # 只在 systemd 是 PID 1 时才有意义；否则这一步什么也不做（不报错）
+    if [ -d /run/systemd/system ]; then
+      systemctl daemon-reload 2>/dev/null || true
+      for d in "$SETS"/*; do
+        [ -e "$d" ] || continue
+        systemctl enable "yojigen-$(basename "$d").service" 2>/dev/null || true
+      done
+      echo "  已 enable（systemd 在跑）"
+    fi
+  fi
+}
+
+清理() {
+  rm -f "$UNITDIR"/yojigen-*.service
+  echo "  清掉了所有 yojigen-*.service"
+}
+
+[ $# -ge 1 ] || 用法
+act=$1; shift
+case "$act" in
+  sync)  同步 "$@" ;;
+  clean) 清理 ;;
+  *)     用法 ;;
+esac

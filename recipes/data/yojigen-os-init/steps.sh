@@ -37,6 +37,12 @@ package() {
     ln -sf echo_success "$PKGDEST/usr/sbin/echo_failure"
     ln -sf echo_success "$PKGDEST/usr/sbin/log_error"
 
+    # ★★ 2026-10-22：SystemV → systemd 的桥（决策记录 0024 的延伸）。
+    #
+    #   `/etc/services/` 是 0024 定的"启用"出处，而 **systemd 不认识它** ——
+    #   所以换 PID 1 之前必须先有这座桥，否则 sshd / docker 都不起来。
+    install -Dm755 "$PKGDIR/files/service-to-systemd" "$PKGDEST/usr/sbin/service-to-systemd"
+
     # ★ 2026-10-22：`service` 命令（决策记录 0024）。放 /usr/bin 而不是
     #   /usr/sbin —— 它在 PATH 上，而且不是"只有 root 该碰"的东西（看 list 谁都能）。
     install -Dm755 "$PKGDIR/files/service" "$PKGDEST/usr/bin/service"
