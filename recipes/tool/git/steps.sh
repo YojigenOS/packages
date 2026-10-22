@@ -30,7 +30,17 @@
 #   thread_data 全成了未声明。
 #
 #   ★ 光 `-std=gnu17` 不够：那是解决 C23 的 unreachable 宏，这是另一件事。
-CFLAGS="-std=gnu17 -O2 -pipe -pthread"
+# ★★★ 第三条：`thread_local` 这个 token 得有人定义（2026-10-22）。
+#
+#       builtin/index-pack.c:97: error: expected '{' before 'thread_local'
+#
+#   它在 gcc 的 **C23** 里是关键字；而在 **C17** 里它只是 <threads.h> 里的一个
+#   宏，git 又没 include 那个头（它只 include <pthread.h>）。于是我们钉了
+#   `-std=gnu17` 之后，这个 token 谁都不认 —— 换了个错法，还是错。
+#
+#   ★ 显式钉住：`__thread` 是 GCC 的线程局部存储扩展，语义和 _Thread_local 一样。
+#     这一条比"升级到某个能过的 git 版本"可靠：它不依赖上游哪天改。
+CFLAGS="-std=gnu17 -O2 -pipe -pthread -Dthread_local=__thread"
 
 build() {
   make -j"$(nproc)" \
