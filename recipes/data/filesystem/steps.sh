@@ -17,11 +17,25 @@ package() {
   d="$PKGDEST"
 
   # ---------------------------------------------------------------- 目录骨架
+  # ══ SysV 的兼容骨架（2026-10-22）══
+  #
+  # 下面那几个 etc/init.d 和 etc/rc2.d..rc5.d 不是"为了某一个安装脚本"—— 而是
+  # 【很多既有的安装脚本和守护进程都按这套约定找地方】：
+  #
+  #     /etc/init.d/<名字>        服务脚本
+  #     /etc/rc2.d/S95<名字>      启用的软链（S = start）
+  #
+  # 没有这些目录，`cp ... /etc/init.d/x` 直接报 No such file or directory ——
+  # 那正是 1Panel 的安装脚本在我们系统上撞到的第一堵墙。
+  #
+  # ★ 有了目录之后 /init 也会扫 /etc/rc2.d/S* 把它们起起来。两套并存
+  #   （我们的 /etc/services/ 和 SysV 的 rc 软链），因为生态里两种写法都有。
   for p in \
     usr/bin usr/sbin usr/lib usr/libexec usr/include \
     usr/share usr/share/man usr/share/man/man1 \
     usr/local usr/local/bin usr/local/lib usr/local/sbin \
     etc etc/profile.d etc/skel etc/ld.so.conf.d \
+    etc/init.d etc/rc.d etc/rc2.d etc/rc3.d etc/rc4.d etc/rc5.d \
     var var/log var/tmp var/cache var/lib \
     tmp root home run mnt opt srv proc sys dev
   do

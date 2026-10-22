@@ -166,6 +166,41 @@ if [ -d /etc/services ] && [ -n "$(ls -A /etc/services 2>/dev/null)" ]; then
     echo
 fi
 
+# --- SysV 的 rc 软链（兼容层）-------------------------------------------
+#
+# 生态里"开机自启"有两种写法，而我们要两种都能认：
+#
+#   /etc/services/<名字>      我们自己的（决策记录 0024，包提供定义 + 风味启用）
+#   /etc/rc2.d/S<N><名字>     SysV 的（老安装脚本和管理员习惯的写法）
+#
+# ★ 为什么必须支持后一种：**很多既有的安装脚本只认它**。实测 1Panel 的
+#   install.sh 在没有 systemctl 时就把自己的 `.init` 脚本放进 /etc/init.d/
+#   再建 rc 软链 —— 没有那个目录它直接报 No such file or directory。
+#
+# ★★ 只跑大写 `S` 开头的（S = start）；`K` 开头的是关机时停的，这里不管。
+#    而运行级只跑 2：我们是单运行级的系统，2/3/4/5 都跑会让同一个服务起两遍。
+#
+# 和上面一样：**失败不拦启动**。
+if [ -d /etc/rc2.d ] && [ -n "$(ls -A /etc/rc2.d 2>/dev/null)" ]; then
+    echo "  SysV 启用的服务："
+    for s in /etc/rc2.d/S*; do
+        [ -e "$s" ] || continue
+        [ -x "$s" ] || continue
+        name=$(basename "$s" | sed 's/^S[0-9]*//')
+        if [ -e "/etc/services/$name" ]; then
+            continue          # 已经在上面按我们的方式起过了
+        fi
+        echo "  ▸ $name"
+        if "$s" start; then
+            echo "$name ok (sysv)" >> /run/yojigen-os/services.log
+        else
+            echo "    ⚠ $name 没起来，继续"
+            echo "$name failed (sysv)" >> /run/yojigen-os/services.log
+        fi
+    done
+    echo
+fi
+
 # --- 起 shell -----------------------------------------------------------
 # 开机就进 root shell。现在还没有用户体系（没有 shadow/pam），
 # 那些属于「能装软件」那一层，不在「能开机」里。
