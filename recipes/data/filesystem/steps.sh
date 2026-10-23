@@ -72,9 +72,21 @@ package() {
   #   建，而 sysusers 和 tmpfiles 之间没有硬顺序（tmpfiles 只写了
   #   `After=systemd-sysusers.service`，而 sysusers 自己也可能迟一步）。
   #
-  # ★ 所以这里把「形状」直接做进镜像：三个空文件 + `utmp` 组（在
-  #   files/etc/group 里）。开机的 tmpfiles 仍会让它们保持正确（`f` 类型只是
-  #   「不存在就建」），而**竞态消失了** —— 因为文件一开始就在。
+  # ★ 所以这里把「形状」直接做进镜像：**三个空文件**。
+  #
+  #   ★★ 而 `utmp` 组【不】写进 files/etc/group —— 试过，是错的：
+  #      systemd-sysusers 会按 `basic.conf` 里 `g utmp - - -` 动态分配一个 GID
+  #      （实测 TX 上分到 998），和我们硬写的 43 冲突，而 /etc/group 归
+  #      filesystem 包所有 —— sysusers 改完之后 apk 会认为它"被用户改过"，
+  #      下次升级 filesystem 就变成一次合并冲突。
+  #
+  #   ★ 属主由开机的 tmpfiles 修正：`var.conf` 里 `f /var/log/wtmp 0664 root utmp -`，
+  #     而 `f` 在文件已存在时**仍会改属主/权限**（实测：root:root → root:utmp）。
+  #     它的顺序由 systemd 保证（`After=systemd-sysusers.service`）。
+  #
+  #   ★★ 所以镜像里的状态是「文件在、属主 root:root」—— 而那正是我们要的：
+  #      **"文件不存在"这个致命条件消失了**。即使 tmpfiles 那一步还有问题，
+  #      `systemd-update-utmp` 也不会再因为"没有 wtmp"而失败。
   #
   # ★ 这三个文件的用途是真实的，不是为了让 systemd 高兴：
   #     /var/log/wtmp     who / last 读它
