@@ -428,6 +428,29 @@ def info_fields(job: Job, depends: list[str], provides: list[str]
 
 # ------------------------------------------------------------------ 容器里那一段
 
+# ── 发行版的系统组（GID → 名字）────────────────────────────────────────────
+#
+# ★★★ 为什么要在驱动里再列一遍（2026-10-23）：
+#
+#   打包容器里 `chgrp 43` 能成功，但 `mkpkg` 打出来的是 `group: nobody` ——
+#   **因为 `mkpkg` 记的是组【名字】**，而它查不到 GID 43 → 退回 nobody。
+#
+#   所以容器里必须有一行 `utmp:x:43:` 才能记对。而容器是一次性的
+#   （`docker run --rm`），写它的 `/etc/group` 无害。
+#
+# ★★ 而这张表【和 `filesystem` 包的 `files/etc/group` 是同一件事】——
+#    两处都写就是为了"驱动能独立跑，不依赖某个包被解开"。
+#    `test_pack_groups` 盯着它们不许漂移：**这里改了那边没改，测试会红。**
+#
+# ★ 值照 Debian 的 base-passwd 抄（那套从 1990 年代沿用至今，是事实标准）。
+SYSTEM_GROUPS: tuple[tuple[int, str], ...] = (
+    (4, "adm"), (5, "tty"), (6, "disk"), (7, "lp"),
+    (15, "kmem"), (20, "dialout"), (24, "cdrom"), (26, "tape"),
+    (29, "audio"), (42, "shadow"), (43, "utmp"), (44, "video"),
+    (100, "users"),
+)
+
+
 def inner_script(job: Job, depends: list[str], provides: list[str], *,
                  signed: bool) -> str:
     """生成【容器里】跑的 shell（`/pack/inner.sh`）。
@@ -446,6 +469,24 @@ def inner_script(job: Job, depends: list[str], provides: list[str], *,
         #   装不上就继续 —— 下面的 getcap 会失败，而那时 /tmp/.caps 是空的，
         #   等于退回"没有能力位"的旧行为，不会把构建弄挂。
         "apk add --no-cache libcap >/dev/null 2>&1 || true",
+        # ★★★ 让容器认得发行版的组名（2026-10-23 加）。
+        #
+        #   撞到的最后一环：清单里记的是数字 GID（`43 /var/log/wtmp`），
+        #   `chgrp 43` 也成功了 —— 而 `mkpkg` 打出来的包是 `group: nobody`。
+        #
+        #   **因为 `mkpkg` 记的是组【名字】**，它在容器的 `/etc/group` 里查不到
+        #   GID 43，就退回 `nobody`（65534）。
+        #
+        #   ★ 所以让容器认得那个 GID 对应的名字。容器是**一次性的**
+        #     （`docker run --rm`），写一行 `/etc/group` 无害，也不影响宿主。
+        #
+        #   ★ 而这张表就是 SYSTEM_GROUPS —— 它和 `filesystem` 包的
+        #     `files/etc/group` 是同一件事，由 `test_pack_groups` 盯着不许漂移。
+        f"for e in {' '.join(f'{g}:{n}' for g, n in SYSTEM_GROUPS)}; do",
+        '  gid=${e%%:*}; gname=${e##*:}'
+        '  grep -q "^$gname:" /etc/group 2>/dev/null || printf "%s:x:%s:\\n" "$gname" "$gid" >> /etc/group'
+        'done',
+
         # ★ rsync 也要装 —— 理由同 build.py：cp 不保 security.* 扩展属性，
         #   而能力位在那里。apk 装一个 rsync 换来能力位不丢，是划得来的。
         "apk add --no-cache rsync >/dev/null 2>&1 || true",
