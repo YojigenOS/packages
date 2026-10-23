@@ -820,8 +820,27 @@ def run_in_container(srcrel: str, srcname: str, arch: str, spec: dict, epoch: in
         #     "有 getcap 才查能力位"，组属主是另一件事。
         'find "$WORK/dest" \\( -type f -o -type d \\) ! -group 0 2>/dev/null'
         ' | while IFS= read -r f; do'
-        '     g=$(stat -c %G "$f" 2>/dev/null) || continue;'
-        '     [ -n "$g" ] && [ "$g" != root ] && printf "%s %s\\n" "$g" "${f#$WORK/dest}";'
+        # ★★★ 记【数字 GID】，不记组名（2026-10-23 修）。
+        #
+        #   撞到的：原来用 `stat -c %G`，而它在**查不到组名时会返回字面字符串
+        #   `UNKNOWN`**（不是空、不是数字）。于是清单里 18 行全是：
+        #
+        #       UNKNOWN /var/log/wtmp
+        #       UNKNOWN /etc/hosts
+        #       ...
+        #
+        #   而在 pack 那边 `chgrp UNKNOWN ...` 必然失败 —— 日志里就是
+        #   `⚠ 补不回 /data/var/log/wtmp 的组 UNKNOWN`。
+        #
+        #   ★ 为什么查不到：`chgrp 43` 造出的组，在构建容器的 /etc/group 里
+        #     没有对应条目（43 是 Debian 的约定，而容器是旧版 9 个组那套）。
+        #     **文件带着一个"没有名字的 GID"是完全合法的** —— Linux 就是这么
+        #     工作的（`ls -ln` 显示 43，`ls -l` 显示 UNKNOWN 或数字）。
+        #
+        #   ★ 所以记 `%g`（数字）而不是 `%G`（名字）：数字总是有的，而目标
+        #     系统装上去之后，43 自然会被解析成 `utmp`（那边 /etc/group 里有）。
+        '     g=$(stat -c %g "$f" 2>/dev/null) || continue;'
+        '     [ -n "$g" ] && [ "$g" != 0 ] && printf "%s %s\\n" "$g" "${f#$WORK/dest}";'
         '   done > "$WORK/dest/.yojigen-groups" || true\n'
         'echo "[产物] 组属主清单（$(wc -l < "$WORK/dest/.yojigen-groups" 2>/dev/null || echo 0) 条）" >&2\n'
         'find "$WORK/dest" -perm -4000 -exec ls -ld {} \\; >&2 2>/dev/null || true\n'
