@@ -508,12 +508,23 @@ def inner_script(job: Job, depends: list[str], provides: list[str], *,
         #
         #   为什么按名字而不是数字：构建容器里的 GID 和目标系统上的可能不同
         #   （`utmp` 在容器里是 101、在目标上是 43 也说不定）。记名字才对得上。
-        "find /data \\( -type f -o -type d \\) ! -group 0 2>/dev/null"
-        " | while IFS= read -r f; do"
-        "     g=$(stat -c %G \"$f\" 2>/dev/null) || continue;"
-        "     [ -n \"$g\" ] && [ \"$g\" != root ] && echo \"$g $f\";"
-        "   done > /tmp/.groups || true",
-        "echo \"[打包] 记下 $(wc -l < /tmp/.groups 2>/dev/null || echo 0) 个非 root 的组属主\"",
+        # ★★ 组属主从【清单】读，不是现场扫（2026-10-23 修正）。
+        #
+        #   现场扫不出来的原因：`build.py` 的 `cleanup()` 里有一句
+        #       chown -R "$HOSTUID:$HOSTGID" /in
+        #   —— payload 从容器出来时，**所有文件的组已经被改成构建用户的组**。
+        #   于是这里 `find ! -group 0` 一个都找不到（实测：tar 里读出来是 `0 0`）。
+        #
+        #   ★ 所以清单由 `build.py` 在【改之前】写（`.yojigen-groups`），
+        #     和 `.yojigen-caps` 完全同一个理由：属性过不了那条路，文本可以。
+        "GROUPS=/data/.yojigen-groups",
+        "if [ -s \"$GROUPS\" ]; then"
+        "  cp \"$GROUPS\" /tmp/.groups;"
+        "  echo \"[打包] 从清单读到 $(wc -l < /tmp/.groups) 个非 root 的组属主\";"
+        "else"
+        "  : > /tmp/.groups;"
+        "  echo \"[打包] 没有 .yojigen-groups —— 这一批的组属主都是 root\";"
+        "fi",
         "chown -R 0:0 /data",
         # ★ 补回组属主。用 `chgrp` 按名字 —— target 系统上没有那个组时它失败，
         #   而失败【要说出来】：一个静默没补上的组，症状是"who 不记录登录"，
@@ -551,6 +562,8 @@ def inner_script(job: Job, depends: list[str], provides: list[str], *,
         "fi",
         # ★ 而清单本身要删掉 —— 它是构建过程的记事，不是这个包的内容。
         "rm -f \"$CAPS\"",
+        # ★ 而组清单同样要删 —— 同理，它是构建过程的记事。
+        "rm -f \"$GROUPS\"",
     ]
 
     # ── mkpkg ────────────────────────────────────────────────────────────

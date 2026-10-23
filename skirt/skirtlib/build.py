@@ -406,7 +406,7 @@ def make_build_script(spec: dict, arch: str = "") -> str:
         #       meson / pip       0 个                   → 报出来 ✓
         #
         #     正好分开，而分开的依据是【"有没有包内容"】而不是【"文件多少"】。
-        "  n=$(find \"$PKGDEST\" -type f ! -name '.yojigen-caps' 2>/dev/null | wc -l)\n"
+        "  n=$(find \"$PKGDEST\" -type f ! -name '.yojigen-caps' ! -name '.yojigen-groups' 2>/dev/null | wc -l)\n"
         "  if [ \"$n\" -eq 0 ]; then\n"
         "    echo \"[产物] ✗ $PKGDEST 里一个包内容都没有 —— package() 没装东西。\" >&2\n"
         "    echo \"        （那一层的函数可能没被 steps.sh 覆盖掉，或者它装的地方\" >&2\n"
@@ -777,6 +777,24 @@ def run_in_container(srcrel: str, srcname: str, arch: str, spec: dict, epoch: in
         #
         #   文件名前面一个点 —— skirt pack 读完会把它删掉，不会进包。
         '  "$GC2" -r "$WORK/dest" 2>/dev/null | sed "s|^$WORK/dest||" > "$WORK/dest/.yojigen-caps" || true\n'
+        # ★★ 组属主的清单（2026-10-23 加）。
+        #
+        #   为什么需要它：`pack.py` 里有个 `chown -R 0:0 /data`，它修的是
+        #   "属主被 cleanup 改成构建用户"那件事，但**顺手把组也拍平了**。
+        #   `/var/log/wtmp` 的 `root:utmp` 就是在这里丢的。
+        #
+        #   ★ 和 `.yojigen-caps` 完全同一个形状、同一个理由：**属性过不了
+        #     "容器 → 宿主 → 容器"这条路**（chown 会重写它），而**文本可以**。
+        #
+        #   格式：`<组名> <相对路径>`，一行一个。用组名不用数字 —— 构建容器和
+        #   目标系统上同一个组的 GID 可能不同（`utmp` 在容器里 998、目标上 43）。
+        #
+        #   ★ 只在【组不是 root】时记 —— root 是默认，记它没意义。
+        'find "$WORK/dest" \\( -type f -o -type d \\) ! -group 0 2>/dev/null'
+        ' | while IFS= read -r f; do'
+        '     g=$(stat -c %G "$f" 2>/dev/null) || continue;'
+        '     [ -n "$g" ] && [ "$g" != root ] && printf "%s %s\\n" "$g" "${f#$WORK/dest}";'
+        '   done > "$WORK/dest/.yojigen-groups" || true\n'
         '  n=$(wc -l < "$WORK/dest/.yojigen-caps" 2>/dev/null || echo 0)\n'
         '  echo "[产物] 能力位清单（$n 条）写进 payload 的 .yojigen-caps" >&2\n'
         '  head -3 "$WORK/dest/.yojigen-caps" 2>/dev/null | sed "s|^|  · |" >&2 || true\n'

@@ -16,7 +16,7 @@
 [package]
 name        = "filesystem"
 version     = "1.0"
-release     = 15
+release     = 16
 date        = 2026-10-10T06:54:56Z
 description = "目录骨架、usr-merge 链接与 /etc 基础文件"
 url         = "https://github.com/YojigenOS/packages"
