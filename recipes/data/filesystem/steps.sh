@@ -50,6 +50,16 @@ package() {
   # /var/run 指向 /run —— 现代约定，避免重启后状态残留
   ln -s ../run "$d/var/run"
 
+  # ★★ 再放一份【权威的】/etc/group 到 /usr/share/yojigen-os/（2026-10-23）。
+  #
+  #   理由：`scripts/post-install` 要合并 /etc/group，而它读不到 `.apk-new`
+  #   的时候需要一个兜底来源 —— apk 判断"文件没被改过"时会直接覆盖、不留
+  #   .apk-new。这份就是那个兜底。
+  #
+  #   ★ 为什么不用 /etc/group 自己：那个是"期望状态"，而合并脚本需要的是
+  #     **包里的原始表**；两者在升级路径上可能不同（apk 还没覆盖）。
+  install -Dm644 "$PKGDIR/files/etc/group" "$d/usr/share/yojigen-os/group.master"
+
   # ── utmp 记账用的三个空文件（2026-10-23 加）──────────────────────────────
   #
   # ★★ 为什么由【我们】造，而不是等开机时 tmpfiles 建：
