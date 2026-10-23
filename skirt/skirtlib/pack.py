@@ -520,7 +520,11 @@ def inner_script(job: Job, depends: list[str], provides: list[str], *,
         "GROUPS=/data/.yojigen-groups",
         "if [ -s \"$GROUPS\" ]; then"
         "  cp \"$GROUPS\" /tmp/.groups;"
-        "  echo \"[打包] 从清单读到 $(wc -l < /tmp/.groups) 个非 root 的组属主\";"
+        "  echo \"[打包] 从清单读到 $(wc -l < /tmp/.groups) 个非 root 的组属主\" >&2;"
+        # ★ 而清单【内容】也打出来（前 3 条）—— 只看条数分不清"记对了没有"。
+        #   这条是 2026-10-23 加的：当时清单有 18 条、chgrp 也成功，
+        #   而 .apk 里还是 root:root，光看条数完全不知道差在哪。
+        "  head -3 /tmp/.groups | sed \"s|^|    · |\" >&2 || true;"
         "else"
         "  : > /tmp/.groups;"
         "  echo \"[打包] 没有 .yojigen-groups —— 这一批的组属主都是 root\";"
