@@ -483,8 +483,21 @@ def inner_script(job: Job, depends: list[str], provides: list[str], *,
         #   ★ 而这张表就是 SYSTEM_GROUPS —— 它和 `filesystem` 包的
         #     `files/etc/group` 是同一件事，由 `test_pack_groups` 盯着不许漂移。
         f"for e in {' '.join(f'{g}:{n}' for g, n in SYSTEM_GROUPS)}; do",
+        # ★★★ 先删掉冲突项，再写（2026-10-23 修）。
+        #
+        #   上一版是 `grep -q "^$gname:" || 写` —— **发现同名就跳过**。
+        #   而 alpine 的 `/etc/group` 里本来就有 `utmp`，GID 却不是 43。
+        #   于是跳过 → GID 43 仍然没有组名 → `mkpkg` 退回 `nobody`。
+        #
+        #   ★ 判据："已经有了就不动" 只在【已有的那个是对的】时成立。
+        #     而这里要的不是"有个叫 utmp 的组"，是"**GID 43 叫 utmp**"。
+        #     两件事在 GID 不同时不是一回事。
+        #
+        #   容器是一次性的，删改它的 /etc/group 无害。
         '  gid=${e%%:*}; gname=${e##*:}\n'
-        '  grep -q "^$gname:" /etc/group 2>/dev/null || printf "%s:x:%s:\\n" "$gname" "$gid" >> /etc/group\n'
+        # 删掉同名行（GID 不同）和同 GID 行（名字不同），然后是干净的追加
+        '  sed -i "/^$gname:/d; /:[0-9]*:$gid:/d" /etc/group 2>/dev/null || true\n'
+        '  printf "%s:x:%s:\\n" "$gname" "$gid" >> /etc/group\n'
         'done\n',
 
         # ★ rsync 也要装 —— 理由同 build.py：cp 不保 security.* 扩展属性，
