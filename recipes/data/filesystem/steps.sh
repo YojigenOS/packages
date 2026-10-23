@@ -114,6 +114,25 @@ package() {
   chmod 0664 "$d/var/log/wtmp" "$d/var/log/lastlog"
   chmod 0660 "$d/var/log/btmp"
 
+  # ★★ 组属主用【数字 GID 43】，不是组名 `utmp`（2026-10-23）。
+  #
+  #   为什么：构建容器里的 `/etc/group` 是**上一次构建的 filesystem** 装出来的
+  #   —— 那时可能还没有 `utmp` 组（比如这台机器的 devel 镜像还是 9 个组那版）。
+  #   而 `chgrp utmp` 在没有那个组时会失败，于是属主留在 root。
+  #
+  #   实测撞到：第一版靠 `pack.py` 那边"保留非 root 组属主"，但前提是
+  #   **payload 里本来就得是 `root:utmp`** —— 而 `: > file` 造出来是 `root:root`，
+  #   所以那段逻辑无从保留（tar 里读出来确实是 `0 0`）。
+  #
+  #   ★ 用数字 43：`chgrp 43` 在组不存在时**也能成功**（chgrp 认数字）。
+  #     而 43 就是 Debian 的 `utmp` GID —— 我们 `/etc/group` 里也写着 43。
+  #     装到目标系统上之后，`stat` 会把它显示成 `utmp`（因为那边有那个组）。
+  #
+  #   ★ 这个数字不是魔数：它和 `files/etc/group` 里的 `utmp:x:43:` 是同一件事，
+  #     两处改了要一起改。而这是个**发行版常量**，抄的是 Debian 的 base-passwd。
+  chgrp 43 "$d/var/log/wtmp" "$d/var/log/btmp" "$d/var/log/lastlog" 2>/dev/null || \
+    echo "  ⚠ chgrp 43 失败 —— 那三个 utmp 文件的组属主留在 root" >&2
+
   # --------------------------------------------------------------- usr-merge
   # 让 /bin /sbin /lib /lib64 都通向 usr/ 下的真实目录。
   #
