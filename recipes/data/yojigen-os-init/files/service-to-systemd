@@ -29,14 +29,14 @@ DEFS=/usr/lib/yojigen-os/services
 SETS=/etc/services
 UNITDIR=/usr/lib/systemd/system
 
-用法() {
+usage() {
   echo "用法: service-to-systemd sync [名字...]" >&2
   echo "      service-to-systemd clean" >&2
   exit 2
 }
 
 # 把一个定义写成 unit
-写一份() {
+write_one() {
   name=$1
   [ -e "$DEFS/$name" ] || { echo "✗ 没有定义: $name" >&2; return 1; }
 
@@ -95,7 +95,7 @@ UNIT
   echo "  + yojigen-$name.service"
 }
 
-同步() {
+do_sync() {
   mkdir -p "$UNITDIR"
   n=0
   for d in "$SETS"/*; do
@@ -104,7 +104,7 @@ UNIT
     if [ $# -gt 0 ]; then
       case " $* " in *" $name "*) ;; *) continue ;; esac
     fi
-    写一份 "$name" && n=$((n+1))
+    write_one "$name" && n=$((n+1))
   done
   echo "  共 $n 个"
   if [ "$n" -gt 0 ] && command -v systemctl >/dev/null 2>&1; then
@@ -120,15 +120,15 @@ UNIT
   fi
 }
 
-清理() {
+do_clean() {
   rm -f "$UNITDIR"/yojigen-*.service
   echo "  清掉了所有 yojigen-*.service"
 }
 
-[ $# -ge 1 ] || 用法
+[ $# -ge 1 ] || usage
 act=$1; shift
 case "$act" in
-  sync)  同步 "$@" ;;
-  clean) 清理 ;;
-  *)     用法 ;;
+  sync)  do_sync "$@" ;;
+  clean) do_clean ;;
+  *)     usage ;;
 esac
