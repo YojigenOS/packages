@@ -489,7 +489,41 @@ def inner_script(job: Job, depends: list[str], provides: list[str], *,
         " [ -x \"$GC\" ] || GC=/usr/sbin/getcap",
         "if [ -x \"$GC\" ]; then \"$GC\" -r /data > /tmp/.caps 2>/dev/null || true; fi",
         "echo \"[打包] 记下 $(wc -l < /tmp/.caps 2>/dev/null || echo 0) 个能力位\"",
+        # ★★ 而【非 root 的组属主】要保住 —— 2026-10-23 加。
+        #
+        #   上面那个 `chown -R 0:0` 修的是"属主变成构建用户"，但它顺手把
+        #   **组**也拍平了。而有些文件的组属主是【有意义的】：
+        #
+        #       /var/log/wtmp   root:utmp     who / last 靠它写记录
+        #       /var/log/btmp   root:utmp     lastb 靠它
+        #       /usr/bin/wall   root:tty      往终端广播
+        #
+        #   ★ 而 apk 的记录是【按名字】的（`adbdump` 里是 `group: root`），
+        #     不是数字 GID —— 所以 `root:utmp` 能原样进包，装的时候 apk 按
+        #     目标系统的 /etc/group 解析。**这正是 Debian 的 dpkg 的做法**。
+        #
+        #   ★★ 所以顺序是：先记下非 root 的组（**按名字**）、chown 拍平、
+        #      再把那些组按名字设回去。和上面 setuid / 能力位那两段是同一个
+        #      形状 —— 那两样也是"chown 会毁掉、所以先记后补"。
+        #
+        #   为什么按名字而不是数字：构建容器里的 GID 和目标系统上的可能不同
+        #   （`utmp` 在容器里是 101、在目标上是 43 也说不定）。记名字才对得上。
+        "find /data \\( -type f -o -type d \\) ! -group 0 2>/dev/null"
+        " | while IFS= read -r f; do"
+        "     g=$(stat -c %G \"$f\" 2>/dev/null) || continue;"
+        "     [ -n \"$g\" ] && [ \"$g\" != root ] && echo \"$g $f\";"
+        "   done > /tmp/.groups || true",
+        "echo \"[打包] 记下 $(wc -l < /tmp/.groups 2>/dev/null || echo 0) 个非 root 的组属主\"",
         "chown -R 0:0 /data",
+        # ★ 补回组属主。用 `chgrp` 按名字 —— target 系统上没有那个组时它失败，
+        #   而失败【要说出来】：一个静默没补上的组，症状是"who 不记录登录"，
+        #   离成因很远。
+        "GRPFAIL=0",
+        "while IFS=' ' read -r g f; do",
+        "  [ -n \"$g\" ] && [ -n \"$f\" ] || continue",
+        "  chgrp \"$g\" \"$f\" 2>/dev/null || { GRPFAIL=$((GRPFAIL+1)); echo \"  ⚠ 补不回 $f 的组 $g\"; }",
+        "done < /tmp/.groups || true",
+        "[ \"$GRPFAIL\" -gt 0 ] && echo \"[打包] ⚠ $GRPFAIL 个文件的组属主没补回（构建容器里没有那个组）\" || true",
         "while IFS=' ' read -r m f; do chmod \"$m\" \"$f\" 2>/dev/null || true; done"
         " < /tmp/.setid || true",
         "SC=$(command -v setcap 2>/dev/null || true);"

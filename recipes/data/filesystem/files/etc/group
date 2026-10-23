@@ -1,9 +1,57 @@
+# Yojigen OS 的系统组。
+#
+# ★★ 这张表**照 Debian 的 base-passwd 抄**（2026-10-23）。
+#
+#   为什么值得抄而不是自己编：这些 GID 是【外部约定】——
+#     · systemd 的 sysusers.d/basic.conf 里写着 `g utmp {{UTMP_GID}}`，
+#       而 meson 那个选项的默认值是 0（"没指定"）→ 于是运行时**动态分配**。
+#       动态分配的后果我们撞过：`wtmp` 的组在 tmpfiles 跑的时候还不存在，
+#       `CANTCREAT` 被 systemd 当成成功，接着 `systemd-update-utmp` 失败，
+#       而它挡在 `sysinit.target` 前面 —— 整个启动停住。
+#     · 文件/设备/脚本里写死的 GID 到处都是（/dev/tty 是 5，/dev/disk 是 6…）
+#     · 而 Debian 这套值从 1990 年代沿用至今，是事实上的标准
+#
+#   ★ 所以这里给 systemd 传 `-Dutmp-gid=43` 这类值（见 init/systemd 配方），
+#     **两边对齐**：静态表里是 43，sysusers 印证的也是 43，谁先跑都不冲突。
+#
+# ★ 而这张表**不代表我们的用户策略**：这些组大部分是空的（只是占住 GID），
+#   谁需要谁把用户加进去。真正常用的（wheel/sudo）在下面。
+#
+# 组名:GID:成员
 root:x:0:
-bin:x:1:
-daemon:x:2:
+daemon:x:1:
+bin:x:2:
+sys:x:3:
+adm:x:4:
 tty:x:5:
 disk:x:6:
+lp:x:7:
+mail:x:8:
+news:x:9:
+uucp:x:10:
+man:x:12:
+proxy:x:13:
+kmem:x:15:
+dialout:x:20:
+fax:x:21:
+voice:x:22:
+cdrom:x:24:
+floppy:x:25:
+tape:x:26:
+sudo:x:27:
+audio:x:29:
+dip:x:30:
+operator:x:37:
+list:x:38:
+src:x:40:
+shadow:x:42:
+utmp:x:43:
+video:x:44:
+sasl:x:45:
+plugdev:x:46:
+staff:x:50:
+games:x:60:
+users:x:100:
 wheel:x:10:
 sshd:x:22:
-users:x:100:
 nobody:x:65534:

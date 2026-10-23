@@ -45,7 +45,7 @@
 [package]
 name        = "systemd"
 version     = "258"
-release     = 6
+release     = 7
 date        = 2026-10-22T10:30:00Z
 description = "系统与服务管理器（决策记录 0022：自己建）"
 url         = "https://systemd.io/"
@@ -142,6 +142,31 @@ configure = [
     "-Dhostnamed=true",
     "-Dtimedated=true",
     "-Dlocaled=true",
+    # ★★★ 把发行版的 GID 表传给 systemd（2026-10-23）。
+    #
+    #   `sysusers.d/basic.conf` 里是 `g utmp {{UTMP_GID}}`，而 meson 那个选项的
+    #   **默认值是 0（"没指定"）** —— 于是 sysusers 只能运行时动态分配（我们撞到
+    #   998）。动态分配的后果是同一次启动里"组还没建出来"的竞态，而它让
+    #   `wtmp` 建不出来、`systemd-update-utmp` 失败、整个启动停在 sysinit。
+    #
+    #   ★ 而 `files/etc/group`（filesystem 包）里是**静态**的一张表 ——
+    #     两个来源必须一致，否则 sysusers 会报"组已存在但 GID 不同"。
+    #
+    #   ★ 这里填的值**照 Debian 的 base-passwd 抄**（那套从 1990 年代沿用至今，
+    #     是事实上的标准）。只填 `files/etc/group` 里真有的那些 —— 没有的组
+    #     让它保持默认（sysusers 会跳过不存在的组定义）。
+    "-Dutmp-gid=43",
+    "-Dtty-gid=5",
+    "-Ddisk-gid=6",
+    "-Dlp-gid=7",
+    "-Dkmem-gid=15",
+    "-Ddialout-gid=20",
+    "-Dcdrom-gid=24",
+    "-Dtape-gid=26",
+    "-Daudio-gid=29",
+    "-Dvideo-gid=44",
+    "-Dusers-gid=100",
+    "-Dadm-gid=4",
     # ★★ SysV 兼容：让它读我们那套 init.d + rc2.d（1Panel 装的服务靠这个）
     "-Dsysvinit-path=/etc/init.d",
     "-Dsysvrcnd-path=/etc",
