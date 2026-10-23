@@ -677,6 +677,24 @@ def pack_one(job: Job, *, pkgs_dir: Path, work: Path, sign_key: Path | None,
     if out.is_file() and out.stat().st_size > 0:
         note(f"✓ {out.stat().st_size} 字节")
         _sync_sidecar(job, pkgs_dir, note)
+        # ★★★ 成功时也要把【关键诊断】打出来（2026-10-23 加）。
+        #
+        #   撞到的：为了查"组属主为什么丢了"，我在 inner.sh 里加了几行
+        #   `[打包] 从清单读到 N 条` —— 而它们在 CI 日志里**一行都不出现**。
+        #
+        #   原因就是上面那句 `return True`：`inner.sh` 的输出被
+        #   `capture_output` 收进 `<产物>/log`，而那个文件**只在失败时才被
+        #   打出来**。成功路径上它是黑盒。
+        #
+        #   ★ 而"成功"这件事恰恰不等于"做对了"—— 组属主就是这样：打包
+        #     成功、字节数正常、`.apk` 里的组却是 root。**成功路径上的诊断
+        #     比失败路径上的更重要**，因为失败至少还有退出码。
+        #
+        #   ★ 只挑和"属性有没有带到"有关的行，不是把整个 log 倒出来
+        #     （那会把 CI 日志淹掉，而淹掉之后就没人看了）。
+        for line in log.splitlines():
+            if any(k in line for k in ("清单", "组属主", "能力位")):
+                note(f"      {line.strip()}")
         return True
 
     note("✗")
