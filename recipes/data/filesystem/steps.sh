@@ -50,6 +50,48 @@ package() {
   # /var/run 指向 /run —— 现代约定，避免重启后状态残留
   ln -s ../run "$d/var/run"
 
+  # ── utmp 记账用的三个空文件（2026-10-23 加）──────────────────────────────
+  #
+  # ★★ 为什么由【我们】造，而不是等开机时 tmpfiles 建：
+  #
+  #   实测（TX 上 BOOT -2 的 journal，那次 systemd 起不来）：
+  #
+  #       [3.152] Running create action for entry f /var/log/wtmp
+  #       [3.152] Relabelling "/var/log/wtmp"        ← 没有 "has been created"
+  #       [3.205] systemd-update-utmp: Not writing wtmp: No such file or directory
+  #
+  #   而 `systemd-tmpfiles-setup.service` 里写着：
+  #
+  #       SuccessExitStatus=DATAERR CANTCREAT
+  #
+  #   —— **`CANTCREAT` 被当成成功**。于是「建不出来」被吞掉了，紧接着
+  #   `systemd-update-utmp` 在 50 毫秒后启动、发现文件不在、失败；而它的
+  #   `Before=sysinit.target` 让整个启动停在 sysinit 上，systemd 直接退出。
+  #
+  #   建不出来的原因是 **`utmp` 组那时还不存在** —— 它由 `systemd-sysusers`
+  #   建，而 sysusers 和 tmpfiles 之间没有硬顺序（tmpfiles 只写了
+  #   `After=systemd-sysusers.service`，而 sysusers 自己也可能迟一步）。
+  #
+  # ★ 所以这里把「形状」直接做进镜像：三个空文件 + `utmp` 组（在
+  #   files/etc/group 里）。开机的 tmpfiles 仍会让它们保持正确（`f` 类型只是
+  #   「不存在就建」），而**竞态消失了** —— 因为文件一开始就在。
+  #
+  # ★ 这三个文件的用途是真实的，不是为了让 systemd 高兴：
+  #     /var/log/wtmp     who / last 读它
+  #     /var/log/btmp     lastb 读它（失败登录）
+  #     /var/log/lastlog  lastlog 读它（稀疏文件，空文件是正常初始态）
+  #   三个命令我们都有（实测 who/last/lastb 在）。
+  #
+  # ★ `/var/run/utmp` 这里不建：/var/run 是 → /run 的软链，而 /run 是空的
+  #   tmpfs，开机才挂上去。好在它在 tmpfs 上建得出来（BOOT -2 里 /run/utmp
+  #   真的成功了：`"/run/utmp" has been created.`），而且 `who` 没有 utmp 时
+  #   只是"没有登录记录"，不会拦住谁。
+  : > "$d/var/log/wtmp"
+  : > "$d/var/log/btmp"
+  : > "$d/var/log/lastlog"
+  chmod 0664 "$d/var/log/wtmp" "$d/var/log/lastlog"
+  chmod 0660 "$d/var/log/btmp"
+
   # --------------------------------------------------------------- usr-merge
   # 让 /bin /sbin /lib /lib64 都通向 usr/ 下的真实目录。
   #
