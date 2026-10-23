@@ -1,102 +1,63 @@
 #!/bin/sh
-# filesystem 的 post-install —— 处理 /etc/group 和 /etc/passwd 的增量更新。
+# filesystem 的 post-install —— 把新的系统组补进 /etc/group。
 #
-# ★★ 为什么需要这一步（2026-10-23）：
+# ══ 一个必须说清的约束（2026-10-23 撞到的）════════════════════════════════
 #
-#   apk 把 /etc/group 和 /etc/passwd 当【配置文件】。用户（或者 `sysusers`）
-#   改过之后，升级时 apk **不会覆盖**，而是留在 `/etc/group.apk-new` 让管理员
-#   自己合并 —— 那是 apk 的正确行为，不是 bug。
+# **`filesystem` 是最底层的包。它 install 的时候，系统上可能只有 `/bin/sh`。**
 #
-#   实测撞到：我们给 /etc/group 加了 12 个系统组（照 Debian 的 base-passwd），
-#   发布之后在 TX 上升级，结果是：
+# 我第一版用了 `getent` / `groupmod` / `find` / `cut` / `sort` —— 而 apk 报：
 #
-#       /etc/group          27 个组（旧的，sysusers 加过）
-#       /etc/group.apk-new  37 个组（新的，GID 全对）
-#       utmp 还是 998（动态分配的），而我们期望 43
+#     ERROR: lib/apk/exec/filesystem-1.0-r12.post-install: exited with error 127
 #
-#   ★ 而这正是 **Debian 的 `base-passwd` 做的事**：它带一个 postinst，
-#     调 `update-passwd` 把包里的表【增量】合并进系统 —— 不动已有用户的
-#     自定义项，只补缺的、只改那些"还是出厂值"的。
+# 127 = 命令找不到。而 `filesystem` 的 `runtime = []`：给它加 shadow 之类会造成
+# **循环依赖**（shadow 依赖 filesystem）。所以这个脚本**不能假设那些工具在**。
 #
-# ★ 我们的做法（比 update-passwd 简单，但判据一样）：
+# ★ Debian 怎么解决同一件事：`base-passwd` 带一个 **C 程序** `update-passwd`，
+#   它直接读写 /etc/group —— 不调任何外部命令。那是正解，但要新包。
 #
-#   1. 包里的 /etc/group（现在是 .apk-new）是【权威表】
-#   2. 系统上已有的组：**名字已在权威表里的**
-#        · 如果它在系统上的 GID 和权威表不同 —— 只有当它还是"动态分配的"
-#          （我们没声明过的）才改。判断依据是 GID 落在 900-999 这段
-#          （systemd sysusers 的动态分配区间），而不是我们静态表里的值。
-#        · 名字不在权威表里的 —— **保留**（那是用户自己加的组）
-#   3. 权威表里有、系统上没有的 —— 补进去
+# ★★ 所以这里做的是**最小的一件事**：只补「权威表里有、系统上没有」的组。
+#     - `while read` / `case` / `[` 都是 shell 内建，一定有
+#     - 不改已有组的 GID（那需要 groupmod，而且改完还要 chgrp 一堆文件）
 #
-# ★★ 而"改一个已有组的 GID"是**有后果**的：所有属于那个组的文件要跟着改。
-#   所以这里改完 GID 之后，把带那个 GID 的文件一起 chgrp。我们撞到的正是
-#   `/var/log/wtmp` 属主 `root:998` —— 组改成 43 之后它是 `root:43`（数字），
-#   名字上看起来对，但 stat 会显示成 "43" 而不是 "utmp"。所以必须跟着改。
+#   而"改已有组的 GID"交给 `sysusers`（它本来就是干这个的，而且是 C 程序）——
+#   见 init/systemd 配方里 `-Dutmp-gid=43` 那一串：**GID 是构建时钉死的**，
+#   所以 sysusers 建的组一开始就是对的，不需要事后改。
 
 set -e
 
-# ★★ 两个来源，按顺序找：
-#
-#   /etc/group.apk-new   apk 因为"文件被改过"而留下了新版本没覆盖【最常见】
-#   /usr/share/yojigen-os/group.master   包自己带的那份【兜底】
-#
-#   为什么需要兜底：如果 apk 判断这个文件"没被改过"，它会直接覆盖、不留
-#   .apk-new —— 那时脚本读不到新表。所以配方里额外放一份原表。
-#
-#   这比"假设 .apk-new 一定在"可靠：那个假设只在"文件被改过"时成立。
+# 权威表：优先 .apk-new（apk 因"文件被改过"留下的新版本），否则包自带的那份
 NEW=/etc/group.apk-new
 [ -f "$NEW" ] || NEW=/usr/share/yojigen-os/group.master
-if [ ! -f "$NEW" ]; then
-    echo "  [filesystem] 找不到新的 /etc/group（既没有 .apk-new 也没有 group.master）—— 跳过合并"
-    exit 0
-fi
-echo "  [filesystem] 权威表来自 $NEW"
+[ -f "$NEW" ] || exit 0
 
-echo "  [filesystem] 合并 /etc/group（apk 留了新版本没覆盖）"
-
-# 权威表里有哪些名字
-AUTH_NAMES=$(grep -oE "^[a-z][a-z0-9_-]*" "$NEW" 2>/dev/null | sort -u)
-
-# 1. 名字已在权威表里、而 GID 不同 → 改成权威值
-#    ★ 只改那些"看起来是动态分配"的（900-999），或者系统上根本没有的。
-#      一个管理员手工指定的 GID（比如 1234）不动 —— 那是他的决定。
-grep -E "^[a-z]" "$NEW" 2>/dev/null | while IFS=: read -r name _ gid _; do
-    [ -n "$name" ] && [ -n "$gid" ] || continue
-    cur=$(getent group "$name" 2>/dev/null | cut -d: -f3)
-    [ -n "$cur" ] || continue                      # 系统上没有 → 下面第 3 步补
-    [ "$cur" = "$gid" ] && continue                 # 已经对
-    case "$cur" in
-      9[0-9][0-9])
-        # 动态分配的 → 改成权威值
-        groupmod -g "$gid" "$name" 2>/dev/null && \
-          echo "    $name: $cur → $gid（动态分配改回标准值）" || \
-          echo "    ⚠ $name 改 GID 失败（$cur → $gid）"
-        # ★ 跟着改掉属于旧 GID 的文件 —— 否则 stat 显示数字而不是组名
-        find / -xdev -gid "$cur" -exec chgrp -h "$name" {} + 2>/dev/null || true
-        ;;
-      *)
-        # 不是动态分配的 → 保留（那是管理员/别的包的意图）
-        echo "    $name: 保留 $cur（权威表是 $gid，但这不是动态分配的值）"
-        ;;
+# ── 只补缺的：纯 shell，逐行读 ────────────────────────────────────────────
+#
+# ★ 判据是"这个名字在 /etc/group 里出现过没有" —— 用 `case` 和一个拼起来的
+#   字符串做，避免 grep（不保证有）。
+现有=" "
+while IFS=: read -r name _rest; do
+    case "$name" in
+        ''|'#'*) continue ;;
     esac
-done
+    现有="$现有$name "
+done < /etc/group
 
-# 2. 名字不在权威表里的 → 保留，但说一句（用户可能想知道）
-cut -d: -f1 /etc/group 2>/dev/null | grep -vE "^(#|$)" | while read -r name; do
-    echo "$AUTH_NAMES" | grep -qx "$name" || echo "    $name: 保留（不在权威表里，是本地加的）"
-done
+补了=0
+while IFS=: read -r name _pw gid members; do
+    case "$name" in
+        ''|'#'*) continue ;;
+    esac
+    case "$现有" in
+        *" $name "*) continue ;;   # 已经有了 —— 不动它（那可能是管理员改过的）
+    esac
+    # 没有 → 补进去（保留权威表里的 GID 和成员）
+    printf '%s:x:%s:%s\n' "$name" "$gid" "$members" >> /etc/group
+    现有="$现有$name "
+    补了=$((补了 + 1))
+done < "$NEW"
 
-# 3. 权威表里有、系统上没有的 → 补进去
-grep -E "^[a-z]" "$NEW" 2>/dev/null | while IFS=: read -r name _ gid members; do
-    [ -n "$name" ] || continue
-    if ! getent group "$name" >/dev/null 2>&1; then
-        echo "$name:x:$gid:${members:-}" >> /etc/group
-        echo "    $name: 补进来（GID $gid）"
-    fi
-done
+[ "$补了" -gt 0 ] && echo "  [filesystem] 补了 $补了 个系统组进 /etc/group"
 
-# ★ 最后把 .apk-new 删掉 —— 它的内容已经合并完了。
-#   留着它会让下一次升级又看到它（而那时它的内容已经过时）。
-[ "$NEW" = /etc/group.apk-new ] && rm -f "$NEW" || true
-
-echo "  [filesystem] /etc/group 合并完成（现在 $(grep -cE '^[a-z]' /etc/group) 个组）"
+# 只删我们读的那份临时文件；master 留着（下次升级还要用）
+[ "$NEW" = /etc/group.apk-new ] && rm -f "$NEW"
+exit 0
