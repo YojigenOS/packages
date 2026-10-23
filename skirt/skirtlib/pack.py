@@ -483,9 +483,9 @@ def inner_script(job: Job, depends: list[str], provides: list[str], *,
         #   ★ 而这张表就是 SYSTEM_GROUPS —— 它和 `filesystem` 包的
         #     `files/etc/group` 是同一件事，由 `test_pack_groups` 盯着不许漂移。
         f"for e in {' '.join(f'{g}:{n}' for g, n in SYSTEM_GROUPS)}; do",
-        '  gid=${e%%:*}; gname=${e##*:}'
-        '  grep -q "^$gname:" /etc/group 2>/dev/null || printf "%s:x:%s:\\n" "$gname" "$gid" >> /etc/group'
-        'done',
+        '  gid=${e%%:*}; gname=${e##*:}\n'
+        '  grep -q "^$gname:" /etc/group 2>/dev/null || printf "%s:x:%s:\\n" "$gname" "$gid" >> /etc/group\n'
+        'done\n',
 
         # ★ rsync 也要装 —— 理由同 build.py：cp 不保 security.* 扩展属性，
         #   而能力位在那里。apk 装一个 rsync 换来能力位不丢，是划得来的。

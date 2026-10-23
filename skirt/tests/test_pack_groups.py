@@ -84,3 +84,40 @@ class Test_PACK_SYSTEM_GROUPS_和_etc_group_一致(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Test_inner_sh_语法正确(unittest.TestCase):
+    """`inner.sh` 生成出来必须是【能跑的】shell。
+
+    ★★ 为什么要有这条（2026-10-23）：
+
+       我在里面加了个 for 循环补组名，而 Python 的隐式字符串拼接把
+       `... >> /etc/group` 和 `done` 拼成了一行：
+
+           ... >> /etc/groupdone
+
+       于是整个 `skirt pack` 报：
+
+           /pack/inner.sh: line 48: syntax error: unexpected end of file
+           (expecting "done")
+
+       —— **一个 Python 字符串拼接的问题，症状是一条 shell 语法错误。**
+
+    ★ 判据：**生成的脚本要用 `sh -n` 验一遍。** 这比"读一遍看着对"可靠得多
+      （我读了两遍都觉得对）。
+    """
+
+    def test_生成出来的_inner_sh_过得了_sh_n(self):
+        import subprocess
+        import sys
+        sys.path.insert(0, str(ROOT / "skirt"))
+        from skirtlib.pack import inner_script, Job       # noqa: PLC0415
+
+        job = Job(product=ROOT, meta={}, name="probe", version="1.0-r0",
+                  apk="probe.apk", epoch="0")
+        src = inner_script(job, [], [], signed=False)
+        # 用 `sh -n` 只做语法检查，不执行
+        r = subprocess.run(["sh", "-n"], input=src, text=True,
+                           capture_output=True, timeout=30)
+        self.assertEqual(r.returncode, 0,
+                         f"inner.sh 语法错误：\n{r.stderr}")
