@@ -802,17 +802,28 @@ def run_in_container(srcrel: str, srcname: str, arch: str, spec: dict, epoch: in
         #   目标系统上同一个组的 GID 可能不同（`utmp` 在容器里 998、目标上 43）。
         #
         #   ★ 只在【组不是 root】时记 —— root 是默认，记它没意义。
-        'find "$WORK/dest" \\( -type f -o -type d \\) ! -group 0 2>/dev/null'
-        ' | while IFS= read -r f; do'
-        '     g=$(stat -c %G "$f" 2>/dev/null) || continue;'
-        '     [ -n "$g" ] && [ "$g" != root ] && printf "%s %s\\n" "$g" "${f#$WORK/dest}";'
-        '   done > "$WORK/dest/.yojigen-groups" || true\n'
         '  n=$(wc -l < "$WORK/dest/.yojigen-caps" 2>/dev/null || echo 0)\n'
         '  echo "[产物] 能力位清单（$n 条）写进 payload 的 .yojigen-caps" >&2\n'
         '  head -3 "$WORK/dest/.yojigen-caps" 2>/dev/null | sed "s|^|  · |" >&2 || true\n'
         'else\n'
         '  echo "[产物] ⚠ 没有 getcap —— 能力位这一格查不了" >&2\n'
         'fi\n'
+        # ★★★ 组属主的清单【不能】在下面那个 `if [ -x "$GC" ]` 里面
+        #   （2026-10-23 修正）。
+        #
+        #   撞到的：`filesystem` 是纯元数据包，构建环境里没有 `getcap`
+        #   （它来自 libcap，而这个包不依赖它）。于是那个 if 走了 else，
+        #   而我原来是把它写在 if 里面的 —— 组清单跟着一起被跳过。
+        #   而它**和能力位毫无关系**：`stat` / `find -group` 都不需要 getcap。
+        #
+        #   ★ 判据：**两件不相干的事不该共用一个 if。** 那个 if 的语义是
+        #     "有 getcap 才查能力位"，组属主是另一件事。
+        'find "$WORK/dest" \\( -type f -o -type d \\) ! -group 0 2>/dev/null'
+        ' | while IFS= read -r f; do'
+        '     g=$(stat -c %G "$f" 2>/dev/null) || continue;'
+        '     [ -n "$g" ] && [ "$g" != root ] && printf "%s %s\\n" "$g" "${f#$WORK/dest}";'
+        '   done > "$WORK/dest/.yojigen-groups" || true\n'
+        'echo "[产物] 组属主清单（$(wc -l < "$WORK/dest/.yojigen-groups" 2>/dev/null || echo 0) 条）" >&2\n'
         'find "$WORK/dest" -perm -4000 -exec ls -ld {} \\; >&2 2>/dev/null || true\n'
         'ls -ld "$WORK/dest/usr/bin/sudo" >&2 2>/dev/null || true\n'
         # ★★ 这里【不能】用 `find … | head -3` —— 而这句诊断上一版把我的
