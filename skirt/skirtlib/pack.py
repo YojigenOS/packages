@@ -536,7 +536,17 @@ def inner_script(job: Job, depends: list[str], provides: list[str], *,
         "GRPFAIL=0",
         "while IFS=' ' read -r g f; do",
         "  [ -n \"$g\" ] && [ -n \"$f\" ] || continue",
-        "  chgrp \"$g\" \"$f\" 2>/dev/null || { GRPFAIL=$((GRPFAIL+1)); echo \"  ⚠ 补不回 $f 的组 $g\"; }",
+        # ★★★ 路径要加 `/data` 前缀（2026-10-23 修）。
+        #
+        #   清单里的路径是 `/var/log/wtmp`（相对 payload 根），而 files 在
+        #   容器里落在 `/data/var/log/wtmp`。原来这一行少了 `/data`，于是
+        #   `chgrp 43 /var/log/wtmp` 作用在**容器的根上** —— 那里没有这个
+        #   文件，全部失败。实测：18 条清单里 17 条补不回。
+        #
+        #   ★ 而同一个文件里，能力位那行是 `setcap \"$c\" \"/data$f\"` ——
+        #     **有**前缀。两行干的是同一类事（把清单里的路径映射到文件），
+        #     而一行对一行错。这种"隔壁那行是对的"最容易看漏。
+        "  chgrp \"$g\" \"/data$f\" 2>/dev/null || { GRPFAIL=$((GRPFAIL+1)); echo \"  ⚠ 补不回 /data$f 的组 $g\"; }",
         "done < /tmp/.groups || true",
         "[ \"$GRPFAIL\" -gt 0 ] && echo \"[打包] ⚠ $GRPFAIL 个文件的组属主没补回（构建容器里没有那个组）\" || true",
         "while IFS=' ' read -r m f; do chmod \"$m\" \"$f\" 2>/dev/null || true; done"
@@ -693,7 +703,7 @@ def pack_one(job: Job, *, pkgs_dir: Path, work: Path, sign_key: Path | None,
         #   ★ 只挑和"属性有没有带到"有关的行，不是把整个 log 倒出来
         #     （那会把 CI 日志淹掉，而淹掉之后就没人看了）。
         for line in log.splitlines():
-            if any(k in line for k in ("清单", "组属主", "能力位")):
+            if any(k in line for k in ("清单", "组属主", "能力位", "补不回")):
                 note(f"      {line.strip()}")
         return True
 
