@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import re
 import shutil
 import time
@@ -69,6 +70,10 @@ def _owner(rel: str, subs: list[dict]) -> str | None:
 
 
 # ------------------------------------------------------------------ 收集
+
+# 属主带不过来时只提醒一次（每个文件都刷一行没法看）
+_CHOWN_WARNED: list[int] = []
+
 
 def _entries(root: Path) -> list[Path]:
     """源树里的一切，按路径排序。"""
@@ -144,6 +149,35 @@ def _write_package(out: Path, destdir: Path, wanted: set[str]) -> None:
             shutil.copystat(src, dst)
         else:
             shutil.copy2(src, dst, follow_symlinks=False)
+
+        # ★★★ 属主要【自己带过来】（2026-10-23 加）。
+        #
+        #   `shutil.copy2` **不复制 uid/gid** —— 它只调 `copystat`，而那个的
+        #   范围是 mode / atime / mtime / flags / xattr，**没有属主**。
+        #
+        #   于是 payload 里每个文件的属主都是【跑 collect 的那个用户】
+        #   （CI 里是 runner）。实测后果：
+        #
+        #       /build/dest/var/log/wtmp   root:43   ← 构建容器里是对的
+        #       payload/var/log/wtmp       runner:runner
+        #       发出去的 .apk              root:root  ← pack 的 chown -R 0:0 拍的
+        #
+        #   而 `pack.py` 的 `chown -R 0:0` 修的是"属主不是 root"，它把组也一起
+        #   拍平了 —— **因为到那时组信息早就没了**。
+        #
+        #   ★ 这里的判据：collect 是"把构建出来的东西搬个地方"，它不该改变
+        #     任何属性。**搬运要保真。**
+        #
+        #   ★ 而 chown 失败不拦（普通用户跑本地构建时改不了属主）—— 但要说
+        #     出来：一个静默没带过去的组，症状是"who 不记录登录"，离成因很远。
+        try:
+            st = src.lstat()
+            os.chown(dst, st.st_uid, st.st_gid, follow_symlinks=False)
+        except (OSError, NotImplementedError) as e:
+            # 只有真的搬不动才提一句；否则每个文件都刷一行
+            if not _CHOWN_WARNED:
+                _CHOWN_WARNED.append(1)
+                print(f"  ⚠ 带不过来属主（{e}）—— 这一批的组属主会是当前用户", file=sys.stderr)
 
 
 def collect(spec: dict, arch: str,
