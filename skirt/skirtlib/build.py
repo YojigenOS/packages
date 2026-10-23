@@ -776,7 +776,19 @@ def run_in_container(srcrel: str, srcname: str, arch: str, spec: dict, epoch: in
         #   而 skirt pack 挂的就是那个目录。**自洽，不用两边对齐一个外部路径。**
         #
         #   文件名前面一个点 —— skirt pack 读完会把它删掉，不会进包。
-        '  "$GC2" -r "$WORK/dest" 2>/dev/null | sed "s|^$WORK/dest||" > "$WORK/dest/.yojigen-caps" || true\n'
+        # ★★ 这里原来写的是 `$GC2` —— 而那个变量【从来没有被定义过】
+        #   （上面第 762 行定义的是 `GC`）。所以这一行一直是：
+        #
+        #       bash: line 138: GC2: unbound variable
+        #
+        #   而它【一直在静默失败】：`.yojigen-caps` 从来没被写出真实内容，
+        #   一直是 0 条（日志里那句"能力位清单（0 条）"就是证据）。也就是说
+        #   **# 能力位一直是靠 pack.py 那边 getcap 现场扫的兜底在撑**，
+        #   而主路（清单）一直是坏的。
+        #
+        #   ★ 这个 bug 是 2026-10-23 我加组属主清单时【暴露】出来的 ——
+        #     因为它就在我插入的那几行上面。而它已经存在很久了。
+        '  "$GC" -r "$WORK/dest" 2>/dev/null | sed "s|^$WORK/dest||" > "$WORK/dest/.yojigen-caps" || true\n'
         # ★★ 组属主的清单（2026-10-23 加）。
         #
         #   为什么需要它：`pack.py` 里有个 `chown -R 0:0 /data`，它修的是
