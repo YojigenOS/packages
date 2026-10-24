@@ -34,11 +34,11 @@ mirrors = ["https://git.kernel.org/pub/scm/fs/ext2/e2fsprogs"]
 
 [dependencies.aarch64]
 runtime = ["glibc"]
-build   = ["make", "gcc", "sed", "gawk"]
+build   = ["make", "gcc", "sed", "gawk", "gettext"]
 
 [dependencies.x86_64]
 runtime = ["glibc"]
-build   = ["make", "gcc", "sed", "gawk"]
+build   = ["make", "gcc", "sed", "gawk", "gettext"]
 
 [build]
 type      = "autotools"
@@ -52,8 +52,6 @@ configure = [
     "--disable-uuidd",
 
     # 不编翻译。中文那件事有自己的计划（见 0006），
-    # 而在这里加 gettext 只是把依赖做大。
-    "--disable-nls",
 
     # ── libuuid / libblkid：显式要自带的那份 ──────────────────────────────
     #

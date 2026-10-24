@@ -71,12 +71,12 @@ runtime = ["glibc"]
 # pkgconf：configure 找 freetype 之类的可选库时用；没有也没关系，但显式写出来
 #          比"碰巧构建环境里有"可靠。
 build   = ["make", "gcc", "bison", "flex", "python3", "pkgconf", "xz",
-           "coreutils", "bash", "sed", "grep", "findutils", "gawk", "tar", "gzip"]
+           "coreutils", "bash", "sed", "grep", "findutils", "gawk", "tar", "gzip", "gettext"]
 
 [dependencies.x86_64]
 runtime = ["glibc"]
 build   = ["make", "gcc", "bison", "flex", "python3", "pkgconf", "xz",
-           "coreutils", "bash", "sed", "grep", "findutils", "gawk", "tar", "gzip"]
+           "coreutils", "bash", "sed", "grep", "findutils", "gawk", "tar", "gzip", "gettext"]
 
 [build]
 # 每个目标平台一次 configure —— 套不进 autotools 的单次映射

@@ -25,11 +25,11 @@ commit = "7670338d8b695c476de868dabd34d68d6de2443b"
 
 [dependencies.aarch64]
 runtime = ["glibc", "ncurses"]
-build   = ["make", "gcc"]
+build   = ["make", "gcc", "gettext"]
 
 [dependencies.x86_64]
 runtime = ["glibc", "ncurses"]
-build   = ["make", "gcc"]
+build   = ["make", "gcc", "gettext"]
 
 [build]
 type = "custom"

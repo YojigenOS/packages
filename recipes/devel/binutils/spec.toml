@@ -29,11 +29,11 @@ sha256 = "154ab23b60070e8f27013c22977f1129425d67d1e8acd6e13010e617811e4cff"
 
 [dependencies.aarch64]
 runtime = ["glibc"]
-build   = ["make"]
+build   = ["make", "gettext"]
 
 [dependencies.x86_64]
 runtime = ["glibc"]
-build   = ["make"]
+build   = ["make", "gettext"]
 
 [build]
 type      = "autotools"
@@ -50,7 +50,17 @@ type      = "autotools"
 configure = [
   "--prefix=/usr",
   "--sysconfdir=/etc",
-  "--disable-nls",
+  # ★★ 不写 `--disable-nls`（2026-10-25）。
+  #
+  #   0012 第 2 条本来就禁止它（中文优先），而这里一直带着 —— 那条记录里
+  #   写的"已经做到了"是假的。
+  #
+  #   实测（下载 binutils-2.47.tar.xz 查过）：**上游有 po/zh_CN.po**，
+  #   也就是说关掉它纯粹是让我们丢中文。而 `objdump` / `ld` 的报错是
+  #   开发者天天看的东西，中文化不是可有可无。
+  #
+  #   ★ 而代价（构建时多一个 gettext 依赖）现在付得起了 —— `gettext`
+  #     这个包已经建出来了。
   "--disable-werror",
   "--disable-gprofng",
   "--enable-deterministic-archives",

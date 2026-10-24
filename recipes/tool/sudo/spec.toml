@@ -23,10 +23,10 @@ commit = "d1b48c651cec19fe37d1f0d3299d2283fb0f88e4"
 
 [dependencies.aarch64]
 runtime = ["glibc", "openssl"]
-build   = ["make", "gcc", "autoconf", "automake", "libtool", "openssl", "flex", "bison"]
+build   = ["make", "gcc", "autoconf", "automake", "libtool", "openssl", "flex", "bison", "gettext"]
 [dependencies.x86_64]
 runtime = ["glibc", "openssl"]
-build   = ["make", "gcc", "autoconf", "automake", "libtool", "openssl", "flex", "bison"]
+build   = ["make", "gcc", "autoconf", "automake", "libtool", "openssl", "flex", "bison", "gettext"]
 
 [build]
 type       = "autotools"
@@ -37,8 +37,6 @@ configure  = [
     "--with-vardir=/var",
 
     # ★ 要文档的话它会去找 mandoc / docbook —— 我们两样都没有。
-    #   关掉，不然 configure 会静默降级或者中途报错。
-    "--disable-nls",
 
     # ★ 关掉 PAM。我们没有 PAM，而它默认会试着用 —— 那份默认会在
     #   运行时才现形（sudo 起来了，但任何一条命令都验不过）。
