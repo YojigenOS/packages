@@ -66,4 +66,41 @@ package() {
     #   所以那个目录本来就在 PATH 上。
     install -Dm755 "$PKGDIR/files/reboot"   "$PKGDEST/usr/sbin/reboot"
     install -Dm755 "$PKGDIR/files/poweroff" "$PKGDEST/usr/sbin/poweroff"
+
+    # ── systemd 那条启动路径要用的（2026-10-24）──────────────────────────
+    #
+    # ★★★ 这是三次失联的真正修复。
+    #
+    #   `boot.d/15-network`（属于 dhcpcd 包）是【唯一】配网卡的东西，而它原来
+    #   **只有 /init 会跑**。systemd 当 PID 1 时那条路不执行它 —— 于是
+    #   systemd 起来了、`yojigen-sshd.service` 也起来了，而**机器没有 IP**，
+    #   SSH 进不去。表现看起来像"systemd 卡死"：
+    #
+    #       · timesyncd 重试 DNS 163 次全失败   ← 这就是"没网络"
+    #       · journal 里没有任何 target 达成
+    #
+    #   ★ 而我把它误判成"systemd 有问题"，查了 wtmp / udevd / sysinit 依赖，
+    #     全是岔路。真正的线索（DNS 全失败）我看见了，但没往"没网络"想。
+    #
+    # ★★ 所以给 boot.d 做一个 systemd unit，让【两条路径共用同一份钩子】：
+    #
+    #       /init    → 自己 for 循环跑 boot.d（原来就这样，不动）
+    #       systemd  → 这个 unit 调 bootd，里面还是跑同一份 boot.d
+    #
+    #   而"同一份"是关键：钩子按包分发（10-grow-root 在 yojigen-os-init、
+    #   15-network 在 dhcpcd、host key 在 openssh）—— 复制一份到 systemd
+    #   那边，下次加钩子就得改两处，那种事一定会漏。
+    install -Dm755 "$PKGDIR/files/bootd" "$PKGDEST/usr/lib/yojigen-os/bootd"
+    install -Dm644 "$PKGDIR/files/yojigen-bootd.service" \
+        "$PKGDEST/usr/lib/systemd/system/yojigen-bootd.service"
+
+    # ★ 而它要【默认启用】—— 否则切到 systemd 之后还是没网络。
+    #   enable 就是建一个软链（和 `systemctl enable` 做的事一样）。
+    #
+    #   ★ 为什么在包里 enable 而不是靠风味：它是"没有它这台机器不算能用"
+    #     那一类（boot.d 的定义），和 sshd 那种"服务"不同 —— 后者由风味
+    #     决定（决策记录 0024）。**启动钩子不该需要用户去启用。**
+    mkdir -p "$PKGDEST/etc/systemd/system/multi-user.target.wants"
+    ln -sf /usr/lib/systemd/system/yojigen-bootd.service \
+        "$PKGDEST/etc/systemd/system/multi-user.target.wants/yojigen-bootd.service"
 }

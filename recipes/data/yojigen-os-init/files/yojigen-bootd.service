@@ -1,0 +1,50 @@
+# 跑首启钩子（boot.d）—— 让 systemd 那条启动路径也能配上网卡。
+#
+# ★★★ 为什么这个 unit 必须存在（2026-10-23/24）：
+#
+#   `boot.d/15-network` 是 dhcpcd 包放的、唯一配网卡的东西。而它原来
+#   **只有 /init 会跑**。systemd 当 PID 1 时那条路不执行它 —— 于是
+#   systemd 起来了、sshd 也起来了，而**机器没有 IP**，SSH 进不去。
+#
+#   而我把它误判成"systemd 卡住"，查了 wtmp / udevd / sysinit 依赖，全是岔路。
+#   真正的症状（timesyncd 重试 DNS 163 次全失败）我看见了，但没往"没网络"想。
+#
+# ★★ 排序是这里最重要的部分：
+#
+#       After=sysinit.target          cgroup / /run 都挂好了才配网
+#       After=network-pre.target      按 systemd 的约定，配网前的空 target
+#       Before=network.target         配完之后才让 network.target 算达成
+#       Before=yojigen-sshd.service    ★ 网络先于 sshd —— 否则 sshd 起在
+#                                       一个没有 IP 的机器上，而它不会重试
+#
+#   ★ `Type=oneshot` + `RemainAfterExit=yes`：这个脚本会返回，而它做的
+#     事（配网卡）是"持续有效"的 —— 不是"进程还在跑"。用 forking 会要求
+#     PIDFile，我们没写（这一个坑 jentry 桥那边已经踩过一次）。
+#
+# ★ 而`WantedBy=multi-user.target` —— 它是"没有它这台机器不算能用"那一类，
+#   和 boot.d 的定义一致（见 /init 里那段分界的注释）。
+
+[Unit]
+Description=Yojigen OS 首启钩子（boot.d：cgroup · hostname · 扩根 · 网络）
+Documentation=https://github.com/YojigenOS/packages
+DefaultDependencies=no
+After=sysinit.target local-fs.target
+After=network-pre.target
+Before=network.target
+Before=shutdown.target
+Before=yojigen-sshd.service
+Before=yojigen-docker.service
+Wants=network-pre.target
+Conflicts=shutdown.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/yojigen-os/bootd
+# ★ 失败要能看见，而不能让整机停在"连 shell 都没有"的地方 —— 脚本自己
+#   对每个钩子单独容错，而这里再兜一层：它整体失败也不拦 multi-user。
+SuccessExitStatus=0 1
+TimeoutStartSec=180
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,58 @@
+#!/bin/sh
+# 跑 /usr/lib/yojigen-os/boot.d/ 里的首启钩子。
+#
+# ★★★ 为什么需要这个脚本（2026-10-23/24）：
+#
+#   `boot.d` 原来【只有 /init 会跑】。而 systemd 当 PID 1 时那条路完全不执行
+#   —— 于是 `15-network`（配网卡的那一个，属于 dhcpcd 包）不会被调用。
+#
+#   后果是：systemd 起来了、`yojigen-sshd.service` 也起来了，而**机器没有 IP**
+#   —— 所以 SSH 进不去。而表现看起来像"systemd 卡住了"：
+#
+#       · timesyncd 重试 DNS 163 次全部失败      ← 这就是"没网络"
+#       · journal 里没有任何 target 达成
+#       · 重启几次都一样
+#
+#   ★ 我一开始把这三次失联都当成"systemd 有问题"，查了 wtmp / udevd /
+#     sysinit 的依赖 —— 全是岔路。**真正缺的是"谁配网卡"这一步。**
+#
+# ★★ 所以这个脚本让两条启动路径共用同一份钩子：
+#
+#       /init       → 直接 for 循环跑 boot.d（原来就这样）
+#       systemd     → yojigen-bootd.service 调这个脚本
+#
+#   而"同一份"很重要：钩子是【按包分发】的（10-grow-root 在 yojigen-os-init、
+#   15-network 在 dhcpcd、host key 在 openssh）。复制一份到 systemd 那边，
+#   下次加一个钩子就得改两处 —— 那种事一定会漏。
+#
+# ★ 失败不拦：和 /init 里那段同一个判据 —— 一个钩子起不来，人还能从串口
+#   进去查；而如果这里 exit，系统可能停在一个连 shell 都没有的地方。
+
+set -u
+
+BOOTD=/usr/lib/yojigen-os/boot.d
+
+[ -d "$BOOTD" ] || { echo "没有 $BOOTD，跳过"; exit 0; }
+
+echo "── 首启钩子 ──"
+ANY=0
+for f in "$BOOTD"/*; do
+    [ -e "$f" ] || continue
+    [ -x "$f" ] || continue
+    ANY=1
+    echo "  ▸ $(basename "$f")"
+    if "$f"; then
+        :
+    else
+        echo "    ⚠ 这个钩子失败了，继续"
+    fi
+done
+[ "$ANY" = 1 ] || echo "  （一个都没有）"
+
+# ★ 而 /init 那边跑完 boot.d 会写一个 booted 标记 —— 这里也写，因为
+#   post-install 脚本用它判断"系统已经起来了"（见那些脚本里的说明）。
+mkdir -p /run/yojigen-os 2>/dev/null || true
+: > /run/yojigen-os/booted 2>/dev/null || true
+
+echo "── 首启钩子跑完 ──"
+exit 0
