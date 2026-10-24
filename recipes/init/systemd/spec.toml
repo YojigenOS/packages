@@ -16,10 +16,36 @@
 #
 # 而关哪些，判据都是**我们这台系统的实际情况**，不是"省事"：
 #
-#   -Dudev=false       ★★ 内核 CONFIG_MODULES **没开**（只有个残留的
-#                      MODULES_USE_ELF_RELA 符号）。没有模块加载，udev 存在的
-#                      理由就没了 —— 我们的设备节点靠 boot.d 里的 mount 和
-#                      CONFIG_DEVTMPFS 出来。
+#   ~~-Dudev=false~~   ★★★ **这条推论是错的，2026-10-24 实测推翻。**
+#
+#                      原来写的是："内核 CONFIG_MODULES 没开，没有模块加载，
+#                      udev 存在的理由就没了 —— 设备节点靠 DEVTMPFS 出来。"
+#
+#                      ★ 而 **udev 不只是加载模块**。它还负责把设备**注册给
+#                      systemd** —— 没有它，`dev-ttyS0.device` 永远是
+#                      `inactive (dead)`，于是：
+#
+#                          getty.target              start waiting   ← 卡住
+#                          serial-getty@ttyS0        start waiting
+#                          multi-user.target         start waiting
+#
+#                      `multi-user` 到不了 ⇒ `systemd is-system-running` 永远
+#                      停在 `starting`。而**网络是通的、sshd 也在跑** ——
+#                      所以症状只是"状态不完整"，很容易被当成"systemd 有问题"。
+#
+#                      ★ 实测（TX，内核 CONFIG_MODULES=n）：
+#                          手工起 udevd  → udevadm trigger  → dev-ttyS0.device
+#                          从 `inactive (dead)` 变成 `active (plugged)`
+#                      然后 `systemctl is-system-running` 立刻变 `running`。
+#
+#                      ★★ 所以 v258 里 **udev 保留**（它本来也没有开关，
+#                         meson.build 里无条件 `subdir('src/udev')`）。
+#                         `-Dkmod=false` 仍然给它 —— 模块加载那部分自动缩掉，
+#                         而设备枚举/注册不需要它。
+#
+#                      ★ 判据：**"这件东西在我们这儿没用"要分清是"它的哪一部分"
+#                        没用。** udev 的"加载模块"没用，而"枚举设备并告诉
+#                        systemd"正是指望它干的活。
 #   -Dkmod=false       同上。
 #   -Dseccomp=false    libseccomp 没建；而 SECCOMP 那侧内核是开的，不影响。
 #   -Dapparmor=false -Dselinux=false   都不做。
@@ -45,7 +71,7 @@
 [package]
 name        = "systemd"
 version     = "258"
-release     = 7
+release     = 8
 date        = 2026-10-22T10:30:00Z
 description = "系统与服务管理器（决策记录 0022：自己建）"
 url         = "https://systemd.io/"
@@ -104,6 +130,11 @@ configure = [
     #   `subdir('src/udev')`）。而那不是问题：udev 的**构建**不依赖内核有没有
     #   CONFIG_MODULES（那是运行时的事）。我们把 `-Dkmod=false` 给它，
     #   它的模块加载那部分自动缩掉。
+    #
+    #   ★★★ 而它的【设备枚举】那部分**必须留着**（2026-10-24 实测）：
+    #     没有 udevd，`dev-*.device` 全是 `inactive (dead)`，`getty.target`
+    #     和 `multi-user.target` 永远到不了，`is-system-running` 停在
+    #     `starting`。见文件头那条被推翻的 `-Dudev=false` 注释。
     "-Dkmod=false",
     "-Dseccomp=false",
     "-Dapparmor=false",
