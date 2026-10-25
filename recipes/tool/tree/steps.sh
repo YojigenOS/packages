@@ -26,13 +26,15 @@ build() {
 
 package() {
     install -Dm755 tree "$PKGDEST/usr/bin/tree"
-    install -Dm644 tree.1 "$PKGDEST/usr/share/man/man1/tree.1"
-    # ★ 中文手册（上游带了 doc/zh_CN 和 doc/zh_TW）
-    for l in zh_CN zh_TW; do
-        [ -f "doc/$l/tree.1" ] && \
-            install -Dm644 "doc/$l/tree.1" "$PKGDEST/usr/share/man/$l/man1/tree.1"
-    done
-    # ★ 翻译（.mo）由 make 在 build() 里编好，装在 po/*.gmo → 这里搬过来
+    # ★ man page 在 **doc/** 子目录里，不在顶层。
+    #   （实测：`tar -tzf` 里是 doc/tree.1；而顶层只有 Makefile / tree.c / 各 .c）
+    #   第一版写 `install -Dm644 tree.1 ...` → `cannot stat 'tree.1'`。
+    #
+    # ★ 而 doc/ 里【没有】中文手册（只有 tree.1 + xml.dtd + global_info），
+    #   所以我原来那个 `for l in zh_CN zh_TW` 循环是凭印象写的，删掉了。
+    install -Dm644 doc/tree.1 "$PKGDEST/usr/share/man/man1/tree.1"
+
+    # ★ 翻译（.mo）由 make 在 build() 里编好（po/*.gmo）→ 这里搬过来
     for m in po/*.gmo; do
         [ -f "$m" ] || continue
         lang=$(basename "$m" .gmo)
