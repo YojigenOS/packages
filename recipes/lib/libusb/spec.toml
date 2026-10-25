@@ -20,11 +20,17 @@ url    = "https://github.com/libusb/libusb/releases/download/v$VERSION/libusb-$V
 sha256 = "966bb0d231f94a474eaae2e67da5ec844d3527a1f386456394ff432580634b29"
 
 [dependencies.aarch64]
-runtime = ["glibc"]
+# ★★ runtime 里有 systemd —— 因为 libusb 要 **libudev**（它随 systemd 发：
+#   `/usr/include/libudev.h` + `/usr/lib/pkgconfig/libudev.pc`，实测在 TX 上确认过）。
+#   而 udev 是"设备热插拔通知"，libusb 靠它做 `libusb_hotplug_register_callback`。
+#
+# ★ 不关 `--disable-udev`：关了之后 libusb 退回 poll /dev/bus/usb —— lsusb
+#   照样能用，但**热插拔回调失效**。那是"功能缺失"，违反项目第 2 条。
+runtime = ["glibc", "systemd"]
 build   = ["make", "gcc", "autoconf", "automake", "libtool"]
 
 [dependencies.x86_64]
-runtime = ["glibc"]
+runtime = ["glibc", "systemd"]
 build   = ["make", "gcc", "autoconf", "automake", "libtool"]
 
 [build]
