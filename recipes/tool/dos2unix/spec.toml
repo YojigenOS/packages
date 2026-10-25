@@ -16,8 +16,18 @@ url         = "https://waterlan.home.xs4all.nl/dos2unix.html"
 license     = "BSD-2-Clause"
 
 [[source]]
-url    = "https://waterlan.home.xs4all.nl/dos2unix/dos2unix-$VERSION.tar.gz"
-sha256 = "b900ed9a92ef9b2548a6ac708ec81f724c59f2c089ed90f8e39a4e1287b28c1f"
+# ★★ 原来写的是 waterlan.home.xs4all.nl/dos2unix/dos2unix-$VERSION.tar.gz ——
+#   而那个地址返回的是**一个 HTML 页面**（12KB，`<!DOCTYPE html>`），不是源码。
+#   sha256 我当初是照 12KB 那个算的，所以"校验匹配"反而掩盖了问题。
+#
+#   实测（HEAD 请求看 content_type）：
+#     waterlan.home.xs4all.nl/…tar.gz   → text/html      ✗
+#     sourceforge.net/…/download        → application/x-gzip ✓
+#     deb.debian.org/…/dos2unix_….orig.tar.gz → application/x-gzip ✓
+#
+#   用 Debian pool 那份：地址稳定、和 Debian 同一个上游 tar。
+url    = "https://deb.debian.org/debian/pool/main/d/dos2unix/dos2unix_$VERSION.orig.tar.gz"
+sha256 = "264742446608442eb48f96c20af6da303cb3a92b364e72cb7e24f88239c4bf3a"
 
 [dependencies.aarch64]
 runtime = ['glibc']
