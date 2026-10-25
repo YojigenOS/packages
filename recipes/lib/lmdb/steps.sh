@@ -1,21 +1,20 @@
 # lmdb —— 从 OpenLDAP 源码树的 libraries/liblmdb/ 编
 #
-# ★ 那一层自带 Makefile（不是 autotools），所以只 cd 进去 make。
-#   实测过：mdb.c / lmdb.h / Makefile 都在。
+# ★ `$SRCDIR` 是 OpenLDAP 的源码根（驱动算的），而 lmdb 在它下面一层：
+#       $SRCDIR/libraries/liblmdb/
+#   所以这里**要** cd —— 这和其他包不一样，因为 lmdb 没有独立 tar。
 #
-# ★★ 它认这些变量（见那个 Makefile）：
-#       prefix   /usr
-#       DESTDIR 暂存
-#       CC      编译器
-#       AR/RANLIB
+# ★★ 那一层自带 Makefile（不是 autotools），认这些变量：
+#       prefix   /usr（默认 /usr/local —— 要显式传）
+#       DESTDIR  暂存目录
+#       CC / AR / RANLIB
 
 build() {
-    cd "$(ls -d "$SRCDIR"/openldap-* 2>/dev/null | head -1)/libraries/liblmdb"
+    cd "$SRCDIR/libraries/liblmdb"
     make CC="${CC:-gcc}" AR="${AR:-ar}" RANLIB="${RANLIB:-ranlib}"
 }
 
 package() {
-    cd "$(ls -d "$SRCDIR"/openldap-* 2>/dev/null | head -1)/libraries/liblmdb"
-    # ★ prefix 要传进去 —— 那个 Makefile 的默认是 /usr/local
+    cd "$SRCDIR/libraries/liblmdb"
     make install DESTDIR="$PKGDEST" prefix=/usr
 }

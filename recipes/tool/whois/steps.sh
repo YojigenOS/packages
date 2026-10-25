@@ -7,11 +7,9 @@
 #   加 DESTDIR 就行。
 
 build() {
-    cd "$SRCDIR/work" 2>/dev/null || cd "$(ls -d "$SRCDIR"/whois-* 2>/dev/null | head -1)"
     make CC="${CC:-gcc}" CFLAGS="${CFLAGS:--O2}"
 }
 
 package() {
-    cd "$SRCDIR/work" 2>/dev/null || cd "$(ls -d "$SRCDIR"/whois-* 2>/dev/null | head -1)"
     make install DESTDIR="$PKGDEST" prefix=/usr
 }

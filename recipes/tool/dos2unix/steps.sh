@@ -7,11 +7,9 @@
 #   时失败（不像 autotools 那样静默跳过）。
 
 build() {
-    cd "$(ls -d "$SRCDIR"/dos2unix-* 2>/dev/null | head -1)"
     make CC="${CC:-gcc}" CFLAGS="${CFLAGS:--O2}" prefix=/usr
 }
 
 package() {
-    cd "$(ls -d "$SRCDIR"/dos2unix-* 2>/dev/null | head -1)"
     make install DESTDIR="$PKGDEST" prefix=/usr
 }

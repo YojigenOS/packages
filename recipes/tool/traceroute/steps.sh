@@ -8,12 +8,10 @@
 #   之后靠 driver 设能力位（见 steps 里那句 chmod）。
 
 build() {
-    cd "$(ls -d "$SRCDIR"/traceroute-* 2>/dev/null | head -1)"
     make CC="${CC:-gcc}" prefix=/usr
 }
 
 package() {
-    cd "$(ls -d "$SRCDIR"/traceroute-* 2>/dev/null | head -1)"
     # ★ 它的 install target 支持 DESTDIR（见 Make.rules 的 install 段）
     make install DESTDIR="$PKGDEST" prefix=/usr
 
