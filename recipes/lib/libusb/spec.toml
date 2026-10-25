@@ -1,0 +1,33 @@
+# libusb —— 用户态 USB 访问库
+#
+# ★ 对标 Fedora Server 补的（2026-10-25）：`usbutils`（提供 `lsusb`）依赖它。
+#
+# ★ 它用 udev 发现设备（`--enable-udev`），而我们的 systemd 里有 udev
+#   （v258 无条件建，见 init/systemd 里那段被推翻的 `-Dudev=false` 注释）。
+#   所以那里能对上。
+
+[package]
+name        = "libusb"
+version     = "1.0.28"
+release     = 1
+date        = 2026-10-25T00:00:00Z
+description = "用户态 USB 访问库（usbutils 的前置）"
+url         = "https://libusb.info/"
+license     = "LGPL-2.1-or-later"
+
+[[source]]
+url    = "https://github.com/libusb/libusb/releases/download/v$VERSION/libusb-$VERSION.tar.bz2"
+sha256 = "966bb0d231f94a474eaae2e67da5ec844d3527a1f386456394ff432580634b29"
+
+[dependencies.aarch64]
+runtime = ["glibc"]
+build   = ["make", "gcc", "autoconf", "automake", "libtool"]
+
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["make", "gcc", "autoconf", "automake", "libtool"]
+
+[build]
+type      = "autotools"
+# ★ 不传 --disable-udev：urev 是发现设备用的，而那正是我们要的
+configure = ["--prefix=/usr", "--disable-static"]
