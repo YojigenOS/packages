@@ -1,0 +1,33 @@
+# pciutils —— PCI 设备查看（lspci / setpci）
+#
+# ★ 对标 Fedora Server 的 comps（core / standard 两组）补进来的（2026-10-25）。
+#   这些是"一台能用的服务器该有"的东西，而 Fedora 和 Debian 都有。
+#
+# ★★ 判据（YG 定的第 1 条）：**基础包要全。**
+#   一个系统缺 `lspci` 或 `traceroute`，不是"精简"，是"查不了问题"。
+
+[package]
+name        = "pciutils"
+version     = "3.15.0"
+release     = 1
+date        = 2026-10-25T00:00:00Z
+description = "PCI 设备查看（lspci / setpci）"
+url         = "https://mj.ucw.cz/sw/pciutils/"
+license     = "GPL-2.0-or-later"
+
+[[source]]
+url    = "https://mj.ucw.cz/download/linux/pci/pciutils-$VERSION.tar.gz"
+sha256 = "a42e6e3f76fb6b1f6ac2e08cdd151f6bf78bc4f6312c591f4b6ec197582ede3a"
+
+[dependencies.aarch64]
+runtime = ['glibc', 'zlib', 'kmod']
+build   = ['make', 'gcc']
+
+[dependencies.x86_64]
+runtime = ['glibc', 'zlib', 'kmod']
+build   = ['make', 'gcc']
+
+[build]
+# ★ pciutils 没有 autotools 的 ./configure —— 它是自己的 Makefile（实测解包看过）。
+#   `custom` 类型要求 steps.sh 同时覆盖 build() 和 package()。
+type = "custom"

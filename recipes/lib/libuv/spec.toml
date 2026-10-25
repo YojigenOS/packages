@@ -1,0 +1,38 @@
+# libuv —— 跨平台异步 I/O 库
+#
+# ★ 对标 Fedora Server 补的（2026-10-25）。它是 bind9 的【硬依赖】——
+#   meson.build 里 `uv_dep = dependency('libuv', version: '>=1.34.0')`，
+#   没有 required:false，所以关不掉。
+#
+# ★★ 版本要求：bind9 要 >= 1.34，而**推荐 >= 1.40**（源码里有 warning）。
+#   我们取 1.53.0。
+#
+# ★ 它自己依赖 liburcu（Linux 上）。而 liburcu 只做一件事：让 libuv 的
+#   RCU 那部分能编 —— 不装的话 configure 会报 `liburcu not found`。
+
+[package]
+name        = "libuv"
+version     = "1.53.0"
+release     = 1
+date        = 2026-10-25T00:00:00Z
+description = "跨平台异步 I/O 库（bind9 的前置）"
+url         = "https://libuv.org/"
+license     = "MIT"
+
+[[source]]
+url    = "https://dist.libuv.org/dist/v$VERSION/libuv-v$VERSION.tar.gz"
+sha256 = "cb0d6dd2128d5a95bd242c6cc982a24fe608fa93da57b6b4ec763b0018c53e64"
+
+[dependencies.aarch64]
+runtime = ["glibc", "liburcu"]
+build   = ["make", "gcc", "autoconf", "automake", "libtool"]
+
+[dependencies.x86_64]
+runtime = ["glibc", "liburcu"]
+build   = ["make", "gcc", "autoconf", "automake", "libtool"]
+
+[build]
+type      = "autotools"
+# ★ 上游 tar 里**没有**预生成的 configure（实测：只有 autogen.sh + Makefile.am），
+#   所以驱动要先跑 autogen.sh。
+configure_shell = "/bin/bash"

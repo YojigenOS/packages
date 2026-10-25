@@ -1,0 +1,33 @@
+# whois —— WHOIS 客户端
+#
+# ★ 对标 Fedora Server 的 comps（core / standard 两组）补进来的（2026-10-25）。
+#   这些是"一台能用的服务器该有"的东西，而 Fedora 和 Debian 都有。
+#
+# ★★ 判据（YG 定的第 1 条）：**基础包要全。**
+#   一个系统缺 `lspci` 或 `traceroute`，不是"精简"，是"查不了问题"。
+
+[package]
+name        = "whois"
+version     = "5.6.6"
+release     = 1
+date        = 2026-10-25T00:00:00Z
+description = "WHOIS 客户端"
+url         = "https://github.com/rfc1036/whois"
+license     = "GPL-2.0-or-later"
+
+[[source]]
+url    = "https://deb.debian.org/debian/pool/main/w/whois/whois_$VERSION.tar.xz"
+sha256 = "121a3b0467ad64a0e7034b44e71bd1cf28a2e4cca82886d40804ce1fac6494c0"
+
+[dependencies.aarch64]
+runtime = ['glibc']
+build   = ['make', 'gcc']
+
+[dependencies.x86_64]
+runtime = ['glibc']
+build   = ['make', 'gcc']
+
+[build]
+# ★ whois 没有 autotools 的 ./configure —— 它是自己的 Makefile（实测解包看过）。
+#   `custom` 类型要求 steps.sh 同时覆盖 build() 和 package()。
+type = "custom"

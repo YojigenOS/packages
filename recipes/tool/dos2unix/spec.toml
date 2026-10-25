@@ -1,0 +1,33 @@
+# dos2unix —— DOS/Unix 换行符转换（dos2unix / unix2dos）
+#
+# ★ 对标 Fedora Server 的 comps（core / standard 两组）补进来的（2026-10-25）。
+#   这些是"一台能用的服务器该有"的东西，而 Fedora 和 Debian 都有。
+#
+# ★★ 判据（YG 定的第 1 条）：**基础包要全。**
+#   一个系统缺 `lspci` 或 `traceroute`，不是"精简"，是"查不了问题"。
+
+[package]
+name        = "dos2unix"
+version     = "7.5.2"
+release     = 1
+date        = 2026-10-25T00:00:00Z
+description = "DOS/Unix 换行符转换（dos2unix / unix2dos）"
+url         = "https://waterlan.home.xs4all.nl/dos2unix.html"
+license     = "BSD-2-Clause"
+
+[[source]]
+url    = "https://waterlan.home.xs4all.nl/dos2unix/dos2unix-$VERSION.tar.gz"
+sha256 = "b900ed9a92ef9b2548a6ac708ec81f724c59f2c089ed90f8e39a4e1287b28c1f"
+
+[dependencies.aarch64]
+runtime = ['glibc']
+build   = ['make', 'gcc']
+
+[dependencies.x86_64]
+runtime = ['glibc']
+build   = ['make', 'gcc']
+
+[build]
+# ★ dos2unix 没有 autotools 的 ./configure —— 它是自己的 Makefile（实测解包看过）。
+#   `custom` 类型要求 steps.sh 同时覆盖 build() 和 package()。
+type = "custom"

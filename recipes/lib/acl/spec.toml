@@ -1,0 +1,32 @@
+# acl —— POSIX ACL 工具（getfacl / setfacl）
+#
+# ★ 对标 Fedora Server 的 comps（core / standard 两组）补进来的（2026-10-25）。
+#   这些是"一台能用的服务器该有"的东西，而 Fedora 和 Debian 都有。
+#
+# ★★ 判据（YG 定的第 1 条）：**基础包要全。**
+#   一个系统缺 `lspci` 或 `traceroute`，不是"精简"，是"查不了问题"。
+
+[package]
+name        = "acl"
+version     = "2.4.0"
+release     = 1
+date        = 2026-10-25T00:00:00Z
+description = "POSIX ACL 工具（getfacl / setfacl）"
+url         = "https://savannah.nongnu.org/projects/acl"
+license     = "GPL-2.0-or-later"
+
+[[source]]
+url    = "https://download.savannah.nongnu.org/releases/acl/acl-$VERSION.tar.xz"
+sha256 = "e661131456d2708a01c614a0f400e11d7d1bfaeb6f3e74b75bb980b72f0161a3"
+
+[dependencies.aarch64]
+runtime = ['glibc', 'attr']
+build   = ['make', 'gcc']
+
+[dependencies.x86_64]
+runtime = ['glibc', 'attr']
+build   = ['make', 'gcc']
+
+[build]
+type      = "autotools"
+configure = ["--prefix=/usr", "--disable-static"]

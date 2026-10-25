@@ -1,0 +1,41 @@
+# lmdb —— 超快的嵌入式键值库（OpenLDAP 的 MDB）
+#
+# ★ 对标 Fedora Server 补的（2026-10-25）。它是 bind9 的【硬依赖】：
+#       lmdb_dep = dependency('lmdb')
+#   没有 required:false，关不掉。
+#
+# ★★ 而 lmdb **不再单独发版** —— 它的源码在 OpenLDAP 源码树的
+#   `libraries/liblmdb/` 下（Alpine / Debian 都是这么打的）。
+#   实测：那个目录里有完整的 mdb.c / lmdb.h / Makefile。
+#
+# ★ 所以源码用 openldap 的 tar，而构建只进 libraries/liblmdb 那一层 ——
+#   不需要配 OpenLDAP 本体（那要 BerkeleyDB / Cyrus SASL，一大堆）。
+#
+# ★ 它自带 Makefile，没有 configure → type = custom。
+
+[package]
+name        = "lmdb"
+version     = "0.9.34"
+release     = 1
+date        = 2026-10-25T00:00:00Z
+description = "嵌入式键值库（bind9 的前置）"
+url         = "https://www.openldap.org/software/lmdb/"
+license     = "OLDAP-2.8"
+
+[[source]]
+# ★ 版本号在包名里是 2.7.2（OpenLDAP 的版本），而 lmdb 自己报 0.9.34
+#   （见 libraries/liblmdb/lmdb.h 的 MDB_VERSION_*）。两个都要说清楚，
+#   否则下次看这个配方会以为是 2.7.2 的 lmdb。
+url    = "https://www.openldap.org/software/download/OpenLDAP/openldap-release/openldap-2.7.2.tgz"
+sha256 = "aad731aa22118ff327b9b4ddfc4b6f18ef9476586205da88a532e90940b523d2"
+
+[dependencies.aarch64]
+runtime = ["glibc"]
+build   = ["make", "gcc"]
+
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["make", "gcc"]
+
+[build]
+type = "custom"

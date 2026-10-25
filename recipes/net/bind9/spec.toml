@@ -1,0 +1,48 @@
+# bind9 —— DNS 服务器 + 客户端工具（dig / host / nslookup）
+#
+# ★ 对标 Fedora Server 的 core 组补的（2026-10-25）：`bind-utils` 是
+#   Fedora 和 Debian 都在 standard 层里的东西，而**没有 dig 的服务器不算能用的
+#   服务器** —— DNS 出问题时它是第一把工具。
+#
+# ★★ 而这条依赖链是我们目前最长的（比 systemd 还深）：
+#
+#       bind9 → libuv → liburcu
+#             → lmdb
+#             → openssl ✓  zlib ✓  libcap ✓
+#
+#   libuv 和 lmdb 是**硬依赖**（meson.build 里的 `dependency()` 没有
+#   required:false），实测看过源码 —— 关不掉。
+#
+# ★ 而它的 meson options 全是 `feature: auto`（doc/dnstap/doh/geoip/gssapi/
+#   idn/line/stats-json/stats-xml…）—— **缺依赖就自动关掉那个功能，不会失败**。
+#   所以：
+#     · 我们只要 dig 的话，那些都可以没有
+#     · 但**不要显式 --disable**（那是"功能缺失"，违反第 2 条）——
+#       让 meson 自己按依赖决定，行为就和"标准发行版"一致
+#
+# ★ 9.21 起它改用 **meson** 了（实测：源码里是 meson.build + meson.options，
+#   没有 configure / configure.ac）。这比 autotools 那套好办。
+
+[package]
+name        = "bind9"
+version     = "9.21.27"
+release     = 1
+date        = 2026-10-25T00:00:00Z
+description = "DNS 服务器与查询工具（dig / host / nslookup）"
+url         = "https://www.isc.org/bind/"
+license     = "MPL-2.0"
+
+[[source]]
+url    = "https://downloads.isc.org/isc/bind9/$VERSION/bind-$VERSION.tar.xz"
+sha256 = "a579fee35da9042b656edcc41580f822c08604d9a5710cec958e8490d7eba306"
+
+[dependencies.aarch64]
+runtime = ["glibc", "openssl", "zlib", "libuv", "lmdb", "libcap"]
+build   = ["meson", "ninja", "gcc", "pkgconf", "python3", "perl"]
+
+[dependencies.x86_64]
+runtime = ["glibc", "openssl", "zlib", "libuv", "lmdb", "libcap"]
+build   = ["meson", "ninja", "gcc", "pkgconf", "python3", "perl"]
+
+[build]
+type = "meson"

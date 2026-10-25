@@ -1,0 +1,33 @@
+# tree —— 目录树显示（tree）
+#
+# ★ 对标 Fedora Server 的 comps（core / standard 两组）补进来的（2026-10-25）。
+#   这些是"一台能用的服务器该有"的东西，而 Fedora 和 Debian 都有。
+#
+# ★★ 判据（YG 定的第 1 条）：**基础包要全。**
+#   一个系统缺 `lspci` 或 `traceroute`，不是"精简"，是"查不了问题"。
+
+[package]
+name        = "tree"
+version     = "2.2.1"
+release     = 1
+date        = 2026-10-25T00:00:00Z
+description = "目录树显示（tree）"
+url         = "https://oldmanprograms.netlify.app/"
+license     = "GPL-2.0-or-later"
+
+[[source]]
+url    = "https://github.com/Old-Man-Programmer/tree/archive/refs/tags/$VERSION.tar.gz"
+sha256 = "5caddcbca805131ff590b126d3218019882e4ca10bc9eb490bba51c05b9b3b75"
+
+[dependencies.aarch64]
+runtime = ['glibc']
+build   = ['make', 'gcc']
+
+[dependencies.x86_64]
+runtime = ['glibc']
+build   = ['make', 'gcc']
+
+[build]
+# ★ tree 没有 autotools 的 ./configure —— 它是自己的 Makefile（实测解包看过）。
+#   `custom` 类型要求 steps.sh 同时覆盖 build() 和 package()。
+type = "custom"

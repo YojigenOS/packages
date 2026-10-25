@@ -1,0 +1,35 @@
+# liburcu —— 用户态 RCU（Read-Copy-Update）
+#
+# ★ 对标 Fedora Server 补的（2026-10-25）：它是 libuv 的前置，而 libuv 是
+#   bind9 的前置，而 bind9 提供 `dig` / `host` / `nslookup`。
+#
+# ★★ 这条链是我们目前最长的：
+#       bind9 → libuv → liburcu
+#             → lmdb
+#   （libuv 和 lmdb 是 bind9 的【硬依赖】—— meson.build 里 `dependency()`
+#     没有 required:false，关不掉。实测看过源码。）
+
+[package]
+name        = "liburcu"
+version     = "0.15.7"
+release     = 1
+date        = 2026-10-25T00:00:00Z
+description = "用户态 RCU 库（libuv / bind9 的前置）"
+url         = "https://liburcu.org/"
+license     = "LGPL-2.1-or-later"
+
+[[source]]
+url    = "https://www.lttng.org/files/urcu/userspace-rcu-$VERSION.tar.bz2"
+sha256 = "2556b83adc0f9b3ac8024e613e17d014d04c4c49110604ce55fcb14eae32edd3"
+
+[dependencies.aarch64]
+runtime = ["glibc"]
+build   = ["make", "gcc"]
+
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["make", "gcc"]
+
+[build]
+type      = "autotools"
+configure = ["--prefix=/usr", "--disable-static"]
