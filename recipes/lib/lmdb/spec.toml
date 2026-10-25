@@ -16,7 +16,7 @@
 [package]
 name        = "lmdb"
 version     = "0.9.34"
-release     = 1
+release     = 2
 date        = 2026-10-25T00:00:00Z
 description = "嵌入式键值库（bind9 的前置）"
 url         = "https://www.openldap.org/software/lmdb/"
