@@ -18,14 +18,17 @@ license     = "GPL-3.0-or-later"
 [[source]]
 url    = "https://ftp.gnu.org/gnu/ed/ed-$VERSION.tar.lz"
 sha256 = "3f33b22135219c39c3c695f7b7171c2567d3e2a17c798c0a90607320cbb268f2"
+# ★ 注意格式：GNU 的 ed **只发 `.tar.lz`**（lzip 压缩）。实测查过
+#   ftp.gnu.org / tuna / ustc / kernel.org 四个镜像，没有 .tar.gz / .tar.xz。
+#   而 `tar -xf` 靠 exec `lzip` 来解 —— 所以构建依赖里有 lzip（见下）。
 
 [dependencies.aarch64]
 runtime = ['glibc']
-build   = ['make', 'gcc']
+build   = ['make', 'gcc', 'lzip']
 
 [dependencies.x86_64]
 runtime = ['glibc']
-build   = ['make', 'gcc']
+build   = ['make', 'gcc', 'lzip']
 
 [build]
 type      = "autotools"

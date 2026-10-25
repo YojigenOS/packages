@@ -1,0 +1,36 @@
+# lzip —— 基于 LZMA 的无损压缩工具
+#
+# ★ 为什么建它（2026-10-25）：**GNU 的 `ed` 只发 `.tar.lz` 格式**
+#   （实测查过 ftp.gnu.org / tuna / ustc / kernel.org 四个镜像，全是 .lz）。
+#   而 `tar -xf` 靠 exec `lzip` 来解它 —— 没有 lzip 就是：
+#
+#       tar (child): lzip: Cannot exec: No such file or directory
+#
+#   ★★ 而这是一个【构建期】依赖，不是运行时：源码解压完之后 lzip 就没用了。
+#     但我们的驱动是 `tar -xf` 一句话，它不分"构建期/运行期"——所以要么
+#     装进构建镜像，要么让 ed 有一个前置包。**选后者：只影响 ed 这一个包。**
+
+[package]
+name        = "lzip"
+version     = "1.26"
+release     = 1
+date        = 2026-10-25T00:00:00Z
+description = "LZMA 压缩工具（解 .tar.lz 用）"
+url         = "https://www.nongnu.org/lzip/lzip.html"
+license     = "GPL-2.0-or-later"
+
+[[source]]
+url    = "https://download.savannah.nongnu.org/releases/lzip/lzip-$VERSION.tar.gz"
+sha256 = "641cf30961525cbe3b340cc883436c8854e9f5032f459f444de4782b621e6572"
+
+[dependencies.aarch64]
+runtime = ["glibc"]
+build   = ["make", "gcc"]
+
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["make", "gcc"]
+
+[build]
+type      = "autotools"
+configure = ["--prefix=/usr"]
