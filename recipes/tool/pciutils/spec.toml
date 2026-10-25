@@ -9,7 +9,7 @@
 [package]
 name        = "pciutils"
 version     = "3.15.0"
-release     = 1
+release     = 2
 date        = 2026-10-25T00:00:00Z
 description = "PCI 设备查看（lspci / setpci）"
 url         = "https://mj.ucw.cz/sw/pciutils/"
