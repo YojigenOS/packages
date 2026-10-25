@@ -32,7 +32,15 @@ runtime = ["glibc", "liburcu"]
 build   = ["make", "gcc", "autoconf", "automake", "libtool"]
 
 [build]
-type      = "autotools"
-# ★ 上游 tar 里**没有**预生成的 configure（实测：只有 autogen.sh + Makefile.am），
-#   所以驱动要先跑 autogen.sh。
-configure_shell = "/bin/bash"
+# ★★★ 上游 tar 里**没有**预生成的 `configure` —— 实测 `tar -tzf` 看到的是
+#   autogen.sh + configure.ac + Makefile.am，没有 configure。
+#
+#   所以驱动直接跑 `./configure` 会报：
+#       /build/run.sh: line 5: ./configure: No such file or directory
+#
+#   必须先用 custom + steps.sh 跑 `autogen.sh` 生成 configure，再自己调它。
+#
+#   ★ 为什么不用 `autotools` 类型加个"先跑 autogen"的钩子：驱动没有那种钩子。
+#     `autotools` 假定 configure 已经存在 —— 而"源码包里带不带 configure"是
+#     上游打包习惯，不是我们能控制的。**这类包只能走 custom。**
+type = "custom"
