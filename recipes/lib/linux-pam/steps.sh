@@ -26,13 +26,24 @@
 #     于是 login / su 完全用不了 —— 比"没有 pam.d"更糟。所以那份清单是
 #     逐条核对过的，不是照抄 Debian 的。
 
-build() {
-    # meson 那部分由驱动做（type = "meson"），这里不需要 steps.sh 的 build。
-    #
-    # ★ 但驱动对 `type = "meson"` 会跳过 steps.sh 的 build()，只在 package()
-    #   阶段调我们 —— 所以这个函数留空是故意的（写出来是为了说明这件事）。
-    :
-}
+# ★★★ 这里【不要】定义 build()（2026-10-26 撞到的）。
+#
+#   我原来写了一个空的 `build() { : }`，注释说"meson 那部分由驱动做，这里
+#   不需要"。**那是错的，而且错得很隐蔽**：steps.sh 是被 `.` source 进来的，
+#   所以只要定义了 build()，它就把驱动的那个整个替换掉 —— 于是：
+#
+#       meson setup   ← 没跑
+#       meson compile ← 没跑
+#
+#   后面 `meson install -C _build` 就报：
+#
+#       Install data not found. Run this command in build directory root.
+#
+#   ★ 那个报错看起来像"目录找错了"，实际是"根本没有 _build 那个目录"。
+#
+#   ★★ 判据：**steps.sh 里只定义你真正要改的那些函数。**
+#     用不到的（连空函数也不行）就别写 —— "留个空壳说明一下"这件事，
+#     在这个机制里等于"把它废掉"。
 
 package() {
     # ★★★ 必须【自己】跑 meson install（2026-10-26 撞到的）。
