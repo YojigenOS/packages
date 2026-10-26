@@ -71,7 +71,7 @@
 [package]
 name        = "systemd"
 version     = "258"
-release     = 9
+release     = 10
 date        = 2026-10-22T10:30:00Z
 description = "系统与服务管理器（决策记录 0022：自己建）"
 url         = "https://systemd.io/"
@@ -94,10 +94,10 @@ url    = "https://github.com/systemd/systemd/archive/refs/tags/v$VERSION.tar.gz"
 sha256 = "07a580cf21856f468f82b77b82973a926f42ccc696462459b53f8b88893dff8e"
 
 [dependencies.aarch64]
-runtime = ["glibc", "util-linux", "openssl", "zstd", "xz", "libcap", "linux-pam", "libseccomp", "kmod"]
+runtime = ["glibc", "util-linux", "openssl", "zstd", "xz", "libcap", "linux-pam", "libseccomp", "kmod", "cryptsetup"]
 build   = ["meson", "ninja", "gcc", "pkgconf", "gperf", "python3", "jinja2",
            "util-linux", "openssl", "zstd", "xz", "libcap",
-           "linux-pam", "libseccomp", "kmod"]
+           "linux-pam", "libseccomp", "kmod", "cryptsetup"]
 
 # ★★ 第 3 期打开的三个能力的依赖（2026-10-26）：
 #
@@ -110,10 +110,10 @@ build   = ["meson", "ninja", "gcc", "pkgconf", "gperf", "python3", "jinja2",
 #   pkg-config 找到它们的头文件和 .pc。
 
 [dependencies.x86_64]
-runtime = ["glibc", "util-linux", "openssl", "zstd", "xz", "libcap", "linux-pam", "libseccomp", "kmod"]
+runtime = ["glibc", "util-linux", "openssl", "zstd", "xz", "libcap", "linux-pam", "libseccomp", "kmod", "cryptsetup"]
 build   = ["meson", "ninja", "gcc", "pkgconf", "gperf", "python3", "jinja2",
            "util-linux", "openssl", "zstd", "xz", "libcap",
-           "linux-pam", "libseccomp", "kmod"]
+           "linux-pam", "libseccomp", "kmod", "cryptsetup"]
 
 [build]
 type = "meson"
@@ -177,7 +177,20 @@ configure = [
     #     是独立的两组判断）—— logind 可以暂时还关着。
     "-Dpam=true",
     "-Dlogind=false",
-    "-Dlibcryptsetup=false",
+    # ★★★ 第 3/4 期：cryptsetup 打开（2026-10-26）
+    #
+    #   `-Dlibcryptsetup=false` 关着时 systemd **不能读 /etc/crypttab** ——
+    #   也就是"开机自动解锁加密盘"这件事做不到：
+    #
+    #       systemd-cryptsetup@<name>.service   ← 这个 unit 不存在
+    #       cryptsetup.target                   ← 从来没被真正满足过
+    #
+    #   ★ 而 libcryptsetup 现在有了（tool/cryptsetup 2.8.8，
+    #     带 json-c + libdevmapper 两个前置）。
+    #
+    #   ★★ 这是 YG 第 2 条在这条链上的最后一格：从"没有 cryptsetup 这个包"
+    #     到"systemd 能读 crypttab"，中间隔了 3 个包 + 两次构建镜像更新。
+    "-Dlibcryptsetup=true",
     "-Delfutils=false",
     "-Dgcrypt=false",
     "-Dlibidn2=false",
