@@ -6,7 +6,7 @@
 [package]
 name        = "shadow"
 version     = "4.20.3"
-release     = 1
+release     = 2
 # ★ 晚于它的依赖（glibc 是 2026-10-12T19:00:00Z，libxcrypt 更早）。
 date        = 2026-10-12T23:00:00Z
 description = "账号与口令工具（useradd / passwd / su / login…）"
@@ -32,7 +32,7 @@ commit  = "7188fbf46f397ab40d2e77d6f0bb8ebbe479cc0c"
 [dependencies.aarch64]
 # libxcrypt 提供 crypt()。glibc 2.44 自己【不带】libcrypt 了（上游早就把
 # crypt 拆出去了），所以这是个真依赖，不是可选。
-runtime = ["glibc", "libxcrypt"]
+runtime = ["glibc", "libxcrypt", "linux-pam", "acl"]
 # ★ autoreconf 要用 autoconf / automake / libtool，必须【声明】——不声明就会
 #   悄悄用构建环境镜像里的那一份，那是隐式依赖（配方约定里那条，测试守着）。
 # ★ pkgconf 是必须的，而它不在 devel 镜像里——所以这一条不是"声明一下"
@@ -45,11 +45,13 @@ runtime = ["glibc", "libxcrypt"]
 #       configure.ac:245: error: undefined or overquoted macro: AC_MSG_WARN
 #
 #   ——一句话指不到真正缺的东西。和 libffi 的 LT_SYS_SYMBOL_USCORE 是同一类。
-build   = ["gcc", "make", "autoconf", "automake", "libtool", "libxcrypt", "gettext", "pkgconf"]
+build   = ["gcc", "make", "autoconf", "automake", "libtool", "libxcrypt", "gettext", "pkgconf",
+           "linux-pam", "acl"]
 
 [dependencies.x86_64]
-runtime = ["glibc", "libxcrypt"]
-build   = ["gcc", "make", "autoconf", "automake", "libtool", "libxcrypt", "gettext", "pkgconf"]
+runtime = ["glibc", "libxcrypt", "linux-pam", "acl"]
+build   = ["gcc", "make", "autoconf", "automake", "libtool", "libxcrypt", "gettext", "pkgconf",
+           "linux-pam", "acl"]
 
 [build]
 type       = "autotools"
@@ -87,10 +89,22 @@ configure = [
   #
   # 配方约定里那条：关掉它们不是嫌它们没用，是它们还没进来。写清楚是哪个，
   # 下一个人才知道接进来的时候该删哪一行。
-  "--without-libpam",      # 没有 PAM。口令校验会走它自己的 /etc/shadow 直读
+  # ★★★ `--without-libpam` 删掉了（2026-10-26，第 3 期）。
+  #
+  #   原来那条注释写着"没有 PAM"，而现在有了（lib/linux-pam 建出来了）。
+  #   配方约定里那句"关掉它们不是嫌它们没用，是它们还没进来。写清楚是哪个，
+  #   下一个人才知道接进来的时候该删哪一行" —— 这就是删它的时刻。
+  #
+  #   ★ 打开后的区别：passwd / chpasswd / chfn / chsh 会走 /etc/pam.d/passwd
+  #     那条链（pam_unix 做哈希），而不是各自直读 /etc/shadow。
+  #     **这才是标准发行版的行为** —— `pam_pwhistory` 那种"记住最近 N 个
+  #     密码"的能力只有走 PAM 才有。
+  "--with-libpam",
   "--without-audit",       # 没有 libaudit
   "--without-selinux",     # 没有 SELinux
-  "--without-acl",         # 没有 libacl；装了的话 passwd 会保留 ACL
+  # ★ 同理：libacl 现在有了（第 1 期建的），所以这条也删掉。
+  #   打开后 passwd 改密码时会**保留文件的 ACL** —— 关着的话 ACL 会被改掉。
+  "--with-acl",
   "--without-tcb",         # TCB 是另一种口令数据库布局，不用
   "--without-libbsd",      # 没有 libbsd
   "--without-nscd",        # 没有 nscd

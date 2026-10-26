@@ -11,7 +11,7 @@
 [package]
 name        = "sudo"
 version     = "1.9.17_p2"
-release     = 1
+release     = 2
 date        = 2026-10-13T16:00:00Z
 description = "以其他用户身份执行命令"
 url         = "https://www.sudo.ws/"
@@ -23,10 +23,10 @@ commit = "d1b48c651cec19fe37d1f0d3299d2283fb0f88e4"
 
 [dependencies.aarch64]
 runtime = ["glibc", "openssl"]
-build   = ["make", "gcc", "autoconf", "automake", "libtool", "openssl", "flex", "bison", "gettext"]
+build   = ["make", "gcc", "autoconf", "automake", "libtool", "openssl", "flex", "bison", "gettext", "linux-pam"]
 [dependencies.x86_64]
 runtime = ["glibc", "openssl"]
-build   = ["make", "gcc", "autoconf", "automake", "libtool", "openssl", "flex", "bison", "gettext"]
+build   = ["make", "gcc", "autoconf", "automake", "libtool", "openssl", "flex", "bison", "gettext", "linux-pam"]
 
 [build]
 type       = "autotools"
@@ -38,9 +38,17 @@ configure  = [
 
     # ★ 要文档的话它会去找 mandoc / docbook —— 我们两样都没有。
 
-    # ★ 关掉 PAM。我们没有 PAM，而它默认会试着用 —— 那份默认会在
-    #   运行时才现形（sudo 起来了，但任何一条命令都验不过）。
-    "--without-pam",
+    # ★★★ `--without-pam` 删掉了（2026-10-26，第 3 期）。
+    #
+    #   上面那段注释说"我们没有 PAM" —— 现在有了。而那段还说了关掉它的
+    #   真实原因：**sudo 起来了但任何一条命令都验不过**。也就是说
+    #   `--with-pam`（默认值）在没有 PAM 时是"运行时才炸"，那才是当初
+    #   必须显式关掉的理由。理由消失，开关就该删。
+    #
+    #   ★ 打开后 sudo 走 /etc/pam.d/sudo 那条链 —— 和 Fedora/Debian 一致。
+    #     里面那些 `pam_limits`（每用户的资源限制）/ `pam_env`（环境变量）
+    #     才生效。
+    "--with-pam",
 
     # ★ 不用 LDAP / SSSD / 各种后端插件：它们都要各自的库。
     "--disable-ldap",
