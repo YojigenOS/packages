@@ -1,0 +1,29 @@
+# atd 的认证栈
+#
+# ★★★ 为什么需要这一份（2026-10-26）：
+#
+#   `atd` 在执行每个任务之前会调 PAM（实测 atd.c:455-462）：
+#
+#       pam_start("atd", pentry->pw_name, &conv, &pamh);
+#       pam_acct_mgmt(pamh, PAM_SILENT);        ← 这个账号现在能登录吗
+#       pam_open_session(pamh, PAM_SILENT);     ← 开一个会话
+#       pam_setcred(pamh, PAM_ESTABLISH_CRED);  ← 建立凭据
+#
+#   ★ **注意没有 `pam_authenticate`** —— atd 不验密码（它已经以 root 身份
+#     在跑了，任务是谁排的它从文件头知道）。所以这份配置只需要
+#     `account` 和 `session`，不需要 `auth`。
+#
+# ★★ 而 `/etc/pam.d/atd` 不存在时，PAM 回落到 `/etc/pam.d/other`
+#    —— 那是 `pam_deny` 四连（fail-closed）。于是每个任务执行时：
+#
+#       atd[48830]: Authentication failure
+#       （任务被丢弃，什么都不执行，队列里也不再出现）
+#
+#    实测：`at` 排任务 → 到期 → atd 取走 → 认证失败 → 静默丢弃。
+#    **只有 `journalctl -u atd` 里那两行 "Authentication failure"。**
+#
+# ★ 而 `include system-auth` 里那句 `pam_unix` 的 `account` 和 `session`
+#   正是我们要的：前者跑 `shadow` 的账号过期检查，后者建 utmp 条目。
+
+account     include       system-auth
+session     include       system-auth
