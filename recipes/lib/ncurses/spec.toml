@@ -21,7 +21,7 @@
 [package]
 name        = "ncurses"
 version     = "6.4"
-release     = 1
+release     = 2
 date        = 2026-10-13T12:00:00Z
 description = "终端界面库与 terminfo 数据库"
 url         = "https://invisible-island.net/ncurses/"
@@ -55,7 +55,27 @@ configure = [
 
     # ── 动态库 ──
     "--with-shared",
-    "--without-normal",   # 不要 .a —— 省一半体积；要静态链接时再说
+    # ★★★ `--without-normal` 删掉了（2026-10-26）。
+    #
+    #   它当初的意思是"不要 .a —— 省一半体积"。**但它实际做的事比那多**：
+    #   `--with-normal` 是"生成常规库"，关掉它之后**连 .so 也一起没了**。
+    #
+    #   后果（实测）：/usr/lib 里只有一个 `libncursesw.so.6.4`，
+    #   **没有 libncurses.so、没有 libtinfo.so**。于是 parted 构建失败：
+    #
+    #       configure: error: termcap could not be found which is required
+    #       for the --with-readline option
+    #
+    #   而 parted 的探测是 `AC_SEARCH_LIBS([tgetent], [tinfo ncurses curses
+    #   termcap termlib])` —— 五个库名一个都对不上。
+    #
+    # ★★ 而 `tgetent` 在 **libtinfo** 里，那个库要 `--with-termlib` 才生成。
+    #   所以下面那条是这次真正的修法。
+    #
+    #   ★ 判据：**"省体积"的开关要看清楚它到底关了什么**。
+    #     `--without-normal` 这个名字说的是"不要常规库"，
+    #     读起来像"只要 shared 库就好" —— 而实际是"连 shared 都不生成"。
+    "--with-termlib",
 
     # ── 不要调试版 ──
     #   默认它会再编一套带 _g 后缀的库（libncursesw_g），那是给 debug 用的。
