@@ -71,7 +71,7 @@
 [package]
 name        = "systemd"
 version     = "258"
-release     = 8
+release     = 9
 date        = 2026-10-22T10:30:00Z
 description = "系统与服务管理器（决策记录 0022：自己建）"
 url         = "https://systemd.io/"
@@ -94,14 +94,26 @@ url    = "https://github.com/systemd/systemd/archive/refs/tags/v$VERSION.tar.gz"
 sha256 = "07a580cf21856f468f82b77b82973a926f42ccc696462459b53f8b88893dff8e"
 
 [dependencies.aarch64]
-runtime = ["glibc", "util-linux", "openssl", "zstd", "xz", "libcap"]
+runtime = ["glibc", "util-linux", "openssl", "zstd", "xz", "libcap", "linux-pam", "libseccomp", "kmod"]
 build   = ["meson", "ninja", "gcc", "pkgconf", "gperf", "python3", "jinja2",
-           "util-linux", "openssl", "zstd", "xz", "libcap"]
+           "util-linux", "openssl", "zstd", "xz", "libcap",
+           "linux-pam", "libseccomp", "kmod"]
+
+# ★★ 第 3 期打开的三个能力的依赖（2026-10-26）：
+#
+#   linux-pam     -Dpam      → /etc/pam.d + logind 的认证链路
+#   libseccomp    -Dseccomp  → SystemCallFilter= / RestrictAddressFamilies=
+#   kmod          -Dkmod     → udev 加载内核模块（还要内核 CONFIG_MODULES=y）
+#
+# ★ 三个都同时在 runtime 和 build 里 —— runtime 是因为 systemd **链接**它们
+#   （libpam.so / libseccomp.so / libkmod.so），build 是因为 meson 要靠
+#   pkg-config 找到它们的头文件和 .pc。
 
 [dependencies.x86_64]
-runtime = ["glibc", "util-linux", "openssl", "zstd", "xz", "libcap"]
+runtime = ["glibc", "util-linux", "openssl", "zstd", "xz", "libcap", "linux-pam", "libseccomp", "kmod"]
 build   = ["meson", "ninja", "gcc", "pkgconf", "gperf", "python3", "jinja2",
-           "util-linux", "openssl", "zstd", "xz", "libcap"]
+           "util-linux", "openssl", "zstd", "xz", "libcap",
+           "linux-pam", "libseccomp", "kmod"]
 
 [build]
 type = "meson"
@@ -135,12 +147,35 @@ configure = [
     #     没有 udevd，`dev-*.device` 全是 `inactive (dead)`，`getty.target`
     #     和 `multi-user.target` 永远到不了，`is-system-running` 停在
     #     `starting`。见文件头那条被推翻的 `-Dudev=false` 注释。
-    "-Dkmod=false",
-    "-Dseccomp=false",
+    # ★★★ 第 3 期：这三个从 false 改成【不写】（= 用 meson 的默认 auto）
+    #   （2026-10-26）
+    #
+    #   YG 第 2 条：「尽量不要有特殊开关关闭或者功能缺失」。
+    #
+    #   -Dkmod      → systemd-udevd 靠它加载内核模块。关着的时候设备插上来
+    #                 **驱动加载不了**。而 kmod / libkmod 现在有了（第 3 期建的）。
+    #                 ★ 注意：真正生效还要内核 CONFIG_MODULES=y（单独处理）。
+    #   -Dseccomp   → `SystemCallFilter=` / `RestrictAddressFamilies=` 这些
+    #                 服务加固指令靠它。关着时那些指令**静默失效**。
+    #                 libseccomp 现在有了。
+    #
+    #   ★ 不写而不是写 =true：meson 的 auto 会在依赖缺失时跳过并打警告，
+    #     而 =true 会**构建失败**。依赖我们已经有，但 auto 让"有问题时
+    #     立刻看得见"（警告）而不是"整个 systemd 编不出来"。
     "-Dapparmor=false",
     "-Dselinux=false",
     "-Daudit=false",
-    "-Dpam=false",
+    # ★★★ 第 3 期：PAM 打开（2026-10-26）
+    #
+    #   `-Dpam=false` 的后果是 **/etc/pam.d 全无** —— 而 Fedora 和 Debian
+    #   都把 libpam-* 放在 **required** 层（不是 important）。
+    #
+    #   没有 PAM：`login` / `su` / `sudo` / `sshd` 的认证链路和标准发行版
+    #   不一样；`pam_unix` / `pam_limits` / `pam_env` 全没有。
+    #
+    #   ★ 而它和 `-Dlogind` 没有硬耦合（实测 meson.build：pam 和 logind
+    #     是独立的两组判断）—— logind 可以暂时还关着。
+    "-Dpam=true",
     "-Dlogind=false",
     "-Dlibcryptsetup=false",
     "-Delfutils=false",
