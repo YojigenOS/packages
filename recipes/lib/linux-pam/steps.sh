@@ -52,6 +52,18 @@ package() {
     #     所以每一份覆盖 package() 的 steps.sh 都要自己把默认那一步补回来。
     #     （`custom` 类型没有默认那一步，所以它们不受影响 —— 只有
     #      autotools/meson/cmake 这三种有默认 install 的类型要注意。）
+    # ★★★ 而且要**先 cd 回源码根**。驱动版本里那句 `cd "$SRCDIR"` 在
+    #   run.sh 的**第 2 行**（脚本顶部），而 `run.sh package` 是一个
+    #   **独立进程** —— 它不会继承 build 那一次的 cwd。
+    #
+    #   所以覆盖 package() 之后，那句 cd 也没了，于是：
+    #
+    #       Install data not found. Run this command in build directory root.
+    #
+    #   ★ 这是"覆盖整个函数"这件事的第二面：不只是丢那句 meson install，
+    #     连脚本顶部的 `cd "$SRCDIR"` 也不在作用域里了 —— 因为它属于
+    #     run.sh 的顶层，而 `package` 分支是被单独调用的一次。
+    cd "$SRCDIR"
     DESTDIR="$PKGDEST" meson install -C _build
 
     # ★ $PKGDIR 是【本配方目录的副本】，files/ 下的东西在 $PKGDIR/files/ ——
