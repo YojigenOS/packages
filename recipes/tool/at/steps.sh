@@ -132,7 +132,7 @@ package() {
     unit="$PKGDEST/usr/lib/systemd/system/atd.service"
     if [ -f "$unit" ]; then
         # 在 [Service] 段后插 Type=forking，并把 ExecStart 的 -f 去掉
-        sed -i 's|^\[Service\]$|[Service]\nType=forking|' "$unit"
+        sed -i 's|^\[Service\]$|[Service]\nType=simple|' "$unit"
         # ★★★ 而且要用 `-d`，**不是 `-f`**（2026-10-26 第六个坑）
         #
         #   `-f` 这个名字会让人以为是 "foreground"，而源码里它只是：
@@ -159,7 +159,7 @@ package() {
         #         atd -f  → 任务永远不执行
         #         atd -d  → AT_WORKED_OK
         sed -i 's|^ExecStart=/usr/sbin/atd -f$|ExecStart=/usr/sbin/atd -d|' "$unit"
-        echo "  ✓ atd.service 改成 Type=forking（原 Type=simple + -f 会空转）" >&2
+        echo "  ✓ atd.service 改成 Type=simple（配合 -d 不 fork）" >&2
 
         # ★★★ 再加一条：atd 必须**以 root 运行**（2026-10-26 第四个坑）
         #
@@ -178,7 +178,7 @@ package() {
         #   ★★ 所以 atd 本体必须是 root —— 它要读所有用户的任务文件，
         #      然后在执行时降权到提交者。标准发行版都是这样
         #      （Debian 的 atd.service 没有 User=，默认 root）。
-        sed -i 's|^Type=forking$|Type=forking\nUser=root|' "$unit"
+        sed -i 's|^Type=simple$|Type=simple\nUser=root|' "$unit"
         echo "  ✓ atd 以 root 运行（它要读所有用户的任务文件，执行时才降权）" >&2
     fi
 
