@@ -1,0 +1,46 @@
+# cryptsetup —— LUKS 磁盘加密
+#
+# ★ 第 4 期补的（2026-10-26）。它是 B 类里依赖最重的一个，但也是
+#   **"一台服务器该不该有"的答案最明确的**：全盘加密是标准运维实践，
+#   而 LUKS 是 Linux 上的唯一标准格式。
+#
+# ★★★ 而它同时解开 systemd 的一个开关：`-Dlibcryptsetup=false`。
+#   那个开关关着的时候，systemd 不能读 /etc/crypttab —— 也就是
+#   **开机自动解锁加密盘**这件事做不到。那是这一期最实质的收益。
+#
+# ★ 它用 **meson**（实测：meson_options.txt + meson.build）。
+#
+# ★★ 依赖（都是默认值，一个都不显式关）：
+#
+#   crypto-backend = 'openssl'   ← 默认就是它，我们有
+#   blkid = true                 ← util-linux 提供（libblkid）
+#   argon-implementation = 'internal'  ← 内置 Argon2，不需要 libargon2
+#   external-tokens = true       ← LUKS2 的 token 机制
+#
+# ★★ 一处**显式关**：`-Dlibdevmapper=false`。
+#   它是"系统上有 LVM 就认它"的支持，而我们没有 LVM —— 属"没有那个东西"，
+#   不是"关功能"。（和 parted 的 --without-devmapper 同一个判断。）
+
+[package]
+name        = "cryptsetup"
+version     = "2.8.8"
+release     = 1
+date        = 2026-10-26T00:00:00Z
+description = "LUKS 磁盘加密（cryptsetup）"
+url         = "https://gitlab.com/cryptsetup/cryptsetup"
+license     = "GPL-2.0-or-later"
+
+[[source]]
+url    = "https://gitlab.com/cryptsetup/cryptsetup/-/archive/v$VERSION/cryptsetup-v$VERSION.tar.gz"
+sha256 = "3aa3bb45472b5de8169b58260b2d59e55557c2c0e210f044fe9148da344db1e0"
+
+[dependencies.aarch64]
+runtime = ["glibc", "openssl", "popt", "json-c", "util-linux"]
+build   = ["meson", "ninja", "gcc", "pkgconf", "util-linux", "json-c"]
+
+[dependencies.x86_64]
+runtime = ["glibc", "openssl", "popt", "json-c", "util-linux"]
+build   = ["meson", "ninja", "gcc", "pkgconf", "util-linux", "json-c"]
+
+[build]
+type = "meson"

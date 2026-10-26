@@ -1,0 +1,34 @@
+# json-c —— JSON 解析库
+#
+# ★ 第 4 期补的（2026-10-26）：`cryptsetup` 的 LUKS2 元数据是 JSON 格式，
+#   它要 json-c 来读写。
+#
+# ★★ 而它用 **CMake**（实测：只有 CMakeLists.txt，没有 configure / meson.build）。
+#
+# ★ 它没有运行时依赖（只要 libc）—— 是最"干净"的那种库。
+
+[package]
+name        = "json-c"
+version     = "0.18"
+release     = 1
+date        = 2026-10-26T00:00:00Z
+description = "JSON 解析库（cryptsetup 的前置）"
+url         = "https://github.com/json-c/json-c"
+license     = "MIT"
+
+[[source]]
+# ★ tag 名字带日期后缀（json-c-0.18-20240915）—— 那是上游的命名习惯，
+#   不是版本号的一部分。包名里的 0.18 才是版本。
+url    = "https://github.com/json-c/json-c/archive/refs/tags/json-c-0.18-20240915.tar.gz"
+sha256 = "3112c1f25d39eca661fe3fc663431e130cc6e2f900c081738317fba49d29e298"
+
+[dependencies.aarch64]
+runtime = ["glibc"]
+build   = ["cmake", "make", "gcc"]
+
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["cmake", "make", "gcc"]
+
+[build]
+type = "cmake"
