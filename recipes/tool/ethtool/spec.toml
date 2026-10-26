@@ -1,0 +1,35 @@
+# ethtool —— 网卡诊断与配置
+#
+# ★ 对标 Fedora Server 的 standard 组补的（2026-10-26，第 4 期）。
+#
+#   一台服务器上"网络不对劲"是最高频的排障场景之一，而 `ethtool` 是看
+#   链路速率 / 双工 / 丢包统计 / 网卡固件版本的标准工具。
+#   没有它，`ip link` 只能看到"UP"或"DOWN"，看不到**为什么**。
+#
+# ★ 它只有一个可选依赖：libmnl（netlink）。而那个第 1 期就有了。
+#   不关任何功能。
+
+[package]
+name        = "ethtool"
+version     = "7.2"
+release     = 1
+date        = 2026-10-26T00:00:00Z
+description = "网卡诊断与配置（ethtool）"
+url         = "https://www.kernel.org/pub/software/network/ethtool/"
+license     = "GPL-2.0-only"
+
+[[source]]
+url    = "https://mirrors.edge.kernel.org/pub/software/network/ethtool/ethtool-$VERSION.tar.xz"
+sha256 = "44256ddf4631ed08d816b7b8725f4b2e0f05e96b8c7ca64ee5c81449da2b6507"
+
+[dependencies.aarch64]
+runtime = ["glibc", "libmnl"]
+build   = ["make", "gcc", "pkgconf"]
+
+[dependencies.x86_64]
+runtime = ["glibc", "libmnl"]
+build   = ["make", "gcc", "pkgconf"]
+
+[build]
+type      = "autotools"
+configure = ["--prefix=/usr", "--disable-static"]

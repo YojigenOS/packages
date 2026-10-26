@@ -1,0 +1,38 @@
+# mdadm —— 软件 RAID 管理
+#
+# ★ 对标 Fedora Server 的 standard 组补的（2026-10-26，第 4 期）。
+#
+# ★★ 它管的是**软件 RAID**（/dev/md*）——不依赖任何硬件 RAID 卡。
+#   一台服务器用两块盘做镜像（RAID1）是最常见的起点，而那是纯软件的。
+#
+# ★ 它只有裸 Makefile（没有 configure），所以 type = custom + steps.sh。
+#
+# ★★ 它有个前置：内核要有 **CONFIG_MD / CONFIG_BLK_DEV_MD**。我们的内核
+#   已经内建（`CONFIG_MD=y`，见 kernel/linux/config.fragment）—— 因为
+#   那是 defconfig 的默认值且 CONFIG_MODULES=n 会把它变成 y。
+#   **所以 mdadm 现在是能真用的**，不像 kmod 那样受 CONFIG_MODULES 限制。
+
+[package]
+name        = "mdadm"
+version     = "4.4"
+release     = 1
+date        = 2026-10-26T00:00:00Z
+description = "软件 RAID 管理（mdadm）"
+url         = "https://raid.wiki.kernel.org/"
+license     = "GPL-2.0-only"
+
+[[source]]
+url    = "https://mirrors.edge.kernel.org/pub/linux/utils/raid/mdadm/mdadm-$VERSION.tar.xz"
+sha256 = "9b488f35ed153df99924b5fe41eed380e8512de8f18a118628cacdd681b1d573"
+
+[dependencies.aarch64]
+runtime = ["glibc"]
+build   = ["make", "gcc"]
+
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["make", "gcc"]
+
+[build]
+# ★ 裸 Makefile（实测：mdadm-4.4/ 里只有 Makefile，没有 configure）
+type = "custom"
