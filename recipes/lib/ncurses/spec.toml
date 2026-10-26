@@ -21,7 +21,7 @@
 [package]
 name        = "ncurses"
 version     = "6.4"
-release     = 3
+release     = 4
 date        = 2026-10-13T12:00:00Z
 description = "终端界面库与 terminfo 数据库"
 url         = "https://invisible-island.net/ncurses/"
@@ -76,6 +76,23 @@ configure = [
     #     `--without-normal` 这个名字说的是"不要常规库"，
     #     读起来像"只要 shared 库就好" —— 而实际是"连 shared 都不生成"。
     "--with-termlib",
+
+    # ★★★ `--enable-termcap`（2026-10-26）：让 ncurses 导出 **termcap 兼容 API**
+    #   ——`tgetent` / `tgetstr` / `tgetflag` 那一组。
+    #
+    #   而 ncurses 6.x 的默认值是 **`with_termcap=no`**（实测 configure 第 9331 行）。
+    #   也就是说：**不加这一条，`tgetent` 在任何库里都不存在** ——
+    #   实测 TX 上 `nm -D libtinfow.so.6 | grep tgetent` 是**空的**。
+    #
+    #   后果是 parted 构建失败（它是第一个探测 tgetent 的包）：
+    #
+    #       AC_SEARCH_LIBS([tgetent], [tinfo ncurses curses termcap termlib])
+    #       configure: error: termcap could not be found …
+    #
+    #   ★ 判据：**"ncurses 提供 termcap"这句话是有条件的。** 它是 termcap 的
+    #     *替代品*，但 API 层面要显式 `--enable-termcap` 才导出那组符号。
+    #     而我原以为"有 libncurses 就有 tgetent" —— 那是 ncurses 5 时代的事。
+    "--enable-termcap",
 
     # ── 不要调试版 ──
     #   默认它会再编一套带 _g 后缀的库（libncursesw_g），那是给 debug 用的。

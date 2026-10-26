@@ -42,6 +42,7 @@ build() {
         --enable-widec \
         --with-shared \
         --with-termlib \
+        --enable-termcap \
         --without-debug \
         --enable-pc-files \
         --with-pkg-config-libdir=/usr/lib/pkgconfig \
