@@ -44,3 +44,22 @@ build   = ["meson", "ninja", "gcc", "pkgconf", "util-linux", "json-c"]
 
 [build]
 type = "meson"
+# ★★ `-Dasciidoc=auto`（2026-10-26）。
+#
+#   上游 `meson_options.txt` 里 `asciidoc` 的默认值是 **`enabled`**，而
+#   meson.build 第 127 行是：
+#
+#       if opt_asciidoc.enabled() and not asciidoc.found()
+#           error('Building man pages requires asciidoctor installed.')
+#       endif
+#
+#   于是没有 asciidoctor 就**硬报错**。
+#
+# ★ 而 `auto` 是上游自己给的选项（`type: 'feature'` 的第三个："缺了就跳过"）。
+#   改成 auto 不是"关功能" —— 是"有 asciidoctor 就编 man page，没有就跳过"，
+#   而那正是 `feature` 类型存在的意义。
+#
+#   ★ 为什么不装 asciidoctor：它是 Ruby 写的，要拖进整个 Ruby 运行时
+#     （~50MB）。为一个 man page 生成器付那个代价不划算 —— 而
+#     `cryptsetup --help` 本身已经把所有选项说全了。
+configure = ["-Dasciidoc=auto"]
