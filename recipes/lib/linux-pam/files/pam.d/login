@@ -1,0 +1,18 @@
+# /bin/login 的认证栈
+#
+# ★ 和 system-auth 分开：login 要处理 tty / nologin / motd 这些终端相关的东西，
+#   标准发行版也是分开的两份。
+#
+# ★★ `pam_securetty.so` 在模块清单里（有）—— 它限制 root 只能从
+#   /etc/securetty 列的终端登录。**而那个文件如果不存在，pam_securetty
+#   会放行**（那是它的行为），所以不装 securetty 也能用。
+auth        required      pam_securetty.so
+auth        substack      system-auth
+auth        include       postlogin
+account     required      pam_nologin.so
+account     include       system-auth
+password    include       system-auth
+session     required      pam_loginuid.so
+session     optional      pam_keyinit.so force revoke
+session     include       system-auth
+session     optional      pam_motd.so motd=/etc/motd

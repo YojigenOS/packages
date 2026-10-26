@@ -1,0 +1,19 @@
+# 通用认证栈 —— 其他服务的配置 include 它
+#
+# ★ 名字用 `system-auth`（RedHat/Fedora 系的叫法）而不是 Debian 的
+#   `common-auth` —— 我们对标的是 Fedora Server（决策记录 0026）。
+#
+# ★★★ 这里引用的每一个模块都必须是 linux-pam 1.7.3 **真编出来的**。
+#   实测清单（`apk info -L linux-pam | grep security/`）里有 40 个，
+#   而【没有】pam_selinux / pam_console / pam_lastlog / pam_sepermit /
+#   pam_tally / pam_systemd —— 那些要么是别的包提供的，要么要别处的依赖。
+#
+#   ★ 引用一个不存在的模块的后果是 **PAM 直接报错**，而不是"忽略那一行"：
+#       PAM: pam_start() failed
+#   而 login / su 会完全用不了 —— 比"没有 pam.d"更糟。
+auth        required      pam_env.so
+auth        required      pam_unix.so try_first_pass nullok
+account     required      pam_unix.so
+password    required      pam_unix.so sha512 shadow nullok try_first_pass use_authtok
+session     required      pam_limits.so
+session     required      pam_unix.so

@@ -19,7 +19,7 @@
 [package]
 name        = "linux-pam"
 version     = "1.7.3"
-release     = 1
+release     = 2
 date        = 2026-10-26T00:00:00Z
 description = "可插拔认证模块（PAM）"
 url         = "https://github.com/linux-pam/linux-pam"

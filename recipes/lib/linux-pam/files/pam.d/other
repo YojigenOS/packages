@@ -1,0 +1,15 @@
+# 默认策略（Debian 的 libpam-runtime 也提供这个）
+#
+# ★★ 这是**所有没有专门配置的服务**的兜底。Debian 的版本是"拒绝一切"：
+#
+#       auth       required   pam_deny.so
+#       account    required   pam_deny.so
+#       password   required   pam_deny.so
+#       session    required   pam_deny.so
+#
+# ★ 而"拒绝一切"是对的：一个没配置 PAM 的服务，默认**不该**能认证通过。
+#   要放行必须显式写一份配置 —— 这是 fail-closed。
+auth       required   pam_deny.so
+account    required   pam_deny.so
+password   required   pam_deny.so
+session    required   pam_deny.so

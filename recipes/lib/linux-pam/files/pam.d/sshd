@@ -1,0 +1,16 @@
+# sshd 的认证栈
+#
+# ★★ 只在 sshd **编了 PAM 支持**（`--with-pam`）时才被读。我们现在的
+#   openssh 是公钥认证为主，那条路还没打开 —— 所以这份是"为打开它准备的"，
+#   不影响当前行为（sshd 不读它就不会读）。
+#
+# ★ 没有 pam_selinux / pam_sepermit（那两个不在模块清单里）。
+auth        substack      system-auth
+auth        include       postlogin
+account     required      pam_nologin.so
+account     include       system-auth
+password    include       system-auth
+session     required      pam_loginuid.so
+session     optional      pam_keyinit.so force revoke
+session     include       system-auth
+session     optional      pam_motd.so motd=/etc/motd

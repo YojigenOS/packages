@@ -1,0 +1,12 @@
+# su 的认证栈
+#
+# ★ `pam_wheel.so` 那一行默认注释掉 —— 打开它是"只有 wheel 组能用 su"。
+#   Fedora 默认也不开（那是站点策略），所以我们也不开。
+auth        sufficient    pam_rootok.so
+# auth      required      pam_wheel.so use_uid
+auth        include       system-auth
+account     sufficient    pam_rootok.so
+account     include       system-auth
+password    include       system-auth
+session     optional      pam_keyinit.so force revoke
+session     include       system-auth

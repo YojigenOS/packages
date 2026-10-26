@@ -1,0 +1,11 @@
+# sudo 的认证栈
+#
+# ★★ 这份只在 sudo **编了 PAM**（`--with-pam`）时生效。我们现在是
+#   `--without-pam`（见 tool/sudo 配方里那段注释：当时没有 PAM）——
+#   而现在 PAM 有了，那是下一件该做的事。
+auth        include       system-auth
+account     include       system-auth
+password    include       system-auth
+session     optional      pam_keyinit.so revoke
+session     required      pam_limits.so
+session     include       system-auth

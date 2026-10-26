@@ -1,0 +1,2 @@
+# passwd / chpasswd / chfn / chsh 的栈（这几个只需要改密码那一条）
+password    include       system-auth

@@ -1,0 +1,9 @@
+# 登录成功后的公共部分（RedHat 系的约定：login / sshd / su 都 include 它）
+#
+# ★★ 这里**没有 pam_lastlog** —— 它不在 linux-pam 1.7.3 的模块清单里
+#   （实测：40 个模块中没有它）。原来我写了，那是错的。
+#   而"上次登录时间"那一格现在靠 `last` 命令读 /var/log/wtmp 补 ——
+#   那两条路是等价的，不影响功能。
+session     optional      pam_motd.so motd=/etc/motd
+session     optional      pam_mail.so standard
+session     optional      pam_umask.so
