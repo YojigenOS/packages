@@ -30,15 +30,23 @@ url    = "https://ftp.gnu.org/gnu/parted/parted-$VERSION.tar.xz"
 sha256 = "a2b7811f47b0ddb1f7b1d0aa456f7c1270da70708ce231c2fe054c7199eafa63"
 
 [dependencies.aarch64]
-runtime = ["glibc", "util-linux"]
-build   = ["make", "gcc", "pkgconf", "gettext", "util-linux"]
+runtime = ["glibc", "util-linux", "readline"]
+build   = ["make", "gcc", "pkgconf", "gettext", "util-linux", "readline", "ncurses"]
 
 [dependencies.x86_64]
-runtime = ["glibc", "util-linux"]
-build   = ["make", "gcc", "pkgconf", "gettext", "util-linux"]
+runtime = ["glibc", "util-linux", "readline"]
+build   = ["make", "gcc", "pkgconf", "gettext", "util-linux", "readline", "ncurses"]
 
 [build]
 type      = "autotools"
+# ★★ readline 那条：parted 默认 `--with-readline`，而它要 termcap
+#   （或 ncurses 代）。**装依赖，不用 --without-readline 关掉它** ——
+#   关了的话 parted 的交互模式没有行编辑（历史、补全、方向键全废），
+#   而 parted 是**主要交互使用**的工具。
+#
+#       configure: error: termcap could not be found which is required for the
+#       --with-readline option (which is enabled by default).
+#
 # ★ --without-devmapper：LVM 那套我们没有。而 parted 的 dm 支持是
 #   "系统上有 LVM 就认它" —— LVM 不存在时它本来也不会生效，所以不算缺功能。
 configure = [
