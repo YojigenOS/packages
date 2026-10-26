@@ -1,0 +1,22 @@
+# mailcap —— MIME 类型到处理程序的映射
+#
+# 格式：<mime-type>;<命令>;<字段列表>
+#   命令里的 %s 会被替换成文件名；%% 是字面的 %。
+#
+# ★ 这份是**最小可用集**，只列我们系统上真有的程序：
+#
+#     text/plain     → less（minimal 里有）
+#     text/html      → 没有浏览器，所以只给 w3m/lynx 那一类留注释
+#     图片 / 音频 / 视频 → 服务器上不装这些查看器
+#
+# ★★ 而它的用途不是"服务器上要看图" —— 是**让程序知道"我不会处理这个类型"**。
+#    很多程序读 /etc/mailcap 判断"该不该自己打开"，而**文件不存在时的
+#    行为在不同程序里不一样**（有的当空表，有的报错）。
+#    有一份明确的表比"文件不存在"可预测。
+
+text/plain; less '%s'; copiousoutput; description=Plain Text
+text/x-uri; xdg-open '%s'; description=URI
+application/pdf; /bin/true '%s'; description=PDF (no viewer installed)
+image/*; /bin/true '%s'; description=Image (no viewer installed)
+audio/*; /bin/true '%s'; description=Audio (no player installed)
+video/*; /bin/true '%s'; description=Video (no player installed)

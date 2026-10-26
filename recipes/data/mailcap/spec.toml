@@ -1,0 +1,28 @@
+# mailcap —— MIME 类型到处理程序的映射表
+#
+# ★ 第 5 期盘点发现的真缺之一（2026-10-26）。Fedora 的 standard 组有它。
+#
+# ★ 它是**纯数据包**：只有一个 /etc/mailcap 文件，没有代码。
+#   而它的作用是告诉"打开某种 MIME 类型该用什么程序" ——
+#   `run-mailcap` / 邮件客户端 / 浏览器都读它。
+#
+# ★★ 标准发行版的 mailcap 是 `mailcap` 包（Debian 由 `media-types` +
+#   `mailcap` 提供）。我们的做法一致：只有数据文件。
+
+[package]
+name        = "mailcap"
+version     = "1.0"
+release     = 1
+date        = 2026-10-26T00:00:00Z
+description = "MIME 类型处理程序映射表（/etc/mailcap）"
+url         = "https://www.freedesktop.org/wiki/Software/shared-mime-info/"
+license     = "public-domain"
+
+[dependencies.aarch64]
+runtime = []
+
+[dependencies.x86_64]
+runtime = []
+
+[build]
+type = "custom"

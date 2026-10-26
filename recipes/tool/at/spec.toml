@@ -1,0 +1,48 @@
+# at —— 一次性定时任务（atd）
+#
+# ★ 第 5 期盘点发现的**真缺**（2026-10-26）。Fedora 的 standard 组有它，
+#   Debian 的 required 层也有 —— 而对照完 114 个包之后，它是仅有的两个
+#   "真的没有"之一（另一个是 mailcap）。
+#
+# ★ 和 cron 的分工：
+#
+#       cron  → **周期性**任务（每分钟 / 每天 / 每周）
+#       at    → **一次性**任务（"五分钟之后跑这个"）
+#
+#   运维场景里"过 30 分钟重启一下"这种是最常见的，而 cron 做不了
+#   （要么写个一次性 crontab 再删，要么 sleep）。
+#
+# ★★ 它用 autotools（实测 Debian 的 orig.tar.gz 里有 configure）。
+#   而它需要一个守护进程 atd —— 那个 unit 在源码树里。
+
+[package]
+name        = "at"
+version     = "3.2.5"
+release     = 1
+date        = 2026-10-26T00:00:00Z
+description = "一次性定时任务（at / atd）"
+url         = "https://salsa.debian.org/debian/at"
+license     = "GPL-2.0-or-later"
+
+[[source]]
+url    = "https://deb.debian.org/debian/pool/main/a/at/at_$VERSION.orig.tar.gz"
+sha256 = "bb066b389d7c9bb9d84a35738032b85c30cba7d949f758192adc72c9477fd3b8"
+
+[dependencies.aarch64]
+runtime = ["glibc", "shadow"]
+build   = ["make", "gcc", "autoconf", "automake", "libtool"]
+
+[dependencies.x86_64]
+runtime = ["glibc", "shadow"]
+build   = ["make", "gcc", "autoconf", "automake", "libtool"]
+
+[build]
+type      = "autotools"
+configure = [
+    "--prefix=/usr",
+    "--sysconfdir=/etc",
+    "--with-etcdir=/etc/at",
+    "--with-jobdir=/var/spool/at",
+    "--with-atspool=/var/spool/at",
+    # ★ 不关任何功能
+]
