@@ -1,0 +1,39 @@
+# libgcrypt —— 加密算法库（gnupg 的密码学后端）
+#
+# ★ 第 4 期补的（2026-10-26）：它是 `gnupg` 的前置之一，而 gnupg 提供
+#   `gpg`/`gpg2` —— 包签名验证、加密通信的标准工具。
+#
+# ★★ gnupg 的依赖链（实测 configure.ac 里的 NEED_* 宏）：
+#
+#       gnupg → libgcrypt → libgpg-error
+#             → libassuan → libgpg-error
+#             → libksba   → libgpg-error
+#             → npth
+#             → sqlite / bzip2 / zlib / readline（我们都有）
+#
+#   所以 `libgpg-error` 是整个 gnupg 家族的**最底层** —— 它先建。
+
+[package]
+name        = "libgcrypt"
+version     = "1.12.4"
+release     = 1
+date        = 2026-10-26T00:00:00Z
+description = "加密算法库（gnupg 的密码学后端）"
+url         = "https://gnupg.org/software/libgcrypt/"
+license     = "LGPL-2.1-or-later"
+
+[[source]]
+url    = "https://gnupg.org/ftp/gcrypt/libgcrypt/libgcrypt-$VERSION.tar.bz2"
+sha256 = "d77f68f48879510e79a2f65977ccc68981781ea0923e5bdffac2a193ea3d660e"
+
+[dependencies.aarch64]
+runtime = ["glibc", "libgpg-error"]
+build   = ["make", "gcc", "libgpg-error"]
+
+[dependencies.x86_64]
+runtime = ["glibc", "libgpg-error"]
+build   = ["make", "gcc", "libgpg-error"]
+
+[build]
+type      = "autotools"
+configure = ["--prefix=/usr", "--disable-static"]
