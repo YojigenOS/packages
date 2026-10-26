@@ -1,0 +1,44 @@
+# sqlite —— 嵌入式数据库
+#
+# ★ 第 4 期补的（2026-10-26）：`gnupg` 的 `keyboxd`（密钥库后端）和
+#   TOFU 信任模型都要它。实测 gnupg 的 configure 有 `--disable-sqlite`，
+#   而**关掉它会让 `keyboxd` 编不出来** —— 那等于 gpg 少了密钥库后端。
+#
+# ★★ 而它也是**最常被依赖的库之一**：Python 的 sqlite3 模块、各种
+#   应用的本地存储都用它。现在补上，以后不会再缺。
+#
+# ★ 版本号 `3540100` 是 SQLite 的命名法：3.54.1.0 → 3540100。
+#   而包名里写 3.54.1（人能读的那个）。
+
+[package]
+name        = "sqlite"
+version     = "3.54.1"
+release     = 1
+date        = 2026-10-26T00:00:00Z
+description = "嵌入式数据库（gnupg keyboxd 的前置）"
+url         = "https://sqlite.org/"
+license     = "blessing"
+
+[[source]]
+# ★ URL 里那个 2026 是发布年份，不是版本 —— SQLite 的下载目录按年分。
+url    = "https://sqlite.org/2026/sqlite-autoconf-3540100.tar.gz"
+sha256 = "926ef8d3eab93fbf6e06011901273eec076b25594a4e1cdadd50c987f4f6d64e"
+
+[dependencies.aarch64]
+runtime = ["glibc"]
+build   = ["make", "gcc"]
+
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["make", "gcc"]
+
+[build]
+type      = "autotools"
+configure = [
+    "--prefix=/usr",
+    "--disable-static",
+    # ★ 这三个是 SQLite 的常用能力，默认可能没开：
+    "--enable-threadsafe",     # 线程安全（gnupg 的 keyboxd 是多线程的）
+    "--enable-fts5",           # 全文搜索
+    "--enable-rtree",          # 空间索引
+]

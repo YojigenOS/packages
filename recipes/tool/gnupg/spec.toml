@@ -1,0 +1,64 @@
+# gnupg —— GnuPG 加密与签名（gpg / gpg2）
+#
+# ★ 第 4 期补的（2026-10-26）。它是 B 类里依赖最重的一个 —— 5 个前置库：
+#
+#       gnupg → libgcrypt → libgpg-error
+#             → libassuan → libgpg-error
+#             → libksba   → libgpg-error
+#             → npth
+#
+#   而那 5 个都建出来了（lib/ 下）。
+#
+# ★★ 为什么一台服务器要有 gpg：
+#
+#   · **包签名验证** —— 我们的 apk 仓库就是签名的（signing.rsa）。gpg 是
+#     用户自己验一个下载物时的标准工具。
+#   · 加密通信（`gpg --encrypt`）—— 不用装别的。
+#   · `git commit -S` 签提交 —— 我们的仓库就在用。
+#
+# ★★★ 一个开关都不关（YG 第 2 条）：
+#
+#   scdaemon    智能卡支持（YubiKey / 硬件密钥）—— 服务器上不常用，
+#               但**关了之后 `gpg --card-status` 直接不存在**。
+#   dirmngr     从密钥服务器拉公钥 / OCSP / CRL —— 验证证书链要它。
+#   keyboxd     密钥库后端（2.2 起的新机制）。
+#   tofu        信任模型（TOFU = Trust On First Use）。
+#   wks-tools   邮件加密的 WKD 工具。
+#
+#   这些全是**上游的默认构建**。关掉任何一个都是"功能缺失"。
+#
+# ★ 而 `--disable-ldap` / `--disable-gnutls` **不写** —— 让 configure
+#   按依赖自己判断（有 libldap 就用，没有就跳过）。那和"显式关掉"不一样。
+
+[package]
+name        = "gnupg"
+version     = "2.4.9"
+release     = 1
+date        = 2026-10-26T00:00:00Z
+description = "GnuPG 加密与签名（gpg）"
+url         = "https://gnupg.org/"
+license     = "GPL-3.0-or-later"
+
+[[source]]
+url    = "https://gnupg.org/ftp/gcrypt/gnupg/gnupg-$VERSION.tar.bz2"
+sha256 = "dd17ab2e9a04fd79d39d853f599cbc852062ddb9ab52a4ddeb4176fd8b302964"
+
+[dependencies.aarch64]
+runtime = ["glibc", "libgpg-error", "libgcrypt", "libassuan", "libksba", "npth",
+           "bzip2", "zlib", "readline", "sqlite"]
+build   = ["make", "gcc", "libgpg-error", "libgcrypt", "libassuan", "libksba", "npth"]
+
+[dependencies.x86_64]
+runtime = ["glibc", "libgpg-error", "libgcrypt", "libassuan", "libksba", "npth",
+           "bzip2", "zlib", "readline", "sqlite"]
+build   = ["make", "gcc", "libgpg-error", "libgcrypt", "libassuan", "libksba", "npth"]
+
+[build]
+type      = "autotools"
+configure = [
+    "--prefix=/usr",
+    "--sysconfdir=/etc",
+    "--disable-static",
+    # ★ 只关测试（那是 CI 用的，不发布），其余全默认
+    "--disable-tests",
+]
