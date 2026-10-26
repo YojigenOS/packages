@@ -1,0 +1,53 @@
+# libdevmapper —— device-mapper 用户态库
+#
+# ★ 第 4 期补的（2026-10-26）：`cryptsetup` **硬依赖**它。
+#
+#   实测 cryptsetup 2.8.8 的 meson.build 第 366-380 行 —— 那是 `assert()`，
+#   不是可选依赖：
+#
+#       devmapper = dependency('devmapper', required: false)
+#       if not devmapper.found()
+#           devmapper = cc.find_library('devmapper')
+#           assert(cc.has_function('dm_task_set_name', …),
+#                  'You need the device-mapper library.')
+#           …
+#
+#   所以没有它 cryptsetup 编不出来，也**没有开关可关**。
+#
+# ★★ 而它在 **LVM2 的源码树**里（`libdm/` 目录），没有独立发布。
+#   实测顶层 Makefile 有独立目标：
+#
+#       libdm.device-mapper        ← 只编 libdm
+#       install_device-mapper      ← 只装 device-mapper 那部分
+#
+#   ★ 而 `device-mapper` 那个目标**不包含 lvm 工具本身** ——
+#     所以我们只建库和头文件，不建 /sbin/lvm（那个要完整 LVM2，依赖多得多）。
+#
+# ★ 用 custom + steps.sh，因为默认的 autotools 流程会跑 `make install`
+#   （那会装整个 LVM2）。
+
+[package]
+name        = "libdevmapper"
+version     = "2.03.43"
+release     = 1
+date        = 2026-10-26T00:00:00Z
+description = "device-mapper 库（cryptsetup 的前置）"
+url         = "https://sourceware.org/lvm2/"
+license     = "LGPL-2.1-or-later"
+
+[[source]]
+# ★ 版本号在包名里是 2.03.43，而 tar 名字是 LVM2.2.03.43.tgz —— 那个
+#   "LVM2." 前缀是上游的命名习惯（它同时发布 libdm 和 lvm 两套版本号）。
+url    = "https://mirrors.kernel.org/sourceware/lvm2/releases/LVM2.$VERSION.tgz"
+sha256 = "d87ec0dac9061f1fa58ebced5c6b1360c87d4c5cd7b455dc0ebe1d3f036920d7"
+
+[dependencies.aarch64]
+runtime = ["glibc"]
+build   = ["make", "gcc", "pkgconf"]
+
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["make", "gcc", "pkgconf"]
+
+[build]
+type = "custom"
