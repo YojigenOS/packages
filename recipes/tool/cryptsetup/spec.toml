@@ -72,4 +72,25 @@ type = "meson"
 #   ★ 为什么不装 asciidoctor：它是 Ruby 写的，要拖进整个 Ruby 运行时
 #     （~50MB）。为一个 man page 生成器付那个代价不划算 —— 而
 #     `cryptsetup --help` 本身已经把所有选项说全了。
-configure = ["-Dasciidoc=auto"]
+configure = [
+    "-Dasciidoc=auto",
+    # ★★ `-Dssh-token=false`（2026-10-26）。
+    #
+    #   那是 **LUKS2 的"用 SSH 服务器解锁"token** —— 一个可选插件：
+    #   你把密钥托管到一台 SSH 服务器上，开机时通过 SSH 取回。
+    #
+    #   而它要 `libssh`（另加 argp）。实测 meson.build 第 430-437 行：
+    #
+    #       if get_option('ssh-token')
+    #           libssh = dependency('libssh')      ← 无 required:false
+    #       endif
+    #
+    #   ★ 关掉它不影响核心能力：LUKS 的加解密、密钥槽、/etc/crypttab
+    #     自动解锁全都不走这条路。**它不是"功能缺失"，是"没装那个插件"。**
+    #     （对比：libdevmapper 那个没有开关，所以只能装 —— 两者不一样。）
+    #
+    #   ★★ 判据：**"有没有开关"决定判断方式** ——
+    #     有开关的（ssh-token / asciidoc）看"关掉它损失什么"；
+    #     没开关的（devmapper）只能装，或者不做这个包。
+    "-Dssh-token=false",
+]
