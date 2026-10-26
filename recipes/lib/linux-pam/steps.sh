@@ -35,9 +35,25 @@ build() {
 }
 
 package() {
-    # ★ meson 已经把库和模块装到 $PKGDEST 了（驱动先跑 meson install，
-    #   再调我们的 package()）。这里只补 pam.d。
+    # ★★★ 必须【自己】跑 meson install（2026-10-26 撞到的）。
     #
+    #   我原来的理解是错的：以为"驱动对 meson 类型会先跑 meson install，
+    #   再调我们的 package()，所以这里只补 pam.d 就行"。实际不是 ——
+    #   `steps.sh` 里的 `package()` 是**整个覆盖**驱动生成的那个，
+    #   包括里面那句 `DESTDIR="$PKGDEST" meson install -C _build`。
+    #
+    #   后果（实测）：payload 里 15 个文件 = 13 个 pam.d + 两个清单文件，
+    #   **libpam.so 和 40 个模块一个都没有**。而构建日志一路绿灯，
+    #   最后是 `test_kind` 那条断言抓住的：
+    #
+    #       AssertionError: linux-pam: lib 但没有 .so/.a
+    #
+    #   ★ 这就是"覆盖函数"的代价：覆盖的是**整个函数**，不是"在它后面追加"。
+    #     所以每一份覆盖 package() 的 steps.sh 都要自己把默认那一步补回来。
+    #     （`custom` 类型没有默认那一步，所以它们不受影响 —— 只有
+    #      autotools/meson/cmake 这三种有默认 install 的类型要注意。）
+    DESTDIR="$PKGDEST" meson install -C _build
+
     # ★ $PKGDIR 是【本配方目录的副本】，files/ 下的东西在 $PKGDIR/files/ ——
     #   不是 $SRCDIR（那是解开的源码）。见 yojigen-os-init 的 steps.sh 开头
     #   那行注释。
