@@ -54,6 +54,28 @@ package() {
     cd "$SRCDIR"
     make install DESTDIR="$PKGDEST"
 
+    # ★★★ spool 目录的属主（2026-10-26 撞到的第二个坑）
+    #
+    #   上游 `make install` 把 /var/spool/at/{jobs,spool} 建成 **root:bin 0770+T**，
+    #   而 `atd` 以 **daemon:daemon** 运行（configure 的 --with-daemon_username）。
+    #
+    #   后果（实测 TX 上）：
+    #
+    #       Cannot change to /var/spool/at/jobs: Permission denied
+    #       atd.service: Failed with result 'exit-code'
+    #
+    #   ★ 那是个 `drwxrwx--T root bin` —— daemon 用户既不是 owner 也不在 bin 组。
+    #
+    #   ★★ 标准发行版把这两个目录归 daemon:daemon（Debian 的 at 包里
+    #      /var/spool/at 就是 daemon:daemon）。所以这里跟着改。
+    #
+    #      ★ 而 `chown` 用的是**数字 UID/GID**（2:2）—— 因为打包容器里
+    #        `daemon` 这个名字可能不存在（我们的 base-passwd 里它在，
+    #        但不要赌）。见 filesystem 那条 udev 的同类教训。
+    for d in var/spool/at var/spool/at/jobs var/spool/at/spool; do
+        [ -d "$PKGDEST/$d" ] && chown 2:2 "$PKGDEST/$d" 2>/dev/null || true
+    done
+
     # ★ 断言：at / atd / atq / atrm 四个都要有
     for b in at atd atq atrm; do
         [ -x "$PKGDEST/usr/bin/$b" ] || [ -x "$PKGDEST/usr/sbin/$b" ] || {
