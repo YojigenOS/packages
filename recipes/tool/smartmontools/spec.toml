@@ -24,12 +24,12 @@ url    = "https://downloads.sourceforge.net/project/smartmontools/smartmontools/
 sha256 = "690b83ca331378da9ea0d9d61008c4b22dde391387b9bbad7f29387f2595f76e"
 
 [dependencies.aarch64]
-runtime = ["glibc"]
-build   = ["make", "gcc"]
+runtime = ["glibc", "systemd"]
+build   = ["make", "gcc", "systemd"]
 
 [dependencies.x86_64]
-runtime = ["glibc"]
-build   = ["make", "gcc"]
+runtime = ["glibc", "systemd"]
+build   = ["make", "gcc", "systemd"]
 
 [build]
 type      = "autotools"
@@ -40,4 +40,15 @@ configure = [
     "--sysconfdir=/etc",
     "--disable-static",
     "--with-systemdsystemunitdir=/usr/lib/systemd/system",
+    # ★★ `--with-systemdsystemunitdir` **要求同时 `--with-libsystemd`**
+    #   （实测：configure: error: '--with-systemdsystemunitdir=…' now requires
+    #    '--with-libsystemd'）。
+    #
+    #   而 libsystemd 我们有（它随 systemd 装：
+    #   /usr/lib/libsystemd.so + /usr/lib/pkgconfig/libsystemd.pc）。
+    #
+    #   ★ 打开它的作用是 **sd_notify** —— smartd 起来之后告诉 systemd
+    #     "我准备好了"。没有它，`systemctl start smartd` 只能靠猜（默认
+    #     Type=simple，起来了就算成功），而**真的挂掉时 systemd 不知道**。
+    "--with-libsystemd",
 ]
