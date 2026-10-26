@@ -26,12 +26,17 @@ url    = "https://mirrors.edge.kernel.org/pub/linux/utils/raid/mdadm/mdadm-$VERS
 sha256 = "9b488f35ed153df99924b5fe41eed380e8512de8f18a118628cacdd681b1d573"
 
 [dependencies.aarch64]
-runtime = ["glibc"]
-build   = ["make", "gcc"]
+# ★★ runtime 有 systemd —— 因为 mdadm 要 **libudev**（它随 systemd 发）。
+#   实测：`udev.c:33:17: fatal error: libudev.h: No such file or directory`
+#
+#   mdadm 用 libudev 监听设备事件（`mdadm --monitor` 靠它感知磁盘掉了）。
+#   关掉这个能力会少**增量装配**和**事件监控** —— 那是 RAID 运维的核心。
+runtime = ["glibc", "systemd"]
+build   = ["make", "gcc", "systemd"]
 
 [dependencies.x86_64]
-runtime = ["glibc"]
-build   = ["make", "gcc"]
+runtime = ["glibc", "systemd"]
+build   = ["make", "gcc", "systemd"]
 
 [build]
 # ★ 裸 Makefile（实测：mdadm-4.4/ 里只有 Makefile，没有 configure）
