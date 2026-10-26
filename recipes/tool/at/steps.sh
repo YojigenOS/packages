@@ -39,8 +39,32 @@ build() {
         --with-etcdir=/etc/at \
         --with-jobdir=/var/spool/at/jobs \
         --with-atspool=/var/spool/at/spool \
-        --with-daemon_username=daemon \
-        --with-daemon_groupname=daemon \
+        # ★★★ 用 root，不是 daemon（2026-10-26 第四个坑的真正修法）
+        #
+        #   `atd.c` 启动末尾有一段：
+        #
+        #       /* We don't need root privileges all the time; running under
+        #        * uid and gid daemon is fine. */
+        #       RELINQUISH_PRIVS_ROOT(daemon_uid, daemon_gid)
+        #
+        #   **atd 启动后主动降权到 daemon。** 而 `at.c` 建的任务文件是
+        #
+        #       -rwx------ root root        （at.c:540 的 fchmod 0700）
+        #
+        #   ★ 那个 fchown 回提交者的调用**被注释掉了**（at.c:337-340）：
+        #
+        #       /*
+        #       if (fchown(fd2, real_uid, real_gid) != 0) …
+        #       */
+        #
+        #   于是 daemon 身份的 atd **读不到 root 的任务文件** ——
+        #   而且它是**静默跳过**（不是报错），所以日志里什么都没有。
+        #
+        #   ★★ 把 daemon_username 设成 root，`RELINQUISH_PRIVS_ROOT(root, root)`
+        #      就等于"不降权" —— atd 保持 root，能读所有任务，
+        #      而执行时它本来就会 setuid 到提交者（atd.c:578-581）。
+        --with-daemon_username=root \
+        --with-daemon_groupname=root \
         --with-systemdsystemunitdir=/usr/lib/systemd/system
 
     # ★★★ 补 SENDMAIL 宏（configure 找不到 sendmail 时不会定义它）
