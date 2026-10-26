@@ -133,7 +133,32 @@ package() {
     if [ -f "$unit" ]; then
         # 在 [Service] 段后插 Type=forking，并把 ExecStart 的 -f 去掉
         sed -i 's|^\[Service\]$|[Service]\nType=forking|' "$unit"
-        sed -i 's|^ExecStart=/usr/sbin/atd -f$|ExecStart=/usr/sbin/atd|' "$unit"
+        # ★★★ 而且要用 `-d`，**不是 `-f`**（2026-10-26 第六个坑）
+        #
+        #   `-f` 这个名字会让人以为是 "foreground"，而源码里它只是：
+        #
+        #       case 'f':
+        #           daemon_foreground++;      ← 这个变量【从不被读取】
+        #           break;
+        #
+        #   而真正控制 "要不要 daemonize" 的是 `daemon_debug`：
+        #
+        #       daemon.c:128    if (!daemon_debug) {
+        #                           … dup2(devnull, 0/1/2) …
+        #                           … fork 到后台 …
+        #
+        #   所以 `atd -f` **仍然会 daemonize** —— 它 fork 到后台，
+        #   父进程退出，systemd 看到 "control group is empty"，而
+        #   真正干活的子进程在 systemd 视野外。
+        #
+        #   ★ 而 `-d`（debug）除了不 daemonize，只多做一件事：
+        #     错误信息写 stderr 而不是 syslog —— 那正好被 journal 收走，
+        #     **比 syslog 更符合 systemd 的习惯**。
+        #
+        #   ★★ 实测对比（同一个任务、同一个目录）：
+        #         atd -f  → 任务永远不执行
+        #         atd -d  → AT_WORKED_OK
+        sed -i 's|^ExecStart=/usr/sbin/atd -f$|ExecStart=/usr/sbin/atd -d|' "$unit"
         echo "  ✓ atd.service 改成 Type=forking（原 Type=simple + -f 会空转）" >&2
 
         # ★★★ 再加一条：atd 必须**以 root 运行**（2026-10-26 第四个坑）
