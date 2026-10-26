@@ -17,9 +17,19 @@
 #   argon-implementation = 'internal'  ← 内置 Argon2，不需要 libargon2
 #   external-tokens = true       ← LUKS2 的 token 机制
 #
-# ★★ 一处**显式关**：`-Dlibdevmapper=false`。
-#   它是"系统上有 LVM 就认它"的支持，而我们没有 LVM —— 属"没有那个东西"，
-#   不是"关功能"。（和 parted 的 --without-devmapper 同一个判断。）
+# ★★★ 而 `libdevmapper` 是**硬依赖，没有开关**（2026-10-26 撞到的）。
+#
+#   我原来在注释里写"`-Dlibdevmapper=false` 可以关掉" —— **那是凭记忆写的，
+#   这个版本的 cryptsetup 根本没有那个选项**。实测 meson.build 第 366-380 行：
+#
+#       devmapper = dependency('devmapper', required: false)
+#       if not devmapper.found()
+#           devmapper = cc.find_library('devmapper')
+#           assert(cc.has_function('dm_task_set_name', …),
+#                  'You need the device-mapper library.')
+#
+#   那是 `assert()`，无条件。所以只能装它（lib/libdevmapper，从 LVM2 源码树
+#   只编 libdm 那一层）。
 
 [package]
 name        = "cryptsetup"
@@ -35,12 +45,12 @@ url    = "https://gitlab.com/cryptsetup/cryptsetup/-/archive/v$VERSION/cryptsetu
 sha256 = "3aa3bb45472b5de8169b58260b2d59e55557c2c0e210f044fe9148da344db1e0"
 
 [dependencies.aarch64]
-runtime = ["glibc", "openssl", "popt", "json-c", "util-linux"]
-build   = ["meson", "ninja", "gcc", "pkgconf", "util-linux", "json-c"]
+runtime = ["glibc", "openssl", "popt", "json-c", "util-linux", "libdevmapper"]
+build   = ["meson", "ninja", "gcc", "pkgconf", "util-linux", "json-c", "libdevmapper"]
 
 [dependencies.x86_64]
-runtime = ["glibc", "openssl", "popt", "json-c", "util-linux"]
-build   = ["meson", "ninja", "gcc", "pkgconf", "util-linux", "json-c"]
+runtime = ["glibc", "openssl", "popt", "json-c", "util-linux", "libdevmapper"]
+build   = ["meson", "ninja", "gcc", "pkgconf", "util-linux", "json-c", "libdevmapper"]
 
 [build]
 type = "meson"
