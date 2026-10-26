@@ -53,7 +53,19 @@ package() {
     #   它依赖 `install_lib_shared`，只装共享库 + 头文件 + pkg-config。
     #
     #   而 `install_device-mapper` 会连带装 dmsetup（那个编不出来，见 build()）。
-    make -C libdm install_ioctl DESTDIR="$PKGDEST"
+    # ★★★ 三个目标，缺一不可（2026-10-26 第二次撞）：
+    #
+    #   `install_ioctl` 只装共享库 —— 实测它装完 /usr/lib 里有了，而
+    #   `/usr/include/libdevmapper.h` 没有。而 cryptsetup 要那个头文件。
+    #
+    #   libdm/Makefile.in 里它们是分开的：
+    #       install_ioctl:    install_lib_shared     ← .so
+    #       install_include:  $(srcdir)/libdevmapper.h  ← 头文件
+    #       install_pkgconfig: libdevmapper.pc       ← .pc
+    #
+    #   ★ 而 `install_dynamic: install_@interface@` 那个更全的也不带 include
+    #     （它只管"哪种接口的库"）。
+    make -C libdm install_ioctl install_include install_pkgconfig DESTDIR="$PKGDEST"
 
     # ★ 断言：cryptsetup 要的三样必须都在
     for f in usr/include/libdevmapper.h usr/lib/libdevmapper.so; do
