@@ -35,15 +35,25 @@ build() {
         --disable-readline \
         --disable-selinux
 
-    # ★ 只编 libdm，不编 lvm 工具
-    make -j"${JOBS:-4}" libdm.device-mapper
+    # ★★★ 只在 libdm/ 子目录里编，目标是 `ioctl`（那是"库"那部分）。
+    #
+    #   我原来写的 `make libdm.device-mapper` 是错的 —— 实测它会连带编
+    #   `dmsetup` 那个工具，而那个在 GCC 16 下链不上：
+    #
+    #       dmvdostats.c:(.text+0x220): undefined reference to `show_units'
+    #       make[2]: *** [Makefile:69: dmsetup] Error 1
+    #
+    #   ★ 而我们**根本不需要 dmsetup** —— 只要 libdevmapper.so + 头文件。
+    make -C libdm -j"${JOBS:-4}" ioctl
 }
 
 package() {
     cd "$SRCDIR"
-    # ★ install_device-mapper 会装 libdm.so、libdevmapper.so 链接、
-    #   头文件（libdevmapper.h）、pkg-config（devmapper.pc）和 man page。
-    make install_device-mapper DESTDIR="$PKGDEST"
+    # ★★★ 用 `install_ioctl`（libdm/Makefile.in 第 143 行）——
+    #   它依赖 `install_lib_shared`，只装共享库 + 头文件 + pkg-config。
+    #
+    #   而 `install_device-mapper` 会连带装 dmsetup（那个编不出来，见 build()）。
+    make -C libdm install_ioctl DESTDIR="$PKGDEST"
 
     # ★ 断言：cryptsetup 要的三样必须都在
     for f in usr/include/libdevmapper.h usr/lib/libdevmapper.so; do
