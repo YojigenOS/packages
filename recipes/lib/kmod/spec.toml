@@ -13,6 +13,14 @@
 #
 # ★ meson 和 autotools 都支持（实测源码里两种构建文件都有）。用 autotools ——
 #   和现有配方的风格一致，少一个 meson 依赖。
+#
+# ★★ 而它**必须有 scdoc**（实测）：
+#
+#       configure: error: *** scdoc needed for building manpages.
+#                Either install it or pass --disable-manpages
+#
+#   选"装 scdoc"而不是 `--disable-manpages` —— 后者会让 kmod 少一批 man page，
+#   而 `modprobe.d(5)` / `modprobe(8)` 正是排障时要查的东西（YG 第 2 条）。
 
 [package]
 name        = "kmod"
@@ -29,11 +37,11 @@ sha256 = "5a5d5073070cc7e0c7a7a3c6ec2a0e1780850c8b47b3e3892226b93ffcb9cb54"
 
 [dependencies.aarch64]
 runtime = ["glibc", "zlib", "xz"]
-build   = ["make", "gcc", "pkgconf"]
+build   = ["make", "gcc", "pkgconf", "scdoc"]
 
 [dependencies.x86_64]
 runtime = ["glibc", "zlib", "xz"]
-build   = ["make", "gcc", "pkgconf"]
+build   = ["make", "gcc", "pkgconf", "scdoc"]
 
 [build]
 type      = "autotools"

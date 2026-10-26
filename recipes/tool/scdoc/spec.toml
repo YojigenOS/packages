@@ -1,0 +1,37 @@
+# scdoc —— 极简的 man page 生成器
+#
+# ★ 为什么建它（2026-10-26）：`kmod` 的 configure 无条件检查它：
+#
+#       configure: error: *** scdoc needed for building manpages.
+#                Either install it or pass --disable-manpages
+#
+# ★★ 而"装上它"比"传 --disable-manpages"好（YG 第 2 条）：
+#   传了破开关 = 少一批 man page，而 kmod 的 `modprobe.d(5)` / `modprobe(8)`
+#   正是**排障时要查的**东西。
+#
+# ★ 它只有 12K 源码 + 一个裸 Makefile —— 比补一个"关了功能"的开关便宜。
+
+[package]
+name        = "scdoc"
+version     = "1.11.3"
+release     = 1
+date        = 2026-10-26T00:00:00Z
+description = "极简 man page 生成器（kmod 的构建依赖）"
+url         = "https://git.sr.ht/~sircmpwn/scdoc"
+license     = "MIT"
+
+[[source]]
+url    = "https://git.sr.ht/~sircmpwn/scdoc/archive/$VERSION.tar.gz"
+sha256 = "4c5c6136540384e5455b250f768e7ca11b03fdba1a8efc2341ee0f1111e57612"
+
+[dependencies.aarch64]
+runtime = ["glibc"]
+build   = ["make", "gcc"]
+
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["make", "gcc"]
+
+[build]
+# ★ 裸 Makefile（实测：只有 Makefile，没有 configure / meson.build）
+type = "custom"
