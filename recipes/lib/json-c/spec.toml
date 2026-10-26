@@ -9,7 +9,7 @@
 
 [package]
 name        = "json-c"
-version     = "0.18"
+version     = "0.19"
 release     = 1
 date        = 2026-10-26T00:00:00Z
 description = "JSON 解析库（cryptsetup 的前置）"
@@ -19,8 +19,17 @@ license     = "MIT"
 [[source]]
 # ★ tag 名字带日期后缀（json-c-0.18-20240915）—— 那是上游的命名习惯，
 #   不是版本号的一部分。包名里的 0.18 才是版本。
-url    = "https://github.com/json-c/json-c/archive/refs/tags/json-c-0.18-20240915.tar.gz"
-sha256 = "3112c1f25d39eca661fe3fc663431e130cc6e2f900c081738317fba49d29e298"
+# ★★ 用 0.19，不是 0.18（2026-10-26 撞到的）：
+#
+#   0.18 的 `apps/CMakeLists.txt` 第一行是 `cmake_minimum_required(VERSION 2.8)`，
+#   而顶层是 `3.9...3.12`。CMake 4.x 移除了小于 3.5 的兼容性：
+#
+#       CMake Error at apps/CMakeLists.txt:2 (cmake_minimum_required):
+#         Compatibility with CMake < 3.5 has been removed from CMake.
+#
+#   0.19 把两处都改成了 `3.9...3.12`（实测确认）。
+url    = "https://github.com/json-c/json-c/archive/refs/tags/json-c-0.19-20260627.tar.gz"
+sha256 = "f17a6d7d265cf840dfd8f0f46a606d98c6b5b26dc7cfe27275d1546a213086c8"
 
 [dependencies.aarch64]
 runtime = ["glibc"]
