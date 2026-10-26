@@ -76,6 +76,38 @@ package() {
         [ -d "$PKGDEST/$d" ] && chown 2:2 "$PKGDEST/$d" 2>/dev/null || true
     done
 
+    # ★★★ 修 atd.service 的 Type（2026-10-26 撞到的第三个坑）
+    #
+    #   上游给的 unit 是：
+    #
+    #       ExecStart=/usr/sbin/atd -f       ← -f 是"前台"
+    #       （Type 没写 → 默认 simple）
+    #
+    #   而**那个组合是错的**。实测 TX 上：
+    #
+    #       Type=simple + -f      → systemd 报 active，而 "Control group is empty"
+    #                               （atd 立刻没了，任务永远不执行）
+    #       Type=forking + 不带 -f → active ✓
+    #
+    #   ★ 根因：`atd` 自己会 fork（`-f` 是"不要 fork，留在前台"，
+    #     而 systemd 的 `Type=simple` 要求"进程不 fork、一直不退"）。
+    #     两者叠在一起时 atd 的 fork 行为和 simple 的预期打架 ——
+    #     父进程退了，systemd 认为"启动完成"，而真正干活的子进程
+    #     在它自己那套里，systemd 看不见（Control group is empty）。
+    #
+    #   ★★ 标准发行版用 `Type=forking` + 不带 `-f`（Debian 的 atd.service
+    #      就是这样）。我们沿用那个。
+    #
+    #   ★ 而这一条**只有真的把服务起起来才会暴露** —— 编译过、包装上、
+    #     `at` 命令能排任务，而任务永远不执行。
+    unit="$PKGDEST/usr/lib/systemd/system/atd.service"
+    if [ -f "$unit" ]; then
+        # 在 [Service] 段后插 Type=forking，并把 ExecStart 的 -f 去掉
+        sed -i 's|^\[Service\]$|[Service]\nType=forking|' "$unit"
+        sed -i 's|^ExecStart=/usr/sbin/atd -f$|ExecStart=/usr/sbin/atd|' "$unit"
+        echo "  ✓ atd.service 改成 Type=forking（原 Type=simple + -f 会空转）" >&2
+    fi
+
     # ★ 断言：at / atd / atq / atrm 四个都要有
     for b in at atd atq atrm; do
         [ -x "$PKGDEST/usr/bin/$b" ] || [ -x "$PKGDEST/usr/sbin/$b" ] || {
