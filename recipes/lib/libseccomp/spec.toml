@@ -9,7 +9,16 @@
 #   而 seccomp 是**服务加固的基础能力** —— 没有它，`SystemCallFilter=` /
 #   `RestrictAddressFamilies=` 这些都需要它。
 #
-# ★ 它自己只有一个可选依赖：gperf（只在 `--enable-gperf` 时要）。默认不用。
+# ★★ 它**必须有 gperf**（实测：`configure: error: please install gperf`）。
+#   而 configure.ac 第 126-128 行是无条件的：
+#
+#       AC_CHECK_TOOL(GPERF, gperf)
+#       ...
+#       AC_MSG_ERROR([please install gperf])
+#
+#   我原来在注释里写"gperf 只在 --enable-gperf 时要，默认不用" —— **那是错的**，
+#   凭印象写的。gperf 在构建期生成系统调用名到编号的哈希表（syscalls.csv →
+#   syscalls.h），和有没有那个开关无关。
 
 [package]
 name        = "libseccomp"
@@ -26,11 +35,11 @@ sha256 = "501f66c667225d53791b97e1d7cf85ab764c297d04881f60f38f451c4b0ee1be"
 
 [dependencies.aarch64]
 runtime = ["glibc"]
-build   = ["make", "gcc"]
+build   = ["make", "gcc", "gperf"]
 
 [dependencies.x86_64]
 runtime = ["glibc"]
-build   = ["make", "gcc"]
+build   = ["make", "gcc", "gperf"]
 
 [build]
 type      = "autotools"
