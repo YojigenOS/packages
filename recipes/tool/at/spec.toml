@@ -18,7 +18,7 @@
 [package]
 name        = "at"
 version     = "3.2.5"
-release     = 3
+release     = 4
 date        = 2026-10-26T00:00:00Z
 description = "一次性定时任务（at / atd）"
 url         = "https://salsa.debian.org/debian/at"

@@ -106,6 +106,26 @@ package() {
         sed -i 's|^\[Service\]$|[Service]\nType=forking|' "$unit"
         sed -i 's|^ExecStart=/usr/sbin/atd -f$|ExecStart=/usr/sbin/atd|' "$unit"
         echo "  ✓ atd.service 改成 Type=forking（原 Type=simple + -f 会空转）" >&2
+
+        # ★★★ 再加一条：atd 必须**以 root 运行**（2026-10-26 第四个坑）
+        #
+        #   实测：任务文件是 `-rwx------ root root`（`at.c:540` 设的
+        #   `S_IRUSR|S_IWUSR|S_IXUSR`，而 `fchown` 把属主设成提交者）。
+        #   而 `atd` 以 `daemon` 跑时**读不到它** —— 于是队列里的任务
+        #   永远不执行，日志里什么都没有（它跳过读不了的文件）。
+        #
+        #   ★ 而 `atd.c` 里那段 `getpwnam(DAEMON_USERNAME)` 是
+        #     **"执行任务时切到谁"**，不是"atd 以谁跑"：
+        #
+        #         atd.c:857  getpwnam(DAEMON_USERNAME)  ← 拿 uid
+        #         atd.c:578  setgid(gid)  /  atd.c:581  setuid(uid)
+        #                    ↑ 在执行子进程里切的
+        #
+        #   ★★ 所以 atd 本体必须是 root —— 它要读所有用户的任务文件，
+        #      然后在执行时降权到提交者。标准发行版都是这样
+        #      （Debian 的 atd.service 没有 User=，默认 root）。
+        sed -i 's|^Type=forking$|Type=forking\nUser=root|' "$unit"
+        echo "  ✓ atd 以 root 运行（它要读所有用户的任务文件，执行时才降权）" >&2
     fi
 
     # ★ 断言：at / atd / atq / atrm 四个都要有
