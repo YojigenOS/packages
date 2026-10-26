@@ -21,7 +21,7 @@
 [package]
 name        = "ncurses"
 version     = "6.4"
-release     = 4
+release     = 5
 date        = 2026-10-13T12:00:00Z
 description = "终端界面库与 terminfo 数据库"
 url         = "https://invisible-island.net/ncurses/"
@@ -93,6 +93,30 @@ configure = [
     #     *替代品*，但 API 层面要显式 `--enable-termcap` 才导出那组符号。
     #     而我原以为"有 libncurses 就有 tgetent" —— 那是 ncurses 5 时代的事。
     "--enable-termcap",
+
+    # ★★★ `--enable-sp-funcs`（2026-10-26，第三条）：`tgetent` 的**导出条件**是
+    #
+    #       #if NCURSES_SP_FUNCS
+    #       NCURSES_EXPORT(int) tgetent(char *bufp, const char *name) { … }
+    #       #endif
+    #
+    #   （见 ncurses/tinfo/lib_termcap.c 第 207 行）
+    #
+    #   而 `NCURSES_SP_FUNCS=1` 只在 `--enable-sp-funcs` 时被定义
+    #   （configure 第 15266 行）。它的默认值是 **no**（第 1731 行
+    #   `cf_dft_ext_spfuncs=no`）——
+    #
+    #   **所以不加这一条，`tgetent` 在源码里就被 #if 掉了，任何库都不导出它。**
+    #
+    #   ★ 这三条是递进的，缺一条都不够：
+    #       ① --with-termlib    生成独立的 libtinfo（否则符号在别的库里）
+    #       ② 不带 w 的软链接    让探测 `-ltinfo` 的包找得到（见 steps.sh）
+    #       ③ --enable-sp-funcs 真的把 tgetent 编进去
+    #
+    #   ★★ 而 ③ 才是根因。前两条是我按"库名/库存在性"想的 ——
+    #     而 `AC_SEARCH_LIBS` 测的**是符号**，不是库文件。
+    #     "库在"和"符号在"是两件事，这一轮花了三次才走对。
+    "--enable-sp-funcs",
 
     # ── 不要调试版 ──
     #   默认它会再编一套带 _g 后缀的库（libncursesw_g），那是给 debug 用的。

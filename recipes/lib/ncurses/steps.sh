@@ -43,6 +43,7 @@ build() {
         --with-shared \
         --with-termlib \
         --enable-termcap \
+        --enable-sp-funcs \
         --without-debug \
         --enable-pc-files \
         --with-pkg-config-libdir=/usr/lib/pkgconfig \
