@@ -51,4 +51,46 @@ package() {
       return 1
     fi
   done
+
+  # ── 第 2 件事：那 6 份 pam.d 归 linux-pam，不归 shadow（2026-10-26）──────
+  #
+  # ★★★ 上游 `etc/pam.d/Makefile.am` 里有：
+  #
+  #         pamd_files = chpasswd chfn chsh login newusers passwd
+  #         pamddir = $(sysconfdir)/pam.d
+  #         pamd_DATA = $(pamd_files)
+  #
+  #   而 `make install` 把它们**无条件**装到 /etc/pam.d/（不检查已存在）。
+  #   于是装 shadow 时：
+  #
+  #       ERROR: shadow-4.20.3-r2: trying to overwrite etc/pam.d/su
+  #              owned by linux-pam-1.7.3-r5.
+  #
+  # ★★ 而两份内容不一样，那个差别是决定性的：
+  #
+  #       shadow 的 su:     auth required pam_wheel.so use_uid   ← 只有 wheel 组能用
+  #       linux-pam 的 su:  # auth required pam_wheel.so …        ← 注释掉（Fedora 默认）
+  #
+  #   而我们的 root **不在 wheel 组**（`id root` → `groups=0(root)`）——
+  #   shadow 那份装上去之后，**root 自己 su 都会失败**。
+  #
+  # ★ 所以归属这样划：
+  #     linux-pam 拥有 su / login / passwd / chfn / chpasswd / chsh
+  #                —— 它是"认证栈"这件事的所有者
+  #     shadow    只留 newusers
+  #                —— newusers 是 shadow 独有的工具，只属于它
+  #
+  #   ★ 不是"绕过检查"：标准发行版里这几个文件的归属也是发行版自己划的
+  #     （Debian 是 libpam-runtime + 各应用自己带；Fedora 是 authselect 统一
+  #     生成）。**关键是"谁拥有"有一个答案，并且写下来。**
+  for f in su login passwd chfn chpasswd chsh; do
+    rm -f "$PKGDEST/etc/pam.d/$f"
+  done
+  # newusers 要留着，删过头同样是错
+  for f in etc/pam.d/newusers; do
+    if [ ! -e "$PKGDEST/$f" ]; then
+      echo "shadow: $f 不见了——那是 shadow 独有的，该留着" >&2
+      return 1
+    fi
+  done
 }

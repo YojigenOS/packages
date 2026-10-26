@@ -6,7 +6,7 @@
 [package]
 name        = "shadow"
 version     = "4.20.3"
-release     = 2
+release     = 3
 # ★ 晚于它的依赖（glibc 是 2026-10-12T19:00:00Z，libxcrypt 更早）。
 date        = 2026-10-12T23:00:00Z
 description = "账号与口令工具（useradd / passwd / su / login…）"
