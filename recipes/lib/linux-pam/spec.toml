@@ -1,0 +1,42 @@
+# linux-pam —— 可插拔认证模块
+#
+# ★★ 第 3 期的一项，而它是**最"基础"的那个** —— Fedora 和 Debian 都把
+#   `libpam-*` 放在 **required** 层（不是 important，更不是 standard）。
+#
+#   没有 PAM 的后果：
+#     · 没有 /etc/pam.d/ —— 而 `login` / `su` / `sudo` / `sshd` 全都读它
+#     · systemd 的 `-Dpam` 关着 → `logind` 起不来 → 没有会话管理
+#     · `pam_unix` / `pam_limits` / `pam_env` 这些全没有
+#
+# ★ 而我们的 `sudo` 现在是**不经过 PAM** 的（`--without-pam` 的效果），
+#   也就是说 sudo 的认证链路和标准发行版不一样 —— 那本身就是"功能缺失"。
+#
+# ★★ 它是 **meson** 构建（实测：顶层 meson.build + meson_options.txt，
+#   没有 configure）。而它有一堆可选后端：audit / selinux / nis /
+#   elogind / logind / pwaccess / econf / openssl。
+#   **一个都不显式关** —— 缺依赖就自动 skip，缺的东西我们本来也没有。
+
+[package]
+name        = "linux-pam"
+version     = "1.7.3"
+release     = 1
+date        = 2026-10-26T00:00:00Z
+description = "可插拔认证模块（PAM）"
+url         = "https://github.com/linux-pam/linux-pam"
+license     = "BSD-3-Clause"
+
+[[source]]
+url    = "https://github.com/linux-pam/linux-pam/releases/download/v$VERSION/Linux-PAM-$VERSION.tar.xz"
+sha256 = "2ce4765fd49df6693771ef2941f81e33d8ee14b94a81a5c7b369aa3b137b85a5"
+
+[dependencies.aarch64]
+# ★ libxcrypt 提供 libcrypt（pam_unix 要用它做密码哈希）
+runtime = ["glibc", "libxcrypt"]
+build   = ["meson", "ninja", "gcc", "pkgconf"]
+
+[dependencies.x86_64]
+runtime = ["glibc", "libxcrypt"]
+build   = ["meson", "ninja", "gcc", "pkgconf"]
+
+[build]
+type = "meson"

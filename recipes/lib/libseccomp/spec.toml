@@ -1,0 +1,38 @@
+# libseccomp —— seccomp 系统调用过滤库
+#
+# ★ 第 3 期（2026-10-25 定的）：「打开被关掉的功能」。
+#
+#   而 `-Dseccomp=false` 是 systemd 的一个开关 —— 关着的时候，systemd 不能
+#   给服务加系统调用过滤（`SystemCallFilter=` 那一条会静默失效）。
+#
+# ★★ 判据来自 YG 第 2 条：「尽量不要有特殊开关关闭或者功能缺失」。
+#   而 seccomp 是**服务加固的基础能力** —— 没有它，`SystemCallFilter=` /
+#   `RestrictAddressFamilies=` 这些都需要它。
+#
+# ★ 它自己只有一个可选依赖：gperf（只在 `--enable-gperf` 时要）。默认不用。
+
+[package]
+name        = "libseccomp"
+version     = "2.6.1"
+release     = 1
+date        = 2026-10-26T00:00:00Z
+description = "seccomp 系统调用过滤库（systemd 的 -Dseccomp 前提）"
+url         = "https://github.com/seccomp/libseccomp"
+license = "LGPL-2.1-or-later"
+
+[[source]]
+url    = "https://github.com/seccomp/libseccomp/releases/download/v$VERSION/libseccomp-$VERSION.tar.gz"
+sha256 = "501f66c667225d53791b97e1d7cf85ab764c297d04881f60f38f451c4b0ee1be"
+
+[dependencies.aarch64]
+runtime = ["glibc"]
+build   = ["make", "gcc"]
+
+[dependencies.x86_64]
+runtime = ["glibc"]
+build   = ["make", "gcc"]
+
+[build]
+type      = "autotools"
+# ★ 不关 --disable-*：上游默认全开，没有我们要的东西被关着
+configure = ["--prefix=/usr", "--disable-static"]

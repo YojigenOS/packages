@@ -1,0 +1,47 @@
+# kmod —— 内核模块工具（modprobe / lsmod / insmod / depmod…）
+#
+# ★★ 第 3 期最重的一项。它同时解开两个东西：
+#
+#   ① `modprobe` 这个命令本身（Fedora/Debian 的 important 层都有）
+#   ② systemd 的 `-Dkmod` —— 关着的时候 systemd-udevd **不能加载模块**
+#      （设备插上来认不出驱动）
+#
+# ★ 而它有个前提在【内核】那一侧：`CONFIG_MODULES=y`。我们原来是 `n`，
+#   所以先要把内核改掉 —— 那是这一期唯一"改内核配置"的地方。
+#
+# ★ 它自带 libkmod（同一个源码树），而 `-Dkmod` 要的就是 libkmod。
+#
+# ★ meson 和 autotools 都支持（实测源码里两种构建文件都有）。用 autotools ——
+#   和现有配方的风格一致，少一个 meson 依赖。
+
+[package]
+name        = "kmod"
+version     = "34.2"
+release     = 1
+date        = 2026-10-26T00:00:00Z
+description = "内核模块工具与 libkmod（systemd 的 -Dkmod 前提）"
+url         = "https://github.com/kmod-project/kmod"
+license     = "LGPL-2.1-or-later"
+
+[[source]]
+url    = "https://mirrors.edge.kernel.org/pub/linux/utils/kernel/kmod/kmod-$VERSION.tar.xz"
+sha256 = "5a5d5073070cc7e0c7a7a3c6ec2a0e1780850c8b47b3e3892226b93ffcb9cb54"
+
+[dependencies.aarch64]
+runtime = ["glibc", "zlib", "xz"]
+build   = ["make", "gcc", "pkgconf"]
+
+[dependencies.x86_64]
+runtime = ["glibc", "zlib", "xz"]
+build   = ["make", "gcc", "pkgconf"]
+
+[build]
+type      = "autotools"
+# ★ 不关功能：`--disable-static` 是唯一一个（不建静态库是通用做法）
+#   zlib / xz 都开着（压缩的模块 .ko 要它们解压）
+configure = [
+    "--prefix=/usr",
+    "--disable-static",
+    "--with-zlib",
+    "--with-xz",
+]
